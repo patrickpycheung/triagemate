@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: triage-copilot
+  # 'mock' selects the offline demo gateways (J3/J7). Swap individual gateways to
+  # 'real' as connectivity (JS-2) lands. Default profile keeps the demo self-contained.
+  profiles:
+    active: mock
+
+server:
+  port: 8080
+
+triage:
+  # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
+  engine: deterministic
+
+  writeback:
+    # Advisory work-note write-back to ServiceNow (J5). Off by default; even when on,
+    # the request must pass ?confirmWriteback=true (J8 human-in-the-loop guardrail).
+    enabled: false
+
+  # Bounded Sumo scopes the agent may search (J8 allowlist). Anything else is rejected.
+  sumo:
+    allowed-scopes:
+      - prod/payment
+      - prod/order-api
+    max-results: 20
+
+logging:
+  level:
+    com.company.triage: INFO

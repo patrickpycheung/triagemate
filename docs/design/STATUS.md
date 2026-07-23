@@ -1,3 +1,13 @@
+> # ⏸️ SUSPENDED — 2026-07-23 (Rovo-native track paused)
+> This CDS workspace designed the **Rovo + Forge** implementation. Requirements
+> changed: the build is now a **local Spring Boot + Google ADK** application
+> (Rovo deferred to the post-hackathon deployment discussion). This workspace is
+> **paused, not deleted** — concepts RC1–RC6 remain valid analysis and are
+> partially carried forward. The active design lives in **`docs/design-java/`**;
+> the pivot rationale is in **`PIVOT.md`** and the new DDS decision in
+> **`docs/discovery/servicenow-triage-java/4-decide/decision.md`**.
+> The Forge scaffold (`manifest.yml`, `src/`, `test/`) is **paused**, not removed.
+
 # STATUS — ServiceNow Triage Assistant (CDS / design workspace)
 
 **Phase**: CDS Round 5 complete → all concepts 🟢 Converged (see checkpoint)

@@ -1,3 +1,6 @@
+> ⏸️ **SUSPENDED 2026-07-23** — Rovo-native track paused; build pivoted to local
+> Spring Boot + Google ADK. Active design: **`docs/design-java/`**. See `PIVOT.md`.
+
 # CDS Workspace — ServiceNow Technical Triage Assistant (Rovo-native)
 
 **Design methodology**: Convergent Design System (CDS). This workspace turns the

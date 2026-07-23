@@ -1,3 +1,10 @@
+> # ⏸️ SUSPENDED — 2026-07-23 (Rovo-native track paused)
+> This DDS explored and chose the **Rovo-native, AI-first** direction. Requirements
+> changed to a **local Spring Boot + Google ADK** POC. This DDS is **paused, not
+> deleted** — its problem statement, constraints, and RC1/RC3/RC5/RC6 findings are
+> reused. A **follow-on DDS round** for the Java pivot lives in
+> **`docs/discovery/servicenow-triage-java/`**. See **`PIVOT.md`** at repo root.
+
 # STATUS — ServiceNow Technical Triage Assistant
 
 **Current Phase**: ✅ DDS COMPLETE — concepts confirmed, ready for CDS handoff
