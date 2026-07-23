@@ -33,33 +33,132 @@ rationale (C1–C6).
   has something real to fetch on `master`.
 - `test/` — `node --test` unit tests with a mocked `@forge/api`.
 
-## Deploying (operator steps — requires the Forge CLI, not available in this build environment)
+## Setup & deploy (from a fresh clone, step by step)
+
+This is the full sequence to go from a clean checkout on a new machine to a
+live Rovo agent. Steps marked **(interactive)** prompt for input and must be
+run by hand in a terminal.
+
+### Prerequisites
+
+- **Node.js 18+** (this app was validated on Node v22). Check with `node --version`.
+- An **Atlassian account** on a site with Rovo enabled.
+
+### 1. Install the Forge CLI (global npm package)
 
 ```bash
-npm install -g @forge/cli   # if not already installed
-forge login
-
-npm install                 # pulls the real @forge/api / @forge/resolver
-                             # (this repo ships a local test-only stub at
-                             # node_modules/@forge/api — npm install replaces it)
-
-forge lint                  # validate manifest + code
-forge deploy
-
-forge variables set --encrypt SN_TOKEN
-forge variables set --encrypt GITLAB_TOKEN
-# (SUMO_KEY not needed — getLogs reads the bundled fixture, not live Sumo)
-
-forge install                # install the app onto your Rovo/Jira site
+npm install -g @forge/cli
+forge --version          # confirm it's on PATH
 ```
 
-Then in Rovo chat: `Triage INC0012345` (the seeded ticket / order
-`INC-ORD-4471`).
+### 2. Log in to Forge — **(interactive)**
 
-Before deploying, push `seed-repo/` to the GitLab project referenced by
-`GITLAB_PROJECT_ID` / the manifest's GitLab egress domain, and seed a
-ServiceNow incident `INC0012345` whose description references order
-`INC-ORD-4471`.
+`forge login` needs your Atlassian email and an **API token** (not your
+password).
+
+1. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>
+   → **Create API token** → copy it.
+2. Run:
+
+```bash
+forge login
+# prompts for: Atlassian account email, then the API token
+```
+
+**Verifying your token (optional).** If `forge login` fails and you want to
+check the email/token pair in isolation, hit the same auth endpoint the CLI
+uses. A `200` with your user details means the credentials are good; a `401`
+or `"user": null` means the token is bad, expired, or paired with the wrong
+email:
+
+```bash
+curl -s -u 'YOUR_EMAIL:YOUR_API_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -X POST https://api.atlassian.com/graphql \
+  -d '{"query":"query forge_cli_getUserDetails { me { user { name accountStatus accountId } } }"}'
+```
+
+Expected response:
+
+```json
+{ "data": { "me": { "user": {
+  "name": "...", "accountStatus": "active", "accountId": "557058:..." } } } }
+```
+
+The equivalent in Postman: `POST https://api.atlassian.com/graphql`,
+**Authorization → Basic Auth** (username = email, password = API token),
+header `Content-Type: application/json`, and a raw-JSON body with the `query`
+field above.
+
+### 3. Install dependencies
+
+```bash
+npm install              # pulls the real @forge/api / @forge/resolver.
+                         # This repo ships a local test-only stub at
+                         # node_modules/@forge/api — npm install replaces it.
+```
+
+### 4. Validate
+
+```bash
+forge lint               # validate manifest.yml + code
+```
+
+### 5. Deploy
+
+```bash
+forge deploy             # deploys to the default (development) environment
+```
+
+The **first** `forge deploy` registers the app and assigns it an app ID
+(written into `manifest.yml` as `app.id`). Commit that change so the next
+machine reuses the same app.
+
+### 6. Set the encrypted secrets — **(interactive)**
+
+Each command prompts for the value; the secret is entered at the prompt, not
+passed on the command line.
+
+```bash
+forge variables set --encrypt SN_TOKEN        # ServiceNow API token
+forge variables set --encrypt GITLAB_TOKEN    # GitLab personal access token
+# (SUMO_KEY not needed — getLogs reads the bundled fixture, not live Sumo)
+```
+
+Re-run `forge deploy` after changing variables so the new values take effect.
+
+### 7. Install the app onto your site — **(interactive)**
+
+```bash
+forge install            # pick product (Jira) + enter your site URL when prompted
+```
+
+### 8. Seed the demo systems (before the first triage)
+
+- Push `seed-repo/` (`payment_service.py`, `order_api.py`) to the GitLab
+  project referenced by the manifest's GitLab egress domain /
+  `GITLAB_PROJECT_ID`, on the `master` branch, so `getSource` can fetch real
+  source.
+- Create a ServiceNow incident **`INC0012345`** whose description references
+  order **`INC-ORD-4471`**.
+- (Optional) Create a Confluence "payments known issues" runbook page for the
+  best-effort lookup.
+
+### 9. Run the demo
+
+In Rovo chat:
+
+```
+Triage INC0012345
+```
+
+(the seeded ticket / order `INC-ORD-4471`).
+
+### Re-deploying after code changes
+
+```bash
+forge deploy             # push new code; installed sites pick it up automatically
+```
 
 ## Testing (this environment — no Forge CLI)
 
