@@ -1,0 +1,91 @@
+modules:
+  rovo:agent:
+    - key: triage-agent
+      name: Triage Agent
+      description: >-
+        Triages a technical ServiceNow ticket by correlating Sumo Logic
+        error lines to the responsible GitLab source line, then drafts a
+        work-note for human confirmation before posting.
+      prompt: file://src/playbook.md
+      conversationStarters:
+        - Triage INC0012345
+      actions:
+        - get-ticket
+        - get-source
+        - get-logs
+        - post-worknote
+
+  action:
+    - key: get-ticket
+      function: getTicket
+      actionVerb: GET
+      description: Fetch a ServiceNow ticket (project, short description, notes, order id, opened-at).
+      inputs:
+        ticketId:
+          title: Ticket ID
+          type: string
+          required: true
+
+    - key: get-source
+      function: getSource
+      actionVerb: GET
+      description: Fetch current master source files for a project from GitLab (fixed seeded file set).
+      inputs:
+        project:
+          title: Project
+          type: string
+          required: true
+
+    - key: get-logs
+      function: getLogs
+      actionVerb: GET
+      description: Fetch the failure-window log lines for an order id (bundled mock Sumo fixture).
+      inputs:
+        orderId:
+          title: Order ID
+          type: string
+          required: true
+
+    - key: post-worknote
+      function: postWorknote
+      actionVerb: CREATE
+      description: >-
+        Post a triage-hypothesis work-note to a ServiceNow ticket. Refuses to
+        write unless confirmed=true.
+      inputs:
+        ticketId:
+          title: Ticket ID
+          type: string
+          required: true
+        noteBody:
+          title: Note body
+          type: string
+          required: true
+        confirmed:
+          title: Confirmed by user
+          type: boolean
+          required: true
+
+  function:
+    - key: getTicket
+      handler: index.getTicket
+    - key: getSource
+      handler: index.getSource
+    - key: getLogs
+      handler: index.getLogs
+    - key: postWorknote
+      handler: index.postWorknote
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+  external:
+    fetch:
+      backend:
+        - 'https://<instance>.service-now.com'
+        - 'https://gitlab.example.com'
+
+app:
+  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  runtime:
+    name: nodejs24.x

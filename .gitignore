@@ -1,0 +1,8 @@
+node_modules/
+.agent.work/
+.agent.work.archive/
+*.env
+.env*
+manifest-secrets*
+__pycache__/
+*.pyc
