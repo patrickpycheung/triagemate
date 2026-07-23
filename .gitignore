@@ -6,3 +6,6 @@ node_modules/
 manifest-secrets*
 __pycache__/
 *.pyc
+
+# Per-worktree in-flight status (see docs/design/worktree-inflight-status)
+STATUS-INFLIGHT.md
