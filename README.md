@@ -1,4 +1,16 @@
-# ServiceNow Triage Assistant
+> ## ⏭️ Start here → [`app/README.md`](app/README.md)
+> The active hackathon build is a **local Spring Boot + Google ADK** app under
+> [`app/`](app/). That README has **step-by-step instructions to start it, trigger a
+> diagnosis, and run the presentation**. Concept & design: [`PIVOT.md`](PIVOT.md) ·
+> [`docs/design-java/`](docs/design-java/) · demo screenshots:
+> [`docs/design-java/DEMO.md`](docs/design-java/DEMO.md).
+>
+> The Forge/Rovo description below is the **⏸️ suspended** original track — kept for
+> reference, not the thing to run.
+
+---
+
+# ServiceNow Triage Assistant (⏸️ suspended — Forge/Rovo track)
 
 An Atlassian Forge Rovo-agent app (hackathon prototype). Given a ticket id
 (e.g. "Triage INC0012345"), the agent:

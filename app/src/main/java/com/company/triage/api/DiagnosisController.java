@@ -5,8 +5,9 @@ import com.company.triage.orchestration.DiagnosisResult;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Manual trigger (J1): POST an incident number, get the structured diagnosis + trace.
- * A ServiceNow Business-Rule webhook can later call this same endpoint unchanged.
+ * Trigger (J1): POST an incident number → runs the triage and automatically posts the
+ * two advisory comments back to ServiceNow. A ServiceNow Business-Rule webhook can call
+ * this same endpoint on ticket creation, unchanged — no human in the loop.
  */
 @RestController
 @RequestMapping("/api/diagnose")
@@ -19,9 +20,7 @@ public class DiagnosisController {
     }
 
     @PostMapping("/{incidentNumber}")
-    public DiagnosisResult diagnose(
-            @PathVariable String incidentNumber,
-            @RequestParam(name = "confirmWriteback", defaultValue = "false") boolean confirmWriteback) {
-        return orchestrator.run(incidentNumber, confirmWriteback);
+    public DiagnosisResult diagnose(@PathVariable String incidentNumber) {
+        return orchestrator.run(incidentNumber);
     }
 }

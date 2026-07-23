@@ -10,7 +10,9 @@ tools, within these limits").
 
 ## Guardrails
 - **Advisory only**: no auto-reassign, no close, no priority change, no remediation.
-  The only write is a labelled work note (J5), gated by an explicit confirm.
+  The write-back is **automatic** (no human in the loop) but limited to **two labelled
+  advisory comments** (sources + diagnosis, J5). Trust comes from *what* it's allowed
+  to do (only comment) — not from a human gate. The assigned engineer still decides.
 - **Untrusted input**: incident text, comments, wiki pages, log messages and source
   are treated as data, never instructions (prompt-injection defense). The model may
   not broaden its own permissions, fetch arbitrary secrets, run unlimited searches,

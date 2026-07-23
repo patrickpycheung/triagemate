@@ -14,6 +14,10 @@ convincingly. Scope to **one** demonstration application — do not cover the en
   evidence, missing info, next action, and the tool-call trace (J8) so viewers see
   it "really consulted all four sources."
 - Plain HTML + fetch to `/api/diagnose/{n}`; no framework needed.
+- Also renders the **two comments posted automatically to ServiceNow** (sources, then
+  advisory diagnosis) so viewers see the real write-back, not just the internal report.
+- **Screenshots + run walkthrough: [`../../DEMO.md`](../../DEMO.md)** (captured from the
+  running app via `scripts/shot.mjs` / Playwright; images in `../screenshots/`).
 
 ## Ground-truth dataset (the `mock` profile serves this)
 For the one demo app, capture per incident: actual affected application, actual root

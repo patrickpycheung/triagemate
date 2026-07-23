@@ -14,9 +14,11 @@ triage:
   engine: deterministic
 
   writeback:
-    # Advisory work-note write-back to ServiceNow (J5). Off by default; even when on,
-    # the request must pass ?confirmWriteback=true (J8 human-in-the-loop guardrail).
-    enabled: false
+    # Automatic advisory write-back to ServiceNow (J5) — two comments per run
+    # (sources first, then the first-pass diagnosis). No human in the loop. It only
+    # comments; it never reassigns, closes, or re-prioritises the ticket (J8).
+    # Safe in the default 'mock' profile (the mock gateway just logs the comments).
+    enabled: true
 
   # Bounded Sumo scopes the agent may search (J8 allowlist). Anything else is rejected.
   sumo:

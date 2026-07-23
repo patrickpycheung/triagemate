@@ -7,9 +7,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Owns a diagnosis run (J1): delegates to the active engine (J2), then optionally
- * writes the advisory work note back to ServiceNow (J5) — guarded by config so the
- * demo never mutates a ticket unless explicitly enabled + confirmed (J8).
+ * Owns a diagnosis run (J1): delegates to the active engine (J2), then — with no
+ * human in the loop — automatically posts the advisory diagnosis back to ServiceNow
+ * as TWO comments (J5): the sources first, then the first-pass diagnosis. It only
+ * comments; it never reassigns, closes, or re-prioritises the ticket (J8).
  */
 @Service
 public class DiagnosisOrchestrator {
@@ -18,29 +19,31 @@ public class DiagnosisOrchestrator {
 
     private final DiagnosisEngine engine;
     private final ServiceNowGateway serviceNow;
+    private final boolean writebackEnabled;
 
-    @Value("${triage.writeback.enabled:false}")
-    private boolean writebackEnabled;
-
-    public DiagnosisOrchestrator(DiagnosisEngine engine, ServiceNowGateway serviceNow) {
+    public DiagnosisOrchestrator(DiagnosisEngine engine, ServiceNowGateway serviceNow,
+                                 @Value("${triage.writeback.enabled:true}") boolean writebackEnabled) {
         this.engine = engine;
         this.serviceNow = serviceNow;
+        this.writebackEnabled = writebackEnabled;
     }
 
-    public DiagnosisResult run(String incidentNumber, boolean confirmWriteback) {
+    public DiagnosisResult run(String incidentNumber) {
         long t0 = System.currentTimeMillis();
         DiagnosisResult result = engine.diagnose(incidentNumber);
 
-        if (writebackEnabled && confirmWriteback) {
-            serviceNow.addWorkNote(incidentNumber, result.report().toWorkNote());
-            result.trace().add("servicenow.addWorkNote → posted advisory note (confirmed)");
+        if (writebackEnabled) {
+            // Automatic, advisory, two comments — sources first so the diagnosis is auditable.
+            serviceNow.addWorkNote(incidentNumber, result.report().toSourcesNote());
+            result.trace().add("servicenow.addWorkNote → posted 'Sources consulted' comment");
+            serviceNow.addWorkNote(incidentNumber, result.report().toDiagnosisNote());
+            result.trace().add("servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)");
         } else {
-            result.trace().add("writeback skipped (enabled=%s, confirmed=%s) — advisory not posted"
-                    .formatted(writebackEnabled, confirmWriteback));
+            result.trace().add("writeback disabled (triage.writeback.enabled=false) — comments not posted");
         }
 
-        log.info("diagnosis for {} completed in {} ms ({} tool steps)",
-                incidentNumber, System.currentTimeMillis() - t0, result.trace().size());
+        log.info("diagnosis for {} completed in {} ms ({} steps, writeback={})",
+                incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackEnabled);
         return result;
     }
 }

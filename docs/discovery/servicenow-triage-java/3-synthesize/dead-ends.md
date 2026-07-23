@@ -13,6 +13,17 @@
 - **Multiple autonomous agents ("Service Now agent", "GitLab agent" …)** — four
   investigators shouting findings; harder to debug, less reliable. Replaced by one
   bounded investigator holding tools (P1).
+
+- **Hierarchical multi-agent (supervisor + per-system sub-agents) — explored &
+  deferred (2026-07-23).** Revisited P1 with a real motivation: *context management*.
+  A supervisor agent owning the case + one specialist agent per external system, each
+  with its own context and returning only a **summary**, keeps the supervisor lean; the
+  bounded, traceable way to do it in ADK is **agent-as-tool** (specialist-calls-specialist
+  = nested tools, still a tree). Genuinely stronger for scale, but its costs — latency,
+  spend (many LLM round-trips), debuggability, and unspiked ADK multi-agent surface —
+  make it wrong for a hackathon *pitch*. Verdict: **the right post-acceptance rewrite**,
+  not the demo. The pitch stays a simple, mostly-linear single investigator; the
+  deterministic engine remains the safe path.
 - **Enterprise-wide RAG / vector index** — permissions, staleness, re-index, citation,
   access-control burden; out of scope for MVP (D5).
 - **Broad autonomous source-code investigation** — expensive, unreliable; GitLab is

@@ -62,6 +62,22 @@ Live keyword/API search for the MVP; cite retrieved sources. No vector DB requir
 - **Superseded** (Rovo/Forge-specific, paused): RC2 rovo-agent, forge-actions, RC4
   chat trigger. Intent preserved in J1/J2/J3.
 
+## Revision — 2026-07-23 (presentation simplification)
+After building the MVP we simplified toward a clean pitch (the hackathon deliverable is
+selling the concept, not shipping the sophisticated engine):
+- **Human-in-the-loop dropped → automatic two-comment write-back.** The copilot now
+  posts, with no confirm gate, **two advisory ServiceNow comments** — *sources first*
+  (clickable links to what it used), then its *first-pass diagnosis*. Trust rests on
+  *what it may do* (only comment — never reassign/close/re-prioritise), not a human
+  gate. Updates J5/J8; the earlier RC5 confirm gate is retired.
+- **Multi-agent + loops: explored and deferred** (see `../3-synthesize/dead-ends.md`).
+  A supervisor + per-system sub-agents (agent-as-tool, for context isolation) was
+  discussed; it's the right *post-acceptance* rewrite but too much for the pitch. The
+  demo stays a bounded, mostly-linear single investigator with the deterministic engine
+  as the safe path.
+- **Pitch deck** (8 slides) + the workflow overview live as published artifacts; the
+  running app's two-comment output is captured in `docs/design-java/DEMO.md`.
+
 ## Handoff
 Concepts **J1–J8** in `4-decide/concepts-extracted.md` → CDS at `docs/design-java/`.
 The first technical task is **Spike JS-1** (ADK-Java + enterprise LLM + one

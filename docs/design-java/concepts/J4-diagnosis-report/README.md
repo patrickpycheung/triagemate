@@ -45,6 +45,9 @@ UI (J7) mere renderings of it. This is the demo's spine.
 - Every conclusion ties to `evidenceRefs`. `advisory` is always `true` this phase.
 - Java: immutable records (`DiagnosisReport`, `CandidateSystem`, `Evidence`, …);
   Jackson (de)serialization; a validator the agent's final step must satisfy.
+- Renders to the two ServiceNow comments (J5): `toSourcesNote()` (the cited
+  evidence, posted first) and `toDiagnosisNote()` (the advisory view), and to the
+  demo UI (J7). Report is the single source; both comments and the UI derive from it.
 
 ## Verification
 - Round-trips through Jackson; validator rejects a report with an empty

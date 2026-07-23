@@ -31,7 +31,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🩺 Incident Triage Copilot <span class="pill">advisory</span></h1>
+  <h1>Incident Triage Copilot <span class="pill">advisory</span></h1>
   <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
 
   <div class="row">
@@ -66,6 +66,9 @@ function render(data) {
   const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}</div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
+  const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</li>`).join('');
+  const cmt = 'border-left:3px solid var(--acc);background:#0e1626;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
+  const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc);display:block;margin-bottom:8px';
   document.getElementById('out').innerHTML = `
     <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
       <p><b>Symptom:</b> ${esc(r.reportedSymptom)}</p>
@@ -78,6 +81,15 @@ function render(data) {
     <div class="card"><h2>Contradicting evidence</h2><ul>${contra||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
+    <div class="card"><h2>Posted to ServiceNow — automatically</h2>
+      <p style="color:var(--muted);margin:-4px 0 14px;font-size:13px">Two advisory comments, sources first. It only comments — never reassigns, closes, or changes the ticket.</p>
+      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; SOURCES CONSULTED</span><ul style="margin:0;padding-left:18px">${sources||'<li>—</li>'}</ul></div>
+      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; FIRST-PASS DIAGNOSIS</span>
+        <p style="margin:0 0 5px"><b>What happened:</b> ${esc(r.reportedSymptom)}</p>
+        <p style="margin:0 0 5px"><b>Likely system:</b> ${esc((r.candidateSystems[0]||{}).name||'—')} &nbsp; <b>Likely team:</b> ${esc(r.suggestedAssignment.group)} (${esc(r.suggestedAssignment.confidence)})</p>
+        <p style="margin:0 0 5px"><b>Next check:</b> ${esc(r.recommendedNextAction)}</p>
+        <p class="advisory" style="margin:0">Advisory only — no reassignment or changes made. The assigned engineer decides.</p></div>
+    </div>
     <div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
 }
 </script>

@@ -16,6 +16,11 @@ with a downloaded Maven 3.9.9 + Temurin JDK 21:
   `beforeToolCallbackSync` bounds are proven (deny-on-budget-0). **JS-1b done** except
   swapping the fake URL for the real enterprise endpoint.
 - Real\*Gateway stubs (`@Profile("real")`, JS-2) compile in both profiles.
+- **2026-07-23 simplification**: human-confirm gate removed → **automatic two-comment
+  write-back** (sources, then advisory diagnosis); multi-agent/loops explored & deferred
+  (`../discovery/servicenow-triage-java/3-synthesize/dead-ends.md`). Tests now **3/3**
+  (default) and **5/5** (`-Padk`). App demoed via Playwright → **[DEMO.md](DEMO.md)**
+  (+ `screenshots/`). Pitch deck + workflow diagram published as artifacts.
 
 | ID | Concept | Complexity | State | Depends on |
 |----|---------|-----------|-------|------------|
