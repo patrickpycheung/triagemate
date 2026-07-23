@@ -1,203 +1,104 @@
-> ## ⏭️ Start here → [`app/README.md`](app/README.md)
-> The active hackathon build is a **local Spring Boot + Google ADK** app under
-> [`app/`](app/). That README has **step-by-step instructions to start it, trigger a
-> diagnosis, and run the presentation**. Concept & design: [`PIVOT.md`](PIVOT.md) ·
-> [`docs/design-java/`](docs/design-java/) · demo screenshots:
-> [`docs/design-java/DEMO.md`](docs/design-java/DEMO.md).
->
-> The Forge/Rovo description below is the **⏸️ suspended** original track — kept for
-> reference, not the thing to run.
+# Incident Triage Copilot
+
+A local **Spring Boot + Google ADK** app that gives every new ServiceNow incident a
+**first-pass diagnosis automatically** — turning a blank ticket into a head start.
+
+When a ticket comes in, the copilot reads it, gathers evidence across the systems your
+teams already use (ServiceNow, Confluence, Sumo Logic, GitLab), and **posts two
+advisory comments back to the ticket**: the **sources** it consulted (with links),
+then its **first-pass diagnosis** (likely system, likely team, evidence, next check).
+
+It is **advisory only** — it comments, it never reassigns, closes, or re-prioritises.
+The assigned engineer still decides everything.
+
+> Hackathon 2026 · IT. This is a proof-of-concept run locally for the presentation —
+> not deployed. See [`PIVOT.md`](PIVOT.md) for how we got here (the earlier Forge/Rovo
+> prototype is archived under [`docs/archive/`](docs/archive/README-forge-rovo.md)).
 
 ---
 
-# ServiceNow Triage Assistant (⏸️ suspended — Forge/Rovo track)
+## Prerequisites
 
-An Atlassian Forge Rovo-agent app (hackathon prototype). Given a ticket id
-(e.g. "Triage INC0012345"), the agent:
+- **JDK 21** (a full JDK with a compiler, not just a JRE) and **Maven 3.9+**.
+  Verify: `java -version` → 21, `mvn -version` → 3.9 on Java 21.
+- No network, API keys, or external systems needed for the demo — it runs fully
+  offline in the `mock` profile.
 
-1. reads the ServiceNow ticket,
-2. pulls the current GitLab `master` source for the affected service,
-3. pulls the failure-window log lines (mock Sumo fixture, bundled),
-4. best-effort checks Confluence for a known-issues page,
-5. correlates the log's ERROR line to the exact source line that emits it
-   (quoting both, with a self-check to catch near-misses),
-6. drafts a work-note with the root-cause hypothesis, and
-7. **only after an explicit "yes" from the user** posts it to the ticket.
-
-See `src/playbook.md` (also inlined via `manifest.yml`'s `prompt: file://src/playbook.md`)
-for the full agent procedure, and `docs/design/concepts/` for the design
-rationale (C1–C6).
-
-## Layout
-
-- `manifest.yml` — Forge app manifest: `nodejs24.x` runtime, `rovo:agent`
-  module, 4 `action`/`function` pairs, exactly two egress backends
-  (ServiceNow + GitLab — Sumo is mocked, not a live backend), and the
-  `read:confluence-content.summary` scope for best-effort runbook lookup.
-- `src/index.js` — the 4 Forge function handlers (`getTicket`, `getSource`,
-  `getLogs`, `postWorknote`).
-- `src/playbook.md` — the Rovo agent's playbook prompt.
-- `src/resources/sumo-fixture.json` — bundled mock Sumo Logic response for
-  the seeded order `INC-ORD-4471` (copied from
-  `docs/design/concepts/log-code-reasoning/verification-s3/sumo-fixture.json`).
-- `seed-repo/` — `payment_service.py` + `order_api.py`, the seeded demo repo.
-  **The operator pushes these to the real GitLab project** so `getSource`
-  has something real to fetch on `master`.
-- `test/` — `node --test` unit tests with a mocked `@forge/api`.
-
-## Setup & deploy (from a fresh clone, step by step)
-
-This is the full sequence to go from a clean checkout on a new machine to a
-live Rovo agent. Steps marked **(interactive)** prompt for input and must be
-run by hand in a terminal.
-
-### Prerequisites
-
-- **Node.js 18+** (this app was validated on Node v22). Check with `node --version`.
-- An **Atlassian account** on a site with Rovo enabled.
-
-### 1. Install the Forge CLI (global npm package)
+## How to start it
 
 ```bash
-npm install -g @forge/cli
-forge --version          # confirm it's on PATH
+cd app
+mvn spring-boot:run
 ```
 
-### 2. Log in to Forge — **(interactive)**
+Wait for `Started TriageApplication in ~1.3 seconds`, then open
+**http://localhost:8080**. Stop with `Ctrl+C`.
 
-`forge login` needs your Atlassian email and an **API token** (not your
-password).
+## How to use it
 
-1. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>
-   → **Create API token** → copy it.
-2. Run:
+**From the UI** (recommended for the demo)
+1. Open http://localhost:8080 — the incident number **`INC0012345`** is pre-filled.
+2. Click **Diagnose**.
+3. You'll see the full diagnosis and, under *"Posted to ServiceNow — automatically,"*
+   the two advisory comments it writes back (sources first, then the diagnosis).
+
+**From the API** (same thing, headless)
+```bash
+curl -X POST http://localhost:8080/api/diagnose/INC0012345 | jq
+```
+
+**What happens on each run** — one bounded pass: read the ticket → clarify the real
+symptom → gather evidence (similar past incidents + ownership, a Confluence runbook, a
+narrow Sumo Logic window, the GitLab line that emits the error) → **auto-post the two
+advisory comments**. In the `mock` profile the comments are written to the app log and
+shown in the UI; nothing external is touched.
+
+> **Full step-by-step run + presentation script:** [`app/README.md`](app/README.md).
+> **Screenshot walkthrough:** [`docs/design-java/DEMO.md`](docs/design-java/DEMO.md).
+
+## Verify it works
 
 ```bash
-forge login
-# prompts for: Atlassian account email, then the API token
+cd app
+mvn test          # offline demo path            → 3 tests pass
+mvn -Padk test    # + live ADK agent loop        → 5 tests pass
 ```
 
-**Verifying your token (optional).** If `forge login` fails and you want to
-check the email/token pair in isolation, hit the same auth endpoint the CLI
-uses. A `200` with your user details means the credentials are good; a `401`
-or `"user": null` means the token is bad, expired, or paired with the wrong
-email:
+## Live agent mode (optional)
+
+By default a deterministic engine runs the flow offline. To use a real LLM-driven
+**Google ADK** agent over the same tools:
 
 ```bash
-curl -s -u 'YOUR_EMAIL:YOUR_API_TOKEN' \
-  -H 'Content-Type: application/json' \
-  -X POST https://api.atlassian.com/graphql \
-  -d '{"query":"query forge_cli_getUserDetails { me { user { name accountStatus accountId } } }"}'
+export LLM_BASE_URL=https://llm.internal/v1  LLM_API_KEY=***  LLM_MODEL=gpt-4o-mini
+cd app && mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
 ```
 
-Expected response:
-
-```json
-{ "data": { "me": { "user": {
-  "name": "...", "accountStatus": "active", "accountId": "557058:..." } } } }
-```
-
-The equivalent in Postman: `POST https://api.atlassian.com/graphql`,
-**Authorization → Basic Auth** (username = email, password = API token),
-header `Content-Type: application/json`, and a raw-JSON body with the `query`
-field above.
-
-### 3. Install dependencies
-
-```bash
-npm install              # pulls the real @forge/api / @forge/resolver.
-                         # This repo ships a local test-only stub at
-                         # node_modules/@forge/api — npm install replaces it.
-```
-
-### 4. Validate
-
-```bash
-forge lint               # validate manifest.yml + code
-```
-
-### 5. Deploy
-
-```bash
-forge deploy             # deploys to the default (development) environment
-```
-
-The **first** `forge deploy` registers the app and assigns it an app ID
-(written into `manifest.yml` as `app.id`). Commit that change so the next
-machine reuses the same app.
-
-### 6. Set the encrypted secrets — **(interactive)**
-
-Each command prompts for the value; the secret is entered at the prompt, not
-passed on the command line.
-
-```bash
-forge variables set --encrypt SN_TOKEN        # ServiceNow API token
-forge variables set --encrypt GITLAB_TOKEN    # GitLab personal access token
-# (SUMO_KEY not needed — getLogs reads the bundled fixture, not live Sumo)
-```
-
-Re-run `forge deploy` after changing variables so the new values take effect.
-
-### 7. Install the app onto your site — **(interactive)**
-
-```bash
-forge install            # pick product (Jira) + enter your site URL when prompted
-```
-
-### 8. Seed the demo systems (before the first triage)
-
-- Push `seed-repo/` (`payment_service.py`, `order_api.py`) to the GitLab
-  project referenced by the manifest's GitLab egress domain /
-  `GITLAB_PROJECT_ID`, on the `master` branch, so `getSource` can fetch real
-  source.
-- Create a ServiceNow incident **`INC0012345`** whose description references
-  order **`INC-ORD-4471`**.
-- (Optional) Create a Confluence "payments known issues" runbook page for the
-  best-effort lookup.
-
-### 9. Run the demo
-
-In Rovo chat:
+## Repository layout
 
 ```
-Triage INC0012345
+app/                     Spring Boot application (the build)
+  src/main/java/...       api · orchestration · gateway (mock + real) · model
+  src/main/adk/...         ADK LlmAgent engine (profile: adk)
+  src/main/resources/...   application config + demo UI
+  README.md                full run + presentation runbook
+docs/
+  design-java/             active design (concepts J1–J8) · DEMO.md · screenshots
+  discovery/               DDS problem exploration + decisions
+  archive/                 retired Forge/Rovo prototype (reference only)
+PIVOT.md                   why this is Spring Boot + ADK, not Rovo
+scripts/                   helper scripts (e.g. Playwright screenshots)
 ```
 
-(the seeded ticket / order `INC-ORD-4471`).
+## Design & concept
 
-### Re-deploying after code changes
+- **Pitch deck** and **workflow diagram** are published as artifacts (private; share
+  from the artifact page) — links in [`app/README.md`](app/README.md).
+- **Design**: [`docs/design-java/`](docs/design-java/) (concepts J1–J8, `STATUS.md`).
+- **Discovery / decisions**: [`docs/discovery/servicenow-triage-java/`](docs/discovery/servicenow-triage-java/).
 
-```bash
-forge deploy             # push new code; installed sites pick it up automatically
-```
+## Repositories
 
-## Testing (this environment — no Forge CLI)
-
-```bash
-npm test
-# -> node --test, all handlers exercised against a mocked @forge/api
-```
-
-This build environment has **no Forge CLI**, so `forge lint` / `forge
-deploy` were **not run here** — the manifest was only checked for valid
-YAML syntax, and the handlers were only checked with `node --test`. The
-operator must run `forge lint` and `forge deploy` before this is a live
-Rovo agent.
-
-## Honest-autonomy caveat
-
-This is a hackathon prototype, not a production triage system:
-
-- **`getSource` returns a fixed seeded file set**, not real relevance
-  selection — the grounding guarantee only holds for the seeded project.
-- **`getLogs` reads a bundled fixture**, not live Sumo Logic — the failure
-  window is pre-scoped, not derived from ticket time + heuristics.
-- The log↔code correlation is **LLM reasoning, not a deterministic
-  matcher** (no Drain3/AST engine). It's made trustworthy by the playbook's
-  quote-both + self-check + degrade-not-invent rules, but on a real repo
-  with non-unique log strings it could mis-rank — flagged, not solved, here.
-- The agent **never writes autonomously**: `postWorknote` refuses unless
-  `confirmed===true`, and the playbook only sets that after showing the
-  exact draft and getting an explicit "yes." On a network error it reports
-  "unknown outcome" rather than retrying, to avoid a duplicate work-note.
+- **Primary**: Home Git (Forgejo) `eugene/hackathon2026` — the `origin` remote.
+- **Mirror**: GitLab `eugene.novikov/hackathon2026` (private) — kept in sync
+  automatically on every push via a server-side push mirror.
