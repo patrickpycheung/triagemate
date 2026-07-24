@@ -171,43 +171,93 @@ triage.connectors.gitlab=mock|real     # default: all mock
 
 Mix freely — the useful demo combo is **real ServiceNow + mock evidence**.
 
-## ⭐ Live demo: write the comments to a REAL ServiceNow ticket
+## ⭐ Live demo on the corporate laptop — write comments to a REAL ServiceNow ticket
 
-Instead of only showing the result in our UI, post the two advisory comments onto a
-real ticket in your **ServiceNow dev instance** and switch to ServiceNow to show it
-updating live. Run this **on a machine that can reach the dev instance** (e.g. the
-corporate-network laptop).
+Post the two advisory comments onto a real incident in your **ServiceNow dev instance**
+and switch to ServiceNow to show it updating live. Only the ServiceNow connector goes
+live; the evidence stays mock/curated. Must run **where the dev instance is reachable**
+— i.e. the corporate-network laptop.
 
-**1. One-time: a service account + a test ticket.**
-- A ServiceNow user/service account with **read + write on `incident`** (e.g. the
-  `itil` role, or a scoped REST role). Basic-auth credentials.
-- Create a test incident. Its number is what you'll type in the demo. *(The diagnosis
-  content is the scripted payment-reconcile story regardless of the ticket's text, so
-  any incident works; a ticket worded like "orders don't go through at checkout" just
-  makes the read look coherent.)*
+Follow the checklist in order; the **pre-flight curl (step 3)** catches auth/proxy
+problems before you're standing in front of the app.
 
-**2. Run with real ServiceNow (evidence stays mock):**
+### 0 · One-time setup on the laptop
+- **JDK 21 (with compiler) + Maven** — `java -version` → 21, `mvn -version` → Java 21.
+- **Clone the repo** (Home Git or the GitLab mirror), e.g.
+  `git clone https://gitlab.com/eugene.novikov/hackathon2026.git`.
+- Confirm the laptop reaches the instance (browse to `https://devNNNNN.service-now.com`).
 
+### 1 · ServiceNow dev-instance prep
+- **An API login with read + write on `incident`.** Basic auth needs a **local
+  ServiceNow password** (not SSO): on a Personal Developer Instance (PDI) the `admin`
+  account works; on a shared dev instance use/create a local service account with the
+  `itil` role.
+- **A test incident** — note its number (e.g. `INC0010001`); that's what you'll type.
+  *(The diagnosis is the scripted payment-reconcile story regardless of the ticket's
+  text, so any incident works; wording it like "orders don't go through at checkout"
+  just makes the read look coherent.)*
+- **PDI not hibernating** — wake it from developer.servicenow.com first. Hibernation is
+  the #1 cause of "it just times out."
+
+### 2 · Note your connection details
 ```bash
-export SNOW_BASE_URL=https://devNNNNN.service-now.com
-export SNOW_USER=<service-account>   SNOW_PASSWORD=<password>
-cd app
-mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+export SNOW_BASE_URL=https://devNNNNN.service-now.com   # your instance
+export SNOW_USER=<login>                                # local (non-SSO) user
+export SNOW_PASSWORD=<password>
 ```
 
-**3. Trigger it** — open http://localhost:8080, type your **real incident number**,
-click **Diagnose** (or `curl -X POST http://localhost:8080/api/diagnose/<INC>`).
+### 3 · Pre-flight check (prove auth + reachability BEFORE the app)
+```bash
+curl -u "$SNOW_USER:$SNOW_PASSWORD" \
+  "$SNOW_BASE_URL/api/now/table/incident?sysparm_limit=1"
+```
+- **JSON with a `result` array** → good, the app will work. Continue.
+- **401 Unauthorized** → wrong password, or the user lacks the role / is SSO-only.
+- **Hangs / connection refused / timeout** → corporate proxy (see step 6) or the PDI is
+  hibernating.
 
-**4. Show it in ServiceNow** — open that incident; the two advisory entries appear in
-the **Work notes / Activity** stream: *Sources consulted*, then *First-pass diagnosis*.
+### 4 · Run the app (real ServiceNow, mock evidence)
+```bash
+cd app
+# optional sanity pass first — offline, proves the app itself is healthy:
+mvn spring-boot:run
+#   → open http://localhost:8080, Diagnose, Ctrl+C. Then run for real:
+mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+```
+Wait for `Started TriageApplication`.
 
-By default the comments go to **`work_notes`** (internal, fulfiller-visible). To post
-customer-facing **Additional comments** instead:
-`--triage.servicenow.write-field=comments`.
+### 5 · Do the demo
+1. Open **http://localhost:8080**, type your **real incident number**, click
+   **Diagnose** (or `curl -X POST http://localhost:8080/api/diagnose/INC0010001`).
+2. Watch the app log for two lines: `posted advisory work_notes to INC0010001`.
+3. **Switch to ServiceNow**, open that incident → the two entries appear in the
+   **Work notes / Activity** stream: *Sources consulted*, then *First-pass diagnosis*
+   (refresh the form if needed).
+
+To post customer-facing **Additional comments** instead of internal work notes, add
+`--triage.servicenow.write-field=comments` to the run arguments.
+
+### 6 · Corporate-network gotchas
+- **Outbound proxy** — if HTTPS egress goes through a corp proxy, pass it to the JVM:
+  ```bash
+  mvn spring-boot:run \
+    -Dspring-boot.run.jvmArguments="-Dhttps.proxyHost=proxy.corp -Dhttps.proxyPort=8080" \
+    -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+  ```
+- **SSO vs Basic auth** — the Table API uses Basic auth against a **local** ServiceNow
+  password; an SSO-only account won't authenticate. Use a local service account.
+- **Maven behind a proxy** — if the first build can't fetch dependencies, build once
+  off-network or configure `~/.m2/settings.xml`.
+- **`incident not found`** in the log → the number doesn't exist on that instance, or
+  the user lacks read on `incident`.
+
+### 7 · Safety net
+If ServiceNow is flaky on the day, the **offline `mock` demo** (default profile — the
+UI shows the same two comments) always works. Run that and narrate the live write-back.
 
 > **Everything real** (all four systems) = `--spring.profiles.active=real` with every
-> credential set (see `application.yml` `triage.integrations.*`). ServiceNow-only is
-> the recommended demo.
+> credential set (`application.yml` → `triage.integrations.*`). ServiceNow-only is the
+> recommended demo.
 
 ## Auto-trigger on ticket creation — deferred
 
