@@ -6,7 +6,7 @@ import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -21,7 +21,7 @@ import java.util.Optional;
  * so the log↔code citation lands on payment_service.py:44.
  */
 @Component
-@Profile("mock")
+@ConditionalOnProperty(name = "triage.connectors.servicenow", havingValue = "mock", matchIfMissing = true)
 public class MockServiceNowGateway implements ServiceNowGateway {
 
     private static final Logger log = LoggerFactory.getLogger(MockServiceNowGateway.class);

@@ -8,7 +8,8 @@ import com.company.triage.model.ServiceOwnership;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -19,21 +20,28 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Real ServiceNow connector (JS-2) via the REST Table API. {@code @Profile("real")}
- * so it replaces {@code MockServiceNowGateway} only when the app runs with the
- * {@code real} profile and {@code triage.integrations.servicenow.*} is set.
+ * Real ServiceNow connector via the REST Table API. Active when
+ * {@code triage.connectors.servicenow=real} (others can stay {@code mock}), with
+ * {@code triage.integrations.servicenow.*} set. This is the piece that makes the demo
+ * write its two advisory comments onto a <b>real</b> dev-instance ticket.
  *
- * <p>Auth: Basic (least-privilege service account). This is a working skeleton —
- * JS-2 tasks are marked TODO (fuller field mapping, similar-incident query tuning).
+ * <p>Auth: Basic (least-privilege service account with read + write on incident).
+ * Reads use {@code sysparm_display_value=true} so reference fields (assignment group,
+ * CI, caller) come back as readable names. The write appends to the incident's
+ * {@code work_notes} journal by default — switch to {@code comments} (customer-facing)
+ * with {@code triage.servicenow.write-field=comments}.
  */
 @Component
-@Profile("real")
+@ConditionalOnProperty(name = "triage.connectors.servicenow", havingValue = "real")
 public class RealServiceNowGateway implements ServiceNowGateway {
 
     private static final Logger log = LoggerFactory.getLogger(RealServiceNowGateway.class);
-    private final RestClient http;
 
-    public RealServiceNowGateway(IntegrationProperties props) {
+    private final RestClient http;
+    private final String writeField;   // "work_notes" (internal) or "comments" (customer-facing)
+
+    public RealServiceNowGateway(IntegrationProperties props,
+                                 @Value("${triage.servicenow.write-field:work_notes}") String writeField) {
         var sn = props.servicenow();
         String basic = Base64.getEncoder()
                 .encodeToString((sn.user() + ":" + sn.secret()).getBytes());
@@ -42,13 +50,14 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
                 .build();
+        this.writeField = writeField;
     }
 
     @Override
     public IncidentContext getIncident(String number) {
         JsonNode row = firstRow("/api/now/table/incident",
-                "number=" + number, "sys_id,number,short_description,description,"
-                        + "category,subcategory,opened_at,cmdb_ci,assignment_group,comments_and_work_notes");
+                "number=" + number, "sys_id,number,short_description,description,caller_id,"
+                        + "category,subcategory,opened_at,cmdb_ci,assignment_group");
         if (row == null) throw new IllegalStateException("incident not found: " + number);
         return new IncidentContext(
                 text(row, "number"),
@@ -60,16 +69,15 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 parseTime(text(row, "opened_at")),
                 text(row, "u_environment"),
                 text(row, "assignment_group"),
-                List.of(),                 // TODO JS-2: split comments_and_work_notes journal
+                List.of(),
                 List.of(),
                 text(row, "cmdb_ci"),
-                List.of());                // TODO JS-2: reassignment history from sys_journal_field
+                List.of());
     }
 
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
-        // Naive keyword match on short_description of resolved incidents. TODO JS-2:
-        // use text search / similarity; scope by CI or business service.
+        // Naive keyword match on short_description of resolved/closed incidents.
         String kw = firstKeyword(incident.shortDescription());
         JsonNode body = rows("/api/now/table/incident",
                 "stateIN6,7^short_descriptionLIKE" + kw,
@@ -84,6 +92,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public Optional<ServiceOwnership> findOwnership(String applicationName) {
+        if (applicationName == null || applicationName.isBlank()) return Optional.empty();
         JsonNode row = firstRow("/api/now/table/cmdb_ci_service",
                 "nameLIKE" + applicationName, "name,support_group,business_criticality");
         if (row == null) return Optional.empty();
@@ -91,17 +100,18 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 text(row, "support_group"), text(row, "business_criticality"), "cmdb_ci_service"));
     }
 
+    /** Appends the note to the incident's work_notes (or comments) journal. Advisory only. */
     @Override
     public void addWorkNote(String number, String workNote) {
         JsonNode row = firstRow("/api/now/table/incident", "number=" + number, "sys_id");
-        if (row == null) { log.warn("cannot post work note; incident {} not found", number); return; }
+        if (row == null) { log.warn("cannot post note; incident {} not found", number); return; }
         String sysId = text(row, "sys_id");
         http.patch()
                 .uri("/api/now/table/incident/{sysId}", sysId)
                 .header("Content-Type", "application/json")
-                .body("{\"work_notes\":" + jsonString(workNote) + "}")
+                .body("{\"" + writeField + "\":" + jsonString(workNote) + "}")
                 .retrieve().toBodilessEntity();
-        log.info("posted advisory work note to {}", number);
+        log.info("posted advisory {} to {}", writeField, number);
     }
 
     // --- helpers ----------------------------------------------------------------
@@ -110,6 +120,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 .uri(uri -> uri.path(path)
                         .queryParam("sysparm_query", query)
                         .queryParam("sysparm_fields", fields)
+                        .queryParam("sysparm_display_value", "true")   // readable names, not sys_ids
                         .queryParam("sysparm_limit", 10).build())
                 .retrieve().body(JsonNode.class);
         return resp == null ? null : resp.get("result");

@@ -5,7 +5,7 @@ import com.company.triage.gateway.SumoGateway;
 import com.company.triage.model.LogEvidence;
 import com.company.triage.model.LogSearchRequest;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -15,12 +15,12 @@ import java.util.List;
 
 /**
  * Real Sumo Logic connector (JS-2) via the Search Job API: create job → poll until
- * DONE GATHERING RESULTS → fetch messages. {@code @Profile("real")}. Auth: Basic with
+ * DONE GATHERING RESULTS → fetch messages. {@code @ConditionalOnProperty(name = "triage.connectors.sumo", havingValue = "real")}. Auth: Basic with
  * accessId:accessKey; the base URL must be the correct regional endpoint
  * (e.g. https://api.au.sumologic.com). Query is always bounded (scope + window + cap).
  */
 @Component
-@Profile("real")
+@ConditionalOnProperty(name = "triage.connectors.sumo", havingValue = "real")
 public class RealSumoGateway implements SumoGateway {
 
     private static final int MAX_POLLS = 15;

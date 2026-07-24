@@ -158,9 +158,61 @@ first*, then the *first-pass diagnosis* (`triage.writeback.enabled`, default tru
 safe in `mock`, which just logs). Sumo scopes are allowlisted; all fetched content is
 treated as untrusted data. Every run emits a redacted tool-call trace.
 
-## Swapping mocks for real connectors (JS-2)
+## Connectors: mock or real (independently)
 
-Each `Mock*Gateway` (`@Profile("mock")`) has a `Real*Gateway` counterpart under
-`@Profile("real")` (ServiceNow/Confluence/Sumo/GitLab REST). Set credentials in
-`application-real.yml` / env and run with `--spring.profiles.active=real`. No
-orchestrator change — flip the profile per gateway as access lands.
+Each system has a `Mock*Gateway` and a `Real*Gateway`, switched **per connector**:
+
+```
+triage.connectors.servicenow=mock|real
+triage.connectors.confluence=mock|real
+triage.connectors.sumo=mock|real
+triage.connectors.gitlab=mock|real     # default: all mock
+```
+
+Mix freely — the useful demo combo is **real ServiceNow + mock evidence**.
+
+## ⭐ Live demo: write the comments to a REAL ServiceNow ticket
+
+Instead of only showing the result in our UI, post the two advisory comments onto a
+real ticket in your **ServiceNow dev instance** and switch to ServiceNow to show it
+updating live. Run this **on a machine that can reach the dev instance** (e.g. the
+corporate-network laptop).
+
+**1. One-time: a service account + a test ticket.**
+- A ServiceNow user/service account with **read + write on `incident`** (e.g. the
+  `itil` role, or a scoped REST role). Basic-auth credentials.
+- Create a test incident. Its number is what you'll type in the demo. *(The diagnosis
+  content is the scripted payment-reconcile story regardless of the ticket's text, so
+  any incident works; a ticket worded like "orders don't go through at checkout" just
+  makes the read look coherent.)*
+
+**2. Run with real ServiceNow (evidence stays mock):**
+
+```bash
+export SNOW_BASE_URL=https://devNNNNN.service-now.com
+export SNOW_USER=<service-account>   SNOW_PASSWORD=<password>
+cd app
+mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+```
+
+**3. Trigger it** — open http://localhost:8080, type your **real incident number**,
+click **Diagnose** (or `curl -X POST http://localhost:8080/api/diagnose/<INC>`).
+
+**4. Show it in ServiceNow** — open that incident; the two advisory entries appear in
+the **Work notes / Activity** stream: *Sources consulted*, then *First-pass diagnosis*.
+
+By default the comments go to **`work_notes`** (internal, fulfiller-visible). To post
+customer-facing **Additional comments** instead:
+`--triage.servicenow.write-field=comments`.
+
+> **Everything real** (all four systems) = `--spring.profiles.active=real` with every
+> credential set (see `application.yml` `triage.integrations.*`). ServiceNow-only is
+> the recommended demo.
+
+## Auto-trigger on ticket creation — deferred
+
+Firing automatically when a qualifying incident is created is designed but **out of
+scope for the demo** (a cloud dev instance can't reach a corp-network laptop without a
+tunnel/MID Server, which aren't available). The demo uses the **manual trigger** above;
+the investigation and the production path (Flow Designer + MID Server) are in
+[`../docs/discovery/servicenow-auto-trigger/`](../docs/discovery/servicenow-auto-trigger/).

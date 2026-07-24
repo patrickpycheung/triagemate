@@ -2,7 +2,7 @@ package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.model.CodeSearchResult;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -13,7 +13,7 @@ import java.util.List;
  * payment_service.py:44 (the distinctive-token line inside reconcile()).
  */
 @Component
-@Profile("mock")
+@ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "mock", matchIfMissing = true)
 public class MockGitLabGateway implements GitLabGateway {
 
     @Override

@@ -3,7 +3,7 @@ package com.company.triage.gateway.mock;
 import com.company.triage.gateway.SumoGateway;
 import com.company.triage.model.LogEvidence;
 import com.company.triage.model.LogSearchRequest;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
  * must correlate back to source (RC3). Respects the request's maxResults cap.
  */
 @Component
-@Profile("mock")
+@ConditionalOnProperty(name = "triage.connectors.sumo", havingValue = "mock", matchIfMissing = true)
 public class MockSumoGateway implements SumoGateway {
 
     private static final List<LogEvidence> WINDOW = List.of(

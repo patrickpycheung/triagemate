@@ -4,7 +4,7 @@ import com.company.triage.config.IntegrationProperties;
 import com.company.triage.gateway.ConfluenceGateway;
 import com.company.triage.model.KnowledgeDoc;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -13,12 +13,12 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * Real Confluence connector (JS-2) via CQL search + page REST. {@code @Profile("real")}.
+ * Real Confluence connector (JS-2) via CQL search + page REST. {@code @ConditionalOnProperty(name = "triage.connectors.confluence", havingValue = "real")}.
  * Auth: Basic with email + API token (Cloud). Best-effort: on any error the caller
  * degrades (evidence omitted). Alternatively reuse the auspost-mcp Confluence client.
  */
 @Component
-@Profile("real")
+@ConditionalOnProperty(name = "triage.connectors.confluence", havingValue = "real")
 public class RealConfluenceGateway implements ConfluenceGateway {
 
     private final RestClient http;

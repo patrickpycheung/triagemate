@@ -2,14 +2,14 @@ package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ConfluenceGateway;
 import com.company.triage.model.KnowledgeDoc;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /** Mock Confluence (J7 dataset): one runbook that documents the known error (J6). */
 @Component
-@Profile("mock")
+@ConditionalOnProperty(name = "triage.connectors.confluence", havingValue = "mock", matchIfMissing = true)
 public class MockConfluenceGateway implements ConfluenceGateway {
 
     @Override

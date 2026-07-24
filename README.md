@@ -56,6 +56,32 @@ shown in the UI; nothing external is touched.
 > **Full step-by-step run + presentation script:** [`app/README.md`](app/README.md).
 > **Screenshot walkthrough:** [`docs/design-java/DEMO.md`](docs/design-java/DEMO.md).
 
+## Post the comments to a real ServiceNow ticket (optional)
+
+Instead of only showing the result in the UI, write the two advisory comments onto a
+real incident in your **ServiceNow dev instance** and switch to ServiceNow to show it
+updating live. Only the ServiceNow connector goes live; the evidence stays mock.
+
+Run this **where the dev instance is reachable** (e.g. the corporate-network laptop),
+with a service account that has **read + write on `incident`**:
+
+```bash
+export SNOW_BASE_URL=https://devNNNNN.service-now.com
+export SNOW_USER=<service-account>  SNOW_PASSWORD=<password>
+cd app
+mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+```
+
+Then trigger it with a **real incident number** (UI or `curl`). The two entries —
+*Sources consulted* then *First-pass diagnosis* — appear in that ticket's **Work notes /
+Activity** stream. To post customer-facing *Additional comments* instead, add
+`--triage.servicenow.write-field=comments`.
+
+Connectors switch independently (`triage.connectors.{servicenow,confluence,sumo,gitlab}=mock|real`,
+default mock). Full steps + the service-account notes: [`app/README.md`](app/README.md)
+→ "Live demo". Auto-trigger on ticket creation is deferred — see
+[`docs/discovery/servicenow-auto-trigger/`](docs/discovery/servicenow-auto-trigger/).
+
 ## Verify it works
 
 ```bash

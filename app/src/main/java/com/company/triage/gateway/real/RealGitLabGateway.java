@@ -4,7 +4,7 @@ import com.company.triage.config.IntegrationProperties;
 import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.model.CodeSearchResult;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Real GitLab connector (JS-2) via the project blob-search API. {@code @Profile("real")}.
+ * Real GitLab connector (JS-2) via the project blob-search API. {@code @ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "real")}.
  * Auth: PRIVATE-TOKEN (project/group/service-account token). Targeted only — searches
  * one allowlisted project for a concrete term and returns matching file:line; never
  * clones. Alternatively reuse the auspost-mcp gitlab4j client.
@@ -23,7 +23,7 @@ import java.util.List;
  * can reach GitLab (deployment placement, not an AI problem).
  */
 @Component
-@Profile("real")
+@ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "real")
 public class RealGitLabGateway implements GitLabGateway {
 
     private final RestClient http;

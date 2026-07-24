@@ -56,6 +56,23 @@ gateway while the expected total discounts *before* tax — surfaced as
 `PAYMENT_RECONCILE_MISMATCH expected=11.50 charged=11.25`, tied back to
 `payment_service.py:44`.
 
+## Optional: post the comments to a REAL ServiceNow ticket
+
+The screenshots above are the offline `mock` profile. To make the two comments land on a
+real **dev** ServiceNow incident (and show it updating live in ServiceNow), switch just
+the ServiceNow connector to real:
+
+```bash
+export SNOW_BASE_URL=https://devNNNNN.service-now.com  SNOW_USER=<svc>  SNOW_PASSWORD=<pw>
+cd app && mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+```
+
+Type a real incident number → the *Sources consulted* and *First-pass diagnosis* entries
+appear in that ticket's Work notes / Activity stream. Full steps + the service-account
+and write-field notes are in [`../../app/README.md`](../../app/README.md) → "Live demo".
+Evidence stays mock/curated; only ServiceNow is live. Run it where the dev instance is
+reachable (the corporate-network laptop).
+
 ## Regenerating the screenshots
 
 App running on `:8080`, then `node scripts/shot.mjs <out-dir>` (Playwright + chromium)

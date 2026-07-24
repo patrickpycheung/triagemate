@@ -1,20 +1,10 @@
-# Real-connector config (JS-2). Activate with:  --spring.profiles.active=real
-# Fill from env / a secret store — never commit real credentials.
-# Each Real*Gateway (@Profile("real")) reads these; unset connectors simply won't bind.
+# 'real' profile: use REAL connectors for ALL four systems (needs every credential).
+# For the hackathon demo you usually want ONLY real ServiceNow — use the 'snow-live'
+# profile in application.yml instead. Credentials come from the env placeholders in
+# application.yml (triage.integrations.*). Activate: --spring.profiles.active=real
 triage:
-  integrations:
-    servicenow:
-      base-url: ${SNOW_BASE_URL:}          # https://<instance>.service-now.com
-      user:     ${SNOW_USER:}              # least-privilege service account
-      secret:   ${SNOW_PASSWORD:}
-    confluence:
-      base-url: ${CONFLUENCE_BASE_URL:}    # https://<site>.atlassian.net
-      user:     ${CONFLUENCE_EMAIL:}
-      secret:   ${CONFLUENCE_API_TOKEN:}
-    sumo:
-      base-url: ${SUMO_BASE_URL:}          # regional, e.g. https://api.au.sumologic.com
-      user:     ${SUMO_ACCESS_ID:}
-      secret:   ${SUMO_ACCESS_KEY:}
-    gitlab:
-      base-url: ${GITLAB_BASE_URL:}        # https://gitlab.internal (intranet)
-      token:    ${GITLAB_TOKEN:}
+  connectors:
+    servicenow: real
+    confluence: real
+    sumo: real
+    gitlab: real

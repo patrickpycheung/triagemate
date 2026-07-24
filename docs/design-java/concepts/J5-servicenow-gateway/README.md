@@ -35,6 +35,14 @@ Idempotent (skip if an identical AI note already exists). Toggle with
 `triage.writeback.enabled` (default true; safe in `mock` — the mock just logs).
 The earlier human-confirm gate is **removed** (see `PIVOT.md` / J8).
 
+**Live write-back (2026-07-24).** The connector is switchable per system
+(`triage.connectors.servicenow=mock|real`), so the demo can post the two comments to a
+**real dev ServiceNow ticket** while evidence stays mock (`snow-live` profile). The
+target journal is configurable — `triage.servicenow.write-field=work_notes` (default,
+internal) or `comments` (customer-facing). Reads use `sysparm_display_value=true` for
+readable names. Runbook: `app/README.md` → "Live demo". (Auto-trigger on ticket
+creation is deferred — `docs/discovery/servicenow-auto-trigger/`.)
+
 ## Verification
 - `MockServiceNowGateway` serves the J7 dataset incident + 2–3 similar resolved
   incidents + a CMDB ownership record.
