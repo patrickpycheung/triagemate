@@ -12,7 +12,7 @@ This file is the one-screen map of what changed and where the active work lives.
 
 ## What the tool is (unchanged framing)
 
-> **An AI-assisted Incident Triage Copilot** that gathers evidence from ServiceNow,
+> **An AI-assisted TriageMate** that gathers evidence from ServiceNow,
 > enterprise knowledge, logs and source repositories to clarify a reported issue,
 > identify the likely affected system(s), and recommend the appropriate support
 > team and next diagnostic action — posted as an **advisory** ServiceNow work note.

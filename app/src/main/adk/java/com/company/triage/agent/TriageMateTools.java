@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  * The tools the ADK agent may call (J3 gateways exposed as ADK FunctionTools, J2).
- * ADK discovers these via {@code FunctionTool.create(TriageTools.class, "<method>")};
+ * ADK discovers these via {@code FunctionTool.create(TriageMateTools.class, "<method>")};
  * the {@code @Schema} text is what the model sees. Bounds/allowlists (J8) are applied
  * here and re-checked in {@link BoundsCallback}.
  *
@@ -18,7 +18,7 @@ import java.util.Map;
  * populated once at startup ({@link #wire}). JS-1b: confirm the {@code @Schema}
  * package + FunctionTool.create signature against ADK 1.7.0.
  */
-public final class TriageTools {
+public final class TriageMateTools {
 
     private static ServiceNowGateway serviceNow;
     private static ConfluenceGateway confluence;
@@ -26,7 +26,7 @@ public final class TriageTools {
     private static GitLabGateway gitLab;
     private static List<String> sumoAllowlist = List.of("prod/payment", "prod/order-api");
 
-    private TriageTools() {}
+    private TriageMateTools() {}
 
     static void wire(ServiceNowGateway sn, ConfluenceGateway cf, SumoGateway su,
                      GitLabGateway gl, List<String> allowlist) {

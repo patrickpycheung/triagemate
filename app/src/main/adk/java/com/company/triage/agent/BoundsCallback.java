@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * call is denied before it executes.
  *
  * <p>JS-1b: bind {@link #allow} to the ADK 1.7.0 before-tool callback hook; per-tool
- * result caps are already applied inside {@link TriageTools}.
+ * result caps are already applied inside {@link TriageMateTools}.
  */
 public class BoundsCallback {
 

@@ -14,8 +14,8 @@
     <groupId>com.company</groupId>
     <artifactId>triage-copilot</artifactId>
     <version>0.1.0</version>
-    <name>Incident Triage Copilot</name>
-    <description>Local Spring Boot AI incident-triage copilot (hackathon POC)</description>
+    <name>TriageMate</name>
+    <description>TriageMate — local Spring Boot AI incident-triage copilot (hackathon POC)</description>
 
     <properties>
         <java.version>21</java.version>

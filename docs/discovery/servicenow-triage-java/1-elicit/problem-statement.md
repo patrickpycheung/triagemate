@@ -1,4 +1,4 @@
-# Problem Statement — Incident Triage Copilot (Java POC)
+# Problem Statement — TriageMate (Java POC)
 
 > Reuses the original DDS 1-elicit
 > (`docs/discovery/servicenow-triage/1-elicit/`). This file records only what the

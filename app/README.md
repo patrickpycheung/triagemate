@@ -1,4 +1,4 @@
-# Incident Triage Copilot — Spring Boot POC
+# TriageMate — Spring Boot POC
 
 A local Spring Boot app that runs a **bounded, evidence-gathering** diagnosis of a
 ServiceNow incident and **automatically posts two advisory comments back to the
@@ -41,7 +41,7 @@ mvn spring-boot:run
 Wait for this line (~1–2 seconds):
 
 ```
-Started TriageApplication in 1.3 seconds (process running for 1.6)
+Started TriageMateApplication in 1.3 seconds (process running for 1.6)
 ```
 
 The app now serves on **http://localhost:8080** in the offline `mock` profile — no
@@ -91,7 +91,7 @@ payoff):
 
 **Part B — the live demo.** Then show the real app doing it:
 
-1. **Start it** — `cd app && mvn spring-boot:run`, wait for *Started TriageApplication*.
+1. **Start it** — `cd app && mvn spring-boot:run`, wait for *Started TriageMateApplication*.
 2. **Open** http://localhost:8080. Say: *"A support ticket just came in — `INC0012345`,
    'orders sometimes don't go through at checkout'. Vague. Normally a human starts from
    a blank page."*
@@ -224,7 +224,7 @@ mvn spring-boot:run
 #   → open http://localhost:8080, Diagnose, Ctrl+C. Then run for real:
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
-Wait for `Started TriageApplication`.
+Wait for `Started TriageMateApplication`.
 
 ### 5 · Do the demo
 1. Open **http://localhost:8080**, type your **real incident number**, click

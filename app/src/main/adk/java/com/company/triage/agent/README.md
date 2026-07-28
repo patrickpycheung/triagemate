@@ -7,7 +7,7 @@ live `LlmAgent` + tool round-trip against the enterprise endpoint.
 ## Files
 - `AdkModelFactory` — builds the model backend from `LLM_BASE_URL/LLM_API_KEY/LLM_MODEL`
   via `google-adk-langchain4j` + `langchain4j-open-ai`.
-- `TriageTools` — the six gateway-backed `@Schema` tool methods ADK exposes to the model.
+- `TriageMateTools` — the six gateway-backed `@Schema` tool methods ADK exposes to the model.
 - `BoundsCallback` — max-tool-calls leash (J8), to attach to `beforeToolCallback`.
 - `AdkDiagnosisEngine` — builds the `LlmAgent`, runs it, parses the J4 JSON.
 

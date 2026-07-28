@@ -1,4 +1,4 @@
-# Incident Triage Copilot
+# TriageMate
 
 A local **Spring Boot + Google ADK** app that gives every new ServiceNow incident a
 **first-pass diagnosis automatically** — turning a blank ticket into a head start.
@@ -31,7 +31,7 @@ cd app
 mvn spring-boot:run
 ```
 
-Wait for `Started TriageApplication in ~1.3 seconds`, then open
+Wait for `Started TriageMateApplication in ~1.3 seconds`, then open
 **http://localhost:8080**. Stop with `Ctrl+C`.
 
 ## How to use it

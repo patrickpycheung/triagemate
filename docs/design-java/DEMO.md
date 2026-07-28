@@ -1,4 +1,4 @@
-# Demo Walkthrough — Incident Triage Copilot
+# Demo Walkthrough — TriageMate
 
 What the running Spring Boot app does, end to end, and how to run it. Screenshots are
 from the real app (`app/`) driven by Playwright against the offline `mock` profile —

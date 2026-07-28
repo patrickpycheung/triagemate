@@ -46,12 +46,12 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
             .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private static final String AGENT_NAME = "incident-triage-copilot";
-    private static final String USER_ID = "triage-service";
+    private static final String AGENT_NAME = "triagemate";
+    private static final String USER_ID = "triagemate-service";
 
     /** The agent's "way and flow of thinking" — the key tunable (per the brief). */
     private static final String INSTRUCTION = """
-        You are an IT incident triage copilot. Produce an ADVISORY first-pass diagnosis
+        You are TriageMate, an IT incident triage copilot. Produce an ADVISORY first-pass diagnosis
         — never claim a definitive root cause and never reassign tickets.
 
         Investigate in this order, stopping as soon as you have enough to conclude:
@@ -88,7 +88,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                               @Value("${triage.agent.max-tool-calls:8}") int maxToolCalls) {
         // Comma-separated @Value binds cleanly to List<String>; the YAML list is a
         // human-readable mirror. JS-1b: switch to @ConfigurationProperties if preferred.
-        TriageTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes);
+        TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes);
         this.maxToolCalls = maxToolCalls;
     }
 
@@ -103,12 +103,12 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 .model(AdkModelFactory.fromEnv())
                 .instruction(INSTRUCTION)
                 .tools(
-                        FunctionTool.create(TriageTools.class, "getIncident"),
-                        FunctionTool.create(TriageTools.class, "findSimilarIncidents"),
-                        FunctionTool.create(TriageTools.class, "findOwnership"),
-                        FunctionTool.create(TriageTools.class, "searchConfluence"),
-                        FunctionTool.create(TriageTools.class, "searchLogs"),
-                        FunctionTool.create(TriageTools.class, "searchCode"))
+                        FunctionTool.create(TriageMateTools.class, "getIncident"),
+                        FunctionTool.create(TriageMateTools.class, "findSimilarIncidents"),
+                        FunctionTool.create(TriageMateTools.class, "findOwnership"),
+                        FunctionTool.create(TriageMateTools.class, "searchConfluence"),
+                        FunctionTool.create(TriageMateTools.class, "searchLogs"),
+                        FunctionTool.create(TriageMateTools.class, "searchCode"))
                 // J8 leash: the app enforces max tool calls. Returning a non-empty
                 // Optional short-circuits the tool (denies it); empty lets it run.
                 .beforeToolCallbackSync((invocation, tool, args, toolCtx) -> {
