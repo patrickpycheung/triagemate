@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -38,6 +39,8 @@ import java.util.List;
  */
 @Component
 @ConditionalOnProperty(name = "triage.engine", havingValue = "adk")
+@Primary // DeterministicDiagnosisEngine is always registered too (FND-7 fallback);
+         // when both exist, this one wins the DiagnosisEngine interface injection.
 public class AdkDiagnosisEngine implements DiagnosisEngine {
 
     private static final Logger log = LoggerFactory.getLogger(AdkDiagnosisEngine.class);

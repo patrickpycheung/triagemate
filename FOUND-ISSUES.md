@@ -119,7 +119,24 @@ docs. Cheapest fix is renaming one set at the next CDS round.
 ---
 
 ## FND-7 — `LlmCallsLimitExceededException` is unhandled: the J8 safety cap crashes
-instead of degrading · **HIGH**
+instead of degrading · **HIGH** · ✅ **RESOLVED 2026-07-30**
+
+> **Resolution**: `DiagnosisOrchestrator` now catches any exception from the primary
+> engine and falls back to the deterministic engine (chose that option from the three
+> listed below — it reuses proven, tested, network-free code instead of fabricating a
+> partial J4 report). `DeterministicDiagnosisEngine` is registered unconditionally (no
+> longer gated on `triage.engine`) so it's always available as the fallback;
+> `AdkDiagnosisEngine` is `@Primary` so it still wins as the active engine when both
+> beans exist. The fallback is disclosed as the first trace line, never silent. When the
+> active engine already IS the deterministic one, failures propagate normally — no
+> self-fallback masking a real bug. Verified: `mvn test` and `mvn -Padk test` both pass
+> (two new tests cover the fallback firing and the propagate-when-already-fallback case);
+> re-ran the live `-Padk` app against the stub proxy configured to never converge — was a
+> 500, now `HTTP 200` with `trace[0]` reading "⚠ primary engine did not converge
+> (RuntimeException: …LlmCallsLimitExceededException…) — degraded to the deterministic
+> engine". See `src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java`.
+
+Original finding (kept for record):
 
 **Where**: `src/main/adk/java/com/company/triage/agent/AdkDiagnosisEngine.java` —
 `runAgent()` (the `blockingForEach` call, ~line 158) has no `try/catch`; `diagnose()`'s

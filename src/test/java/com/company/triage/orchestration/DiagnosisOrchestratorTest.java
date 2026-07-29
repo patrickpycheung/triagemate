@@ -40,8 +40,9 @@ class DiagnosisOrchestratorTest {
         var snow = new RecordingServiceNow();
         DiagnosisReport report = sampleReport();
         DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
+        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, snow, true).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, true).run("INC0012345");
 
         assertThat(snow.notes).hasSize(2);
         assertThat(snow.notes.get(0)).contains("Sources consulted").contains("prod/payment");   // sources first
@@ -54,7 +55,42 @@ class DiagnosisOrchestratorTest {
     void writebackDisabledPostsNothing() {
         var snow = new RecordingServiceNow();
         DiagnosisEngine engine = incident -> new DiagnosisResult(sampleReport(), new ArrayList<>());
-        new DiagnosisOrchestrator(engine, snow, false).run("INC0012345");
+        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+        new DiagnosisOrchestrator(engine, unusedFallback, snow, false).run("INC0012345");
         assertThat(snow.notes).isEmpty();
+    }
+
+    /** FND-7: a primary engine that fails to converge degrades to the fallback engine
+     *  instead of crashing the request, and the degradation is disclosed in the trace. */
+    @Test
+    void primaryEngineFailureDegradesToFallbackEngine() {
+        var snow = new RecordingServiceNow();
+        DiagnosisEngine failingPrimary = incident -> {
+            throw new IllegalStateException("LLM calls limit exceeded (simulated)");
+        };
+        DiagnosisReport fallbackReport = sampleReport();
+        DiagnosisEngine fallback = incident ->
+                new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: assembled report")));
+
+        DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, true).run("INC0012345");
+
+        assertThat(r.report()).isSameAs(fallbackReport);
+        assertThat(r.trace().get(0)).contains("degraded to the deterministic engine")
+                .contains("LLM calls limit exceeded (simulated)");
+        assertThat(snow.notes).hasSize(2);   // writeback still happens off the fallback report
+    }
+
+    /** When the active engine IS the fallback engine (no -Padk build, or triage.engine=
+     *  deterministic), a failure must propagate as a real bug, not be swallowed by a
+     *  no-op "fallback" to itself. */
+    @Test
+    void whenPrimaryIsAlreadyTheFallbackEngineFailuresPropagate() {
+        var snow = new RecordingServiceNow();
+        DiagnosisEngine onlyEngine = incident -> { throw new IllegalStateException("boom"); };
+
+        var orchestrator = new DiagnosisOrchestrator(onlyEngine, onlyEngine, snow, true);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> orchestrator.run("INC0012345"));
     }
 }

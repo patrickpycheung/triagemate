@@ -5,7 +5,6 @@ import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.gateway.SumoGateway;
 import com.company.triage.model.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -24,10 +23,12 @@ import java.util.regex.Pattern;
  * reasoning instead of an LLM, so the demo works with zero network. The live agentic
  * version lives in src/main/adk (profile {@code adk}).
  *
- * <p>Default engine (active unless {@code triage.engine=adk}).
+ * <p>Default engine (active unless {@code triage.engine=adk}). Registered unconditionally
+ * (not gated on {@code triage.engine}) so it is always available as {@link
+ * DiagnosisOrchestrator}'s automatic fallback (FND-7) when the ADK engine is primary but
+ * fails to converge — no LLM/network dependency means this path can't fail the same way.
  */
 @Component
-@ConditionalOnProperty(name = "triage.engine", havingValue = "deterministic", matchIfMissing = true)
 public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
     private static final Pattern ORDER_ID = Pattern.compile("\\bINC-ORD-\\d+\\b");

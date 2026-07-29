@@ -14,8 +14,16 @@ agents shouting at each other.
   Business-Rule webhook to this same endpoint is the "if we have time" upgrade —
   no code change to the core.)
 - **`DiagnosisOrchestrator`** — owns the run: builds `IncidentContext` (J5), invokes
-  the ADK agent (J2), collects the report (J4), triggers the work-note write (J5),
-  emits the run trace (J8). Enforces a hard wall-clock timeout + max-tool-calls.
+  the active `DiagnosisEngine` (J2 — either the ADK agent or the offline deterministic
+  engine, selected by `triage.engine`), collects the report (J4), triggers the
+  work-note write (J5), emits the run trace (J8). Enforces a hard wall-clock timeout +
+  max-tool-calls.
+  **Auto-fallback (FND-7, fixed 2026-07-30)**: when the ADK engine is active and fails
+  to converge (its own `LlmCallsLimitExceededException` backstop, or any other
+  model/proxy/network failure), the orchestrator degrades to the deterministic engine
+  instead of returning a 500 — disclosed as the first trace line, never silent. When the
+  deterministic engine is already the active one, its failures propagate normally (there
+  is nothing to fall back to, and a bug there should surface as a bug).
 - **`IncidentUnderstandingService`** — Step-2 "clarify symptom": LLM turns the raw
   ticket into the structured interpretation (symptom, function, env, identifiers,
   missing info). Cheap, high-value, runs even if every other tool is mocked.
