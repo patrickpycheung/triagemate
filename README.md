@@ -71,6 +71,12 @@ export $(grep -v '^#' .env | xargs)
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 
+Don't have a ServiceNow service account yet? See
+[`docs/integrations/SERVICENOW.md`](docs/integrations/SERVICENOW.md) for how to get
+one. The other connectors (Confluence, Sumo Logic, GitLab) and the live LLM/ADK agent
+mode each have their own setup guide under
+[`docs/integrations/`](docs/integrations/README.md).
+
 Then trigger it with a **real incident number** (UI or `curl`). The two entries —
 *Sources consulted* then *First-pass diagnosis* — appear in that ticket's **Work notes /
 Activity** stream. To post customer-facing *Additional comments* instead, add
