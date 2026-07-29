@@ -3,6 +3,7 @@ node_modules/
 .agent.work.archive/
 *.env
 .env*
+!.env.example
 manifest-secrets*
 __pycache__/
 *.pyc

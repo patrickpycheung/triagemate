@@ -61,11 +61,13 @@ real incident in your **ServiceNow dev instance** and switch to ServiceNow to sh
 updating live. Only the ServiceNow connector goes live; the evidence stays mock.
 
 Run this **where the dev instance is reachable** (e.g. the corporate-network laptop),
-with a service account that has **read + write on `incident`**:
+with a service account that has **read + write on `incident`**. Secrets are kept in a
+gitignored `.env` file, not exported by hand — copy the template and fill it in:
 
 ```bash
-export SNOW_BASE_URL=https://devNNNNN.service-now.com
-export SNOW_USER=<service-account>  SNOW_PASSWORD=<password>
+cp .env.example .env   # fill in SNOW_BASE_URL / SNOW_USER / SNOW_PASSWORD
+
+export $(grep -v '^#' .env | xargs)
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 
@@ -91,7 +93,9 @@ By default a deterministic engine runs the flow offline. To use a real LLM-drive
 **Google ADK** agent over the same tools:
 
 ```bash
-export LLM_BASE_URL=https://llm.internal/v1  LLM_API_KEY=***  LLM_MODEL=gpt-4o-mini
+cp .env.example .env   # fill in LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+
+export $(grep -v '^#' .env | xargs)
 mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
 ```
 
