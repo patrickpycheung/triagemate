@@ -1,8 +1,10 @@
 # Demo Walkthrough — TriageMate
 
-What the running Spring Boot app does, end to end, and how to run it. Screenshots are
-from the real app driven by Playwright against the offline `mock` profile —
-no network, no LLM, no external systems.
+What the running Spring Boot app does, end to end, and how to run it.
+
+> Screenshots/video removed for now — deferred until the app is finalized (captured from
+> the real app via Playwright against the offline `mock` profile: no network, no LLM, no
+> external systems). This walkthrough describes verified, real behavior in the meantime.
 
 ## Run it
 
@@ -19,16 +21,12 @@ boots in ~1.3s and serves the full diagnosis end-to-end offline.
 A ServiceNow incident number goes in (manually here; a ServiceNow Business-Rule
 webhook can call the same endpoint on ticket creation — no human in the loop).
 
-![Landing screen](screenshots/demo-landing.png)
-
 ## 2 · The automatic two-comment write-back (the payoff)
 
 The copilot runs a bounded, evidence-gathering diagnosis and **automatically posts two
 advisory comments back to the ticket — sources first, then its view.** It only
 comments; it never reassigns, closes, or re-prioritises. Sources go first so the
 diagnosis is auditable: every conclusion is one click from the evidence behind it.
-
-![Two comments posted to ServiceNow: sources, then diagnosis](screenshots/demo-writeback.png)
 
 - **Comment 1 — Sources consulted**: links to the exact Confluence page (KB001234),
   the Sumo Logic window (`order=INC-ORD-4471`), the GitLab line
@@ -44,8 +42,6 @@ clarified symptom, ranked candidate systems with confidence, evidence from all f
 systems (including the log↔code citation `payment_service.py:44`), and the tool-call
 trace proving it really consulted each source.
 
-![Full diagnosis page](screenshots/demo-desktop.png)
-
 ## The worked example
 
 The mock dataset (`src/main/java/.../gateway/mock/`, reusing the S3′ Sumo fixture
@@ -57,9 +53,9 @@ gateway while the expected total discounts *before* tax — surfaced as
 
 ## Optional: post the comments to a REAL ServiceNow ticket
 
-The screenshots above are the offline `mock` profile. To make the two comments land on a
-real **dev** ServiceNow incident (and show it updating live in ServiceNow), switch just
-the ServiceNow connector to real:
+The walkthrough above runs against the offline `mock` profile. To make the two comments
+land on a real **dev** ServiceNow incident (and show it updating live in ServiceNow),
+switch just the ServiceNow connector to real:
 
 ```bash
 cp secrets.properties.example secrets.properties   # fill in triage.integrations.servicenow.*
@@ -72,8 +68,8 @@ and write-field notes are in [`../../README.md`](../../README.md) → "Live demo
 Evidence stays mock/curated; only ServiceNow is live. Run it where the dev instance is
 reachable (the corporate-network laptop).
 
-## Regenerating the screenshots
+## Generating screenshots (deferred)
 
-App running on `:8080`, then `node scripts/shot.mjs <out-dir>` (Playwright + chromium)
-captures landing / full-page / write-back close-up / mobile. Kept under
-`docs/design-java/screenshots/`.
+Not run yet — planned once the app is finalized. App running on `:8080`, then
+`node scripts/shot.mjs <out-dir>` (Playwright + chromium) captures landing / full-page /
+write-back close-up / mobile, to be kept under `docs/design-java/screenshots/`.

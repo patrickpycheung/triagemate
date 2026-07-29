@@ -16,8 +16,8 @@ convincingly. Scope to **one** demonstration application — do not cover the en
 - Plain HTML + fetch to `/api/diagnose/{n}`; no framework needed.
 - Also renders the **two comments posted automatically to ServiceNow** (sources, then
   advisory diagnosis) so viewers see the real write-back, not just the internal report.
-- **Screenshots + run walkthrough: [`../../DEMO.md`](../../DEMO.md)** (captured from the
-  running app via `scripts/shot.mjs` / Playwright; images in `../screenshots/`).
+- **Run walkthrough: [`../../DEMO.md`](../../DEMO.md)**. Screenshots deferred until the
+  app is finalized (then captured via `scripts/shot.mjs` / Playwright into `../screenshots/`).
 
 ## Ground-truth dataset (the `mock` profile serves this)
 For the one demo app, capture per incident: actual affected application, actual root
