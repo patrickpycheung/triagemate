@@ -25,6 +25,11 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
 ## 0. One-time prep (before demo day)
 
 ### a) Stand up the Copilot → OpenAI proxy (E2)
+
+> **Validate with `./scripts/e2-proxy-spike.sh` once it's up** — in particular check 4,
+> tool-calling. Whether a Copilot proxy passes `tools` through to the model is the single
+> highest-risk unknown in D1, and it cannot be tested off the corp laptop.
+
 Pick one:
 
 ```bash
@@ -121,8 +126,12 @@ stage — flip and continue.
 
 ## 4. Pre-flight checklist (10 min before)
 
-- [ ] T1 proxy up; `curl /v1/models` lists your high model.
-- [ ] `secrets.properties` model id matches an id from `/v1/models`.
+- [ ] **`./scripts/e2-proxy-spike.sh` exits 0.** This replaces the two manual checks below —
+      it verifies the proxy is up, lists models, confirms your configured id is served, and
+      (critically) that the proxy **returns `tool_calls`** rather than dropping the `tools`
+      field. A proxy that drops `tools` silently degrades D1 to a single-shot answer with
+      **no evidence trail** — which is the whole demo. Run it before anything else.
+- [ ] JDK + Maven present (`mvn -v`) — a JRE alone cannot build `-Padk`.
 - [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0012345` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
 - [ ] Decide **now** whether D3 runs — network + ToS ok? If unsure, **skip it**. (No MCP
