@@ -12,7 +12,7 @@
 # accept the field and silently drop it — you get prose where you need a tool call,
 # and the agent loop degrades to a single-shot answer with no evidence trail.
 #
-# Usage:  ./scripts/e2-proxy-spike.sh [base_url] [model]
+# Usage:  ./bin/e2-proxy-spike.sh [base_url] [model]
 # Default: http://localhost:4000/v1, model read from secrets.properties.
 
 set -uo pipefail
@@ -98,6 +98,6 @@ fi
 
 echo
 echo "=== $PASS passed, $FAIL failed ==="
-[ "$FAIL" -eq 0 ] && echo "E2 validated — set base-url/model in secrets.properties and run: mvn -Padk spring-boot:run" \
+[ "$FAIL" -eq 0 ] && echo "E2 validated — set base-url/model in secrets.properties and run: ./run-adk.sh" \
                   || echo "E2 NOT validated — see failures above. D2 remains the guaranteed path."
 exit $((FAIL > 0))

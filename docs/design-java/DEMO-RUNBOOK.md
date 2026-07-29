@@ -26,16 +26,16 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
 
 ### a) Stand up the Copilot → OpenAI proxy (E2)
 
-> **Validate with `./scripts/e2-proxy-spike.sh` once it's up** — in particular check 4,
+> **Validate with `./bin/e2-proxy-spike.sh` once it's up** — in particular check 4,
 > tool-calling. Whether a Copilot proxy passes `tools` through to the model is the single
 > highest-risk unknown in D1, and it cannot be tested off the corp laptop.
 >
 > **Rehearse the spike anywhere, without a Copilot seat**, using the stub proxy — so a
 > broken *spike* is never mistaken for a broken *proxy* on demo morning:
 > ```bash
-> ./scripts/fake-openai-proxy.py &                 # compliant  -> spike exits 0
-> ./scripts/fake-openai-proxy.py --drop-tools &    # broken     -> check 4 fails, exit 1
-> ./scripts/e2-proxy-spike.sh http://localhost:4000/v1 claude-opus-4.6
+> ./bin/fake-openai-proxy.py &                 # compliant  -> spike exits 0
+> ./bin/fake-openai-proxy.py --drop-tools &    # broken     -> check 4 fails, exit 1
+> ./bin/e2-proxy-spike.sh http://localhost:4000/v1 claude-opus-4.6
 > ```
 > `--drop-tools` reproduces the exact silent failure that matters: a proxy that accepts
 > `tools` and ignores them. Add `--log req.json` to see the precise request shape our app
@@ -79,7 +79,7 @@ curl -s http://localhost:4000/v1/chat/completions \
   -d '{"model":"claude-opus-4.6","messages":[{"role":"user","content":"say hi"}]}' | head
 
 # app + high model, one incident, live agent path:
-./scripts/run-adk.sh &
+./run-adk.sh &
 curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
 ```
 
@@ -92,8 +92,8 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | # | What | Command | Port |
 |---|------|---------|------|
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
-| T2 | **Primary (D1)** — our loop + high model | `./scripts/run-adk.sh` | 8080 |
-| T3 | **Fallback (D2)** — deterministic, offline | `./scripts/run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
+| T2 | **Primary (D1)** — our loop + high model | `./run-adk.sh` | 8080 |
+| T3 | **Fallback (D2)** — deterministic, offline | `./run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
 | T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0012345: <paste the summary>. Diagnose it."` | — |
 | — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
 
@@ -128,7 +128,7 @@ If the model/proxy misbehaves live (slow, error, network drop):
 - **Just move the browser to `http://localhost:8081`** (the deterministic standby) and
   keep going — identical UI and output, **no LLM, no network**. Say nothing broke; it's
   the offline mode.
-- If you prefer one port: stop T2 and run `./scripts/run-deterministic.sh` on 8080.
+- If you prefer one port: stop T2 and run `./run-deterministic.sh` on 8080.
 
 Because D2 is already running, the flip is a single browser-tab switch. **Never** debug on
 stage — flip and continue.
@@ -137,7 +137,7 @@ stage — flip and continue.
 
 ## 4. Pre-flight checklist (10 min before)
 
-- [ ] **`./scripts/e2-proxy-spike.sh` exits 0.** This replaces the two manual checks below —
+- [ ] **`./bin/e2-proxy-spike.sh` exits 0.** This replaces the two manual checks below —
       it verifies the proxy is up, lists models, confirms your configured id is served, and
       (critically) that the proxy **returns `tool_calls`** rather than dropping the `tools`
       field. A proxy that drops `tools` silently degrades D1 to a single-shot answer with

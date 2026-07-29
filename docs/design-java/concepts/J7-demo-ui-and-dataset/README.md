@@ -17,7 +17,7 @@ convincingly. Scope to **one** demonstration application — do not cover the en
 - Also renders the **two comments posted automatically to ServiceNow** (sources, then
   advisory diagnosis) so viewers see the real write-back, not just the internal report.
 - **Run walkthrough: [`../../DEMO.md`](../../DEMO.md)**. Screenshots deferred until the
-  app is finalized (then captured via `scripts/shot.mjs` / Playwright into `../screenshots/`).
+  app is finalized (then captured via `bin/shot.mjs` / Playwright into `../screenshots/`).
 
 ## Ground-truth dataset (the `mock` profile serves this)
 For the one demo app, capture per incident: actual affected application, actual root

@@ -7,9 +7,9 @@
 # 8080, so run only one at a time unless you override --port to compare them
 # side by side (see docs/design-java/DEMO-RUNBOOK.md, "The fallback flip").
 #
-# Usage: ./scripts/run-deterministic.sh [-- extra mvn args]
+# Usage: ./run-deterministic.sh [-- extra mvn args]
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 command -v mvn >/dev/null 2>&1 || {
   echo "mvn not found. Install a JDK + Maven, e.g.:" >&2

@@ -71,5 +71,5 @@ reachable (the corporate-network laptop).
 ## Generating screenshots (deferred)
 
 Not run yet — planned once the app is finalized. App running on `:8080`, then
-`node scripts/shot.mjs <out-dir>` (Playwright + chromium) captures landing / full-page /
+`node bin/shot.mjs <out-dir>` (Playwright + chromium) captures landing / full-page /
 write-back close-up / mobile, to be kept under `docs/design-java/screenshots/`.

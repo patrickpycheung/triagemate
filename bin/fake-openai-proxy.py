@@ -3,7 +3,7 @@
 
 Why this exists
 ---------------
-`scripts/e2-proxy-spike.sh` validates a real Copilot->OpenAI proxy on the corp
+`bin/e2-proxy-spike.sh` validates a real Copilot->OpenAI proxy on the corp
 laptop. This stub lets you exercise the spike (and the app's LLM wiring) on any
 machine, with no Copilot seat and no network, so a broken *spike* is never
 mistaken for a broken *proxy*.
@@ -17,13 +17,13 @@ answer with no evidence trail.
 Usage
 -----
     # compliant proxy — returns tool_calls when tools are declared
-    ./scripts/fake-openai-proxy.py
+    ./bin/fake-openai-proxy.py
 
     # broken proxy — accepts `tools`, ignores them, answers with prose
-    ./scripts/fake-openai-proxy.py --drop-tools
+    ./bin/fake-openai-proxy.py --drop-tools
 
     # then, in another terminal:
-    ./scripts/e2-proxy-spike.sh http://localhost:4000/v1 claude-opus-4.6
+    ./bin/e2-proxy-spike.sh http://localhost:4000/v1 claude-opus-4.6
     #   default    -> 4 passed, 0 failed   (exit 0)
     #   --drop-tools -> check 4 fails      (exit 1)
 
@@ -166,7 +166,7 @@ def build_server(args: argparse.Namespace) -> HTTPServer:
 def main() -> int:
     p = argparse.ArgumentParser(
         description="Stub OpenAI-compatible server standing in for the Copilot proxy.",
-        epilog="See scripts/e2-proxy-spike.sh — this stub exercises it offline.",
+        epilog="See bin/e2-proxy-spike.sh — this stub exercises it offline.",
     )
     p.add_argument("--port", type=int, default=4000, help="default: 4000")
     p.add_argument("--host", default="127.0.0.1", help="default: 127.0.0.1 (localhost only)")
