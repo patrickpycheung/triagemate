@@ -29,6 +29,17 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
 > **Validate with `./scripts/e2-proxy-spike.sh` once it's up** — in particular check 4,
 > tool-calling. Whether a Copilot proxy passes `tools` through to the model is the single
 > highest-risk unknown in D1, and it cannot be tested off the corp laptop.
+>
+> **Rehearse the spike anywhere, without a Copilot seat**, using the stub proxy — so a
+> broken *spike* is never mistaken for a broken *proxy* on demo morning:
+> ```bash
+> ./scripts/fake-openai-proxy.py &                 # compliant  -> spike exits 0
+> ./scripts/fake-openai-proxy.py --drop-tools &    # broken     -> check 4 fails, exit 1
+> ./scripts/e2-proxy-spike.sh http://localhost:4000/v1 claude-opus-4.6
+> ```
+> `--drop-tools` reproduces the exact silent failure that matters: a proxy that accepts
+> `tools` and ignores them. Add `--log req.json` to see the precise request shape our app
+> sends — that shape is the contract a real proxy has to satisfy.
 
 Pick one:
 
