@@ -115,3 +115,47 @@ resolve them to the engine forks.
 
 **Why it matters**: pre-existing and low-impact, but it is a live ambiguity in the demo
 docs. Cheapest fix is renaming one set at the next CDS round.
+
+---
+
+## FND-7 — `LlmCallsLimitExceededException` is unhandled: the J8 safety cap crashes
+instead of degrading · **HIGH**
+
+**Where**: `src/main/adk/java/com/company/triage/agent/AdkDiagnosisEngine.java` —
+`runAgent()` (the `blockingForEach` call, ~line 158) has no `try/catch`; `diagnose()`'s
+only `catch` (line 173, inside `parse()`) is for JSON parse failures, not this.
+
+**What**: confirmed by actually running the `-Padk` build on 2026-07-30 (first time the
+build has been executable — a JDK/Maven weren't available earlier in the project).
+Pointed `triage.integrations.llm.*` at a local stub proxy (`bin/fake-openai-proxy.py`,
+extended to fill tool-call arguments by JSON-schema type so it wouldn't produce its own
+false failures) that always answers with a `tool_calls` response, never a final prose/JSON
+answer — which is a legitimate model behavior a poorly-prompted or struggling real model
+can also produce. The agent loop keeps calling tools until the `RunConfig.setMaxLlmCalls`
+backstop (`maxToolCalls + 4` = 14 by default) trips
+`com.google.adk.models.LlmCallsLimitExceededException`, which propagates uncaught through
+`diagnose()` → the controller → an **unhandled 500** with a raw stack trace.
+
+**Why it matters**: this is precisely the J8 "hard backstop on top of the tool-call
+bounds" (the code comment's own words) — the mechanism that exists so a model that won't
+converge can't run forever. It works as a *limiter*. It does not work as *demo-safety*:
+tripping it crashes the request instead of returning a bounded, honest advisory
+("investigation did not converge within its budget; partial evidence: …"), which is
+exactly the failure mode D2 (deterministic fallback) and the whole "advisory-only,
+bounded, never fails ugly" pitch are supposed to prevent. On stage, a model that stalls or
+loops (rate limiting, an ambiguous incident, a proxy hiccup) would 500 instead of
+gracefully degrading — and the runbook's fallback flip (switch browser tabs to :8081) only
+helps if someone notices the crash and reacts; it doesn't make T2 itself safe.
+
+**Options to weigh in CDS** (not decided): catch the exception in `runAgent()`/`diagnose()`
+and synthesize a partial `DiagnosisReport` from whatever evidence the tool-call trace
+already gathered · catch and fall back to invoking `DeterministicDiagnosisEngine` for that
+request (auto-flip, not just the manual one in the runbook) · catch and return a plain
+advisory-text response distinct from the strict J4 JSON shape, with `confidenceOverall`
+forced to the lowest tier.
+
+**What's still unverified** (out of scope for this stub, deliberately not fabricated): a
+*real* model, given the actual tool schemas and incident context, may converge well within
+the 14-call budget and never hit this path at all — the corp-laptop E2 spike against the
+real Copilot-served model is the only way to know. This finding is about the missing
+safety net, not a claim that the cap will trip in practice.

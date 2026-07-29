@@ -42,6 +42,41 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 DEFAULT_MODELS = ["claude-opus-4.6", "gpt-5.3-codex"]
 
+# Placeholder values by JSON-schema type, used when a tool call needs an
+# argument we have no domain knowledge of. Real models fill these from the
+# incident context; this stub cannot, so it fabricates by TYPE, not by
+# guessing field names — that keeps it honest (it validates plumbing, not
+# reasoning) and correct for tools this stub has never seen.
+_TYPE_PLACEHOLDERS = {
+    "string": "INC0012345",
+    "integer": 1,
+    "number": 1,
+    "boolean": True,
+    "array": [],
+    "object": {},
+}
+
+
+def _stub_args(function_spec: dict) -> dict:
+    """Fill every `required` parameter of a declared tool's JSON schema.
+
+    Prevents the exact failure this stub exists to catch elsewhere from
+    accidentally causing a DIFFERENT, uninteresting failure: a real model
+    picks arguments per-tool from the incident context; this stub has no
+    such context, so without this it would send the same canned argument
+    shape to every tool regardless of its schema — which no real model
+    does, and which produces app-side errors that look like app bugs but
+    are actually stub limitations.
+    """
+    schema = function_spec.get("parameters", {}) or {}
+    props = schema.get("properties", {}) or {}
+    required = schema.get("required", list(props.keys()))
+    args = {}
+    for name in required:
+        prop_type = (props.get(name, {}) or {}).get("type", "string")
+        args[name] = _TYPE_PLACEHOLDERS.get(prop_type, "stub-value")
+    return args
+
 
 class StubHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -123,7 +158,8 @@ class StubHandler(BaseHTTPRequestHandler):
         # With --drop-tools we deliberately answer prose instead — the silent
         # failure mode this stub exists to reproduce.
         if tools and not self.drop_tools:
-            fn = tools[0].get("function", {}).get("name", "unknown_tool")
+            chosen = tools[0].get("function", {})
+            fn = chosen.get("name", "unknown_tool")
             message = {
                 "role": "assistant",
                 "content": None,
@@ -131,7 +167,7 @@ class StubHandler(BaseHTTPRequestHandler):
                     "id": "call_stub1",
                     "type": "function",
                     "function": {"name": fn,
-                                 "arguments": json.dumps({"number": "INC0012345"})},
+                                 "arguments": json.dumps(_stub_args(chosen))},
                 }],
             }
             finish = "tool_calls"
