@@ -33,7 +33,7 @@
 
 ## design-java
 
-- [**Live demo runbook — Copilot-backed triage (Option 1: D1 + D2 + D3)**](design-java/DEMO-RUNBOOK.md) — The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:  `2026-07-29`
+- [**Live demo runbook — Copilot-backed triage (Option 1: D1 + D2 + D3)**](design-java/DEMO-RUNBOOK.md) — The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:  `2026-07-30`
 - [**Demo Walkthrough — TriageMate**](design-java/DEMO.md) — What the running Spring Boot app does, end to end, and how to run it.  `2026-07-30`
 - [**CDS Workspace — Java Triage Copilot (Spring Boot + Google ADK)**](design-java/README.md) — Active design workspace. Turns the Java-pivot DDS decision  `2026-07-23`
 - [**STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)**](design-java/STATUS.md) — Implementation in **`app/`** (Maven, Java 21, Spring Boot 3.4.3). Verified in-session  `2026-07-30`
