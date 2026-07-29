@@ -1,6 +1,7 @@
 package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ConfluenceGateway;
+import com.company.triage.model.Contact;
 import com.company.triage.model.KnowledgeDoc;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -27,5 +28,20 @@ public class MockConfluenceGateway implements ConfluenceGateway {
                             + "Owned by Payments Platform Support. See payment_service reconcile()."));
         }
         return List.of();
+    }
+
+    /** Who authored / last edited the cited runbook (J9). */
+    @Override
+    public List<Contact> contributors(KnowledgeDoc doc) {
+        if (doc == null || !"KB001234".equals(doc.id())) {
+            return List.of();
+        }
+        return List.of(
+                new Contact("Priya Nair", "priya.nair@example.com", "confluence",
+                        "last edited the payment reconciliation runbook", doc.url(),
+                        "last edited 2026-07-20"),
+                new Contact("Tom Alvarez", "tom.alvarez@example.com", "confluence",
+                        "original author of the reconciliation runbook", doc.url(),
+                        "created 2025-11-03"));
     }
 }

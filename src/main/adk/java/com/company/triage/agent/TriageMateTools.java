@@ -87,4 +87,23 @@ public final class TriageMateTools {
             @Schema(name = "searchTerm") String searchTerm) {
         return gitLab.searchCode(project, searchTerm);
     }
+
+    @Schema(name = "find_page_contributors",
+            description = "Who to talk to about a Confluence page the triage already cited: its author "
+                    + "and last editor(s). Call only for pages returned by search_confluence.")
+    public static List<Contact> findPageContributors(
+            @Schema(name = "pageId") String pageId,
+            @Schema(name = "title") String title,
+            @Schema(name = "url") String url) {
+        return confluence.contributors(new KnowledgeDoc(pageId, title, url, ""));
+    }
+
+    @Schema(name = "find_recent_committers",
+            description = "Who to talk to about the implicated source: recent committers to one file "
+                    + "since the last release. Call only for a file already tied via search_code.")
+    public static List<Contact> findRecentCommitters(
+            @Schema(name = "project") String project,
+            @Schema(name = "filePath") String filePath) {
+        return gitLab.recentCommitters(project, filePath);
+    }
 }

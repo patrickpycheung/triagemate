@@ -8,6 +8,10 @@ teams already use (ServiceNow, Confluence, Sumo Logic, GitLab), and **posts two
 advisory comments back to the ticket**: the **sources** it consulted (with links),
 then its **first-pass diagnosis** (likely system, likely team, evidence, next check).
 
+It also surfaces **who to talk to** (J9): the wiki authors of the runbooks it consulted
+and the recent committers to the implicated source file — merged so whoever has the most
+context ranks first. Shown in the triage UI (not posted to the ticket).
+
 It is **advisory only** — it comments, it never reassigns, closes, or re-prioritises.
 The assigned engineer still decides everything.
 

@@ -32,6 +32,7 @@ with a downloaded Maven 3.9.9 + Temurin JDK 21:
 | J6 | knowledge-tools | Highway | 🟢 Built (mock + Real Confluence/Sumo/GitLab) | J3 |
 | J7 | demo-ui-and-dataset | Moderate | 🟢 Built (UI + ground-truth dataset) | J4 |
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
+| J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 
 ## Spikes
 

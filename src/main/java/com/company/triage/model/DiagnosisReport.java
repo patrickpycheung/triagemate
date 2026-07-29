@@ -21,6 +21,7 @@ public record DiagnosisReport(
         List<CandidateSystem> candidateSystems,
         SuggestedAssignment suggestedAssignment,
         List<Evidence> evidence,
+        List<Contact> suggestedContacts,
         List<String> contradictingEvidence,
         List<String> missingInformation,
         String recommendedNextAction,

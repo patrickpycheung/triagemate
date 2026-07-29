@@ -1,6 +1,7 @@
 package com.company.triage.orchestration;
 
 import com.company.triage.gateway.mock.*;
+import com.company.triage.model.Contact;
 import com.company.triage.model.DiagnosisReport;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +39,20 @@ class DeterministicDiagnosisEngineTest {
         assertThat(r.evidence()).extracting("source")
                 .contains("servicenow-incident", "confluence", "sumo", "gitlab");
 
+        // Who-to-talk-to (J9): contacts gathered from wiki authors + recent committers
+        assertThat(r.suggestedContacts()).isNotEmpty();
+        assertThat(r.suggestedContacts()).extracting(Contact::source)
+                .anyMatch(s -> s.contains("confluence"))
+                .anyMatch(s -> s.contains("gitlab"));
+
+        // Someone in BOTH the runbook history and the file's git history is merged and
+        // ranked first (Priya edited KB001234 and committed payment_service.py).
+        Contact top = r.suggestedContacts().get(0);
+        assertThat(top.name()).isEqualTo("Priya Nair");
+        assertThat(top.source()).isEqualTo("confluence+gitlab");
+
         // Trace shows the tools were actually consulted
         assertThat(result.trace()).anyMatch(s -> s.startsWith("sumo.search"));
+        assertThat(result.trace()).anyMatch(s -> s.startsWith("contacts:"));
     }
 }

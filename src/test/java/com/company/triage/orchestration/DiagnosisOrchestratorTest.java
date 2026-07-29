@@ -30,6 +30,8 @@ class DiagnosisOrchestratorTest {
                 List.of(new CandidateSystem("Payment Service", 0.86, List.of("e-log"))),
                 new SuggestedAssignment("Payments Platform Support", Confidence.MEDIUM, List.of("e-cmdb")),
                 List.of(new Evidence("e-log", "sumo", "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471", "prod/payment")),
+                List.of(new Contact("Priya Nair", "priya.nair@example.com", "confluence+gitlab",
+                        "edited the runbook and committed reconcile()", "https://confluence.example.com/x", "recent")),
                 List.of(), List.of("user id"), "Check payment_service.reconcile()", Confidence.MEDIUM, true);
     }
 

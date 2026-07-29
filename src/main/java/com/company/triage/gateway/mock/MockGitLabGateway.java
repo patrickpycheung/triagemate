@@ -2,6 +2,7 @@ package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.model.CodeSearchResult;
+import com.company.triage.model.Contact;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -27,5 +28,21 @@ public class MockGitLabGateway implements GitLabGateway {
                     "logger.error(  # line 43\n    \"PAYMENT_RECONCILE_MISMATCH order=%s expected=%.2f charged=%.2f\",  # line 44\n    order[\"id\"], expected, charged,\n)\nraise ValueError(\"reconcile mismatch\")  # reconcile(): discount applied after tax upstream"));
         }
         return List.of();
+    }
+
+    /** Recent committers to the implicated file since the last release (J9). */
+    @Override
+    public List<Contact> recentCommitters(String project, String filePath) {
+        if (!"payment_service.py".equals(filePath)) {
+            return List.of();
+        }
+        String fileLink = "%s/%s".formatted(project, filePath);
+        return List.of(
+                new Contact("Priya Nair", "priya.nair@example.com", "gitlab",
+                        "changed reconcile() most recently (touched the discount/tax order of operations)",
+                        fileLink, "2 commits since v2.3.1 — latest 2026-07-21"),
+                new Contact("Marcus Chen", "marcus.chen@example.com", "gitlab",
+                        "committed the surrounding payment gateway code", fileLink,
+                        "1 commit since v2.3.1 — 2026-07-18"));
     }
 }
