@@ -79,7 +79,7 @@ curl -s http://localhost:4000/v1/chat/completions \
   -d '{"model":"claude-opus-4.6","messages":[{"role":"user","content":"say hi"}]}' | head
 
 # app + high model, one incident, live agent path:
-mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk &
+./scripts/run-adk.sh &
 curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
 ```
 
@@ -92,8 +92,8 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | # | What | Command | Port |
 |---|------|---------|------|
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
-| T2 | **Primary (D1)** — our loop + high model | `mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk` | 8080 |
-| T3 | **Fallback (D2)** — deterministic, offline | `mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
+| T2 | **Primary (D1)** — our loop + high model | `./scripts/run-adk.sh` | 8080 |
+| T3 | **Fallback (D2)** — deterministic, offline | `./scripts/run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
 | T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0012345: <paste the summary>. Diagnose it."` | — |
 | — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
 
@@ -128,8 +128,7 @@ If the model/proxy misbehaves live (slow, error, network drop):
 - **Just move the browser to `http://localhost:8081`** (the deterministic standby) and
   keep going — identical UI and output, **no LLM, no network**. Say nothing broke; it's
   the offline mode.
-- If you prefer one port: stop T2 and run `mvn spring-boot:run` (default engine =
-  deterministic) on 8080.
+- If you prefer one port: stop T2 and run `./scripts/run-deterministic.sh` on 8080.
 
 Because D2 is already running, the flip is a single browser-tab switch. **Never** debug on
 stage — flip and continue.
