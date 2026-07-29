@@ -40,7 +40,7 @@
 
 ### design-java/concepts/
 
-- [**J1 — Spring Boot Orchestrator**](design-java/concepts/J1-spring-boot-orchestrator/README.md) — The Spring Boot skeleton and the single entry point. A manual HTTP trigger accepts  `2026-07-23`
+- [**J1 — Spring Boot Orchestrator**](design-java/concepts/J1-spring-boot-orchestrator/README.md) — The Spring Boot skeleton and the single entry point. A manual HTTP trigger accepts  `2026-07-30`
 - [**J2 — ADK Agent Loop**](design-java/concepts/J2-adk-agent-loop/README.md) — Gates on Spike JS-1  `2026-07-23`
 - [**J3 — Connector Tools (gateways + FunctionTool adapters)**](design-java/concepts/J3-connector-tools/README.md) — Each enterprise system is a Spring `@Service` behind a narrow interface, with a  `2026-07-23`
 - [**J4 — Diagnosis Report (JSON contract)**](design-java/concepts/J4-diagnosis-report/README.md) — The strict JSON contract every run produces. Building the report **before** the  `2026-07-23`
