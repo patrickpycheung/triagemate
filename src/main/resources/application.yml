@@ -1,6 +1,11 @@
 spring:
   application:
     name: triage-copilot
+  # Secrets live in a gitignored Java properties file at the project root (copy
+  # secrets.properties.example → secrets.properties). Optional: absent for the offline
+  # demo. Its triage.integrations.* values override the env placeholders below.
+  config:
+    import: "optional:file:secrets.properties"
 
 server:
   port: 8080
@@ -36,7 +41,8 @@ triage:
       - prod/order-api
     max-results: 20
 
-  # Credentials for real connectors (env-driven; blank in the offline demo).
+  # Credentials for real connectors. Set these in secrets.properties (preferred, see
+  # above) as triage.integrations.*, or via the env vars below. Blank in the offline demo.
   integrations:
     servicenow:
       base-url: ${SNOW_BASE_URL:}          # https://<dev-instance>.service-now.com
@@ -60,8 +66,8 @@ logging:
 
 ---
 # Convenience profile: write the two comments to a REAL ServiceNow dev ticket while
-# the evidence stays mock/curated. Run:
-#   SNOW_BASE_URL=https://devNNNNN.service-now.com SNOW_USER=... SNOW_PASSWORD=... \
+# the evidence stays mock/curated. Put the servicenow creds in secrets.properties
+# (triage.integrations.servicenow.*), then run:
 #   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 spring:
   config:

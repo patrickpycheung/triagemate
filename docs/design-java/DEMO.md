@@ -62,7 +62,7 @@ real **dev** ServiceNow incident (and show it updating live in ServiceNow), swit
 the ServiceNow connector to real:
 
 ```bash
-export SNOW_BASE_URL=https://devNNNNN.service-now.com  SNOW_USER=<svc>  SNOW_PASSWORD=<pw>
+cp secrets.properties.example secrets.properties   # fill in triage.integrations.servicenow.*
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 

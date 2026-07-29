@@ -1,7 +1,7 @@
 # GitLab — getting credentials
 
 Used by: real GitLab gateway (`triage.connectors.gitlab=real`).
-Fills `.env` vars `GITLAB_BASE_URL`, `GITLAB_TOKEN`.
+Fills `secrets.properties` keys `triage.integrations.gitlab.{base-url,token}`.
 
 Auth is a **Personal Access Token** (or **Project Access Token**) sent as a bearer
 token against the GitLab REST API.
@@ -40,11 +40,11 @@ curl --header "PRIVATE-TOKEN: <token>" \
 
 A `200` with a JSON project list confirms it's working.
 
-## 4. Fill `.env`
+## 4. Fill `secrets.properties`
 
-```
-GITLAB_BASE_URL=https://gitlab.com
-GITLAB_TOKEN=<token from step 1>
+```properties
+triage.integrations.gitlab.base-url=https://gitlab.com
+triage.integrations.gitlab.token=<token from step 1>
 ```
 
 ## Notes

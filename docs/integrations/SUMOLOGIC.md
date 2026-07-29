@@ -1,7 +1,8 @@
 # Sumo Logic — getting credentials
 
 Used by: real Sumo Logic gateway (`triage.connectors.sumo=real`).
-Fills `.env` vars `SUMO_BASE_URL`, `SUMO_ACCESS_ID`, `SUMO_ACCESS_KEY`.
+Fills `secrets.properties` keys `triage.integrations.sumo.{base-url,user,secret}`
+(user = Access ID, secret = Access Key).
 
 Auth is an Access ID / Access Key pair (used as HTTP Basic credentials) against the
 Sumo Logic Search Job API.
@@ -36,12 +37,12 @@ curl -u <access-id>:<access-key> \
 A `200` with a JSON collector list confirms the credentials work (endpoint may differ
 per your deployment from step 2).
 
-## 4. Fill `.env`
+## 4. Fill `secrets.properties`
 
-```
-SUMO_BASE_URL=https://api.us1.sumologic.com
-SUMO_ACCESS_ID=<access ID from step 1>
-SUMO_ACCESS_KEY=<access key from step 1>
+```properties
+triage.integrations.sumo.base-url=https://api.us1.sumologic.com
+triage.integrations.sumo.user=<access ID from step 1>
+triage.integrations.sumo.secret=<access key from step 1>
 ```
 
 ## Notes

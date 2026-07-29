@@ -2,7 +2,7 @@
 
 Used by: the live **Google ADK** agent engine (`-Padk` build,
 `--triage.engine=adk`) — see `src/main/adk/`.
-Fills `.env` vars `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`.
+Fills `secrets.properties` keys `triage.integrations.llm.{base-url,api-key,model}`.
 
 This is only needed for the **optional live agent mode**. The default
 `deterministic` engine (used for the offline demo) needs none of this.
@@ -14,11 +14,11 @@ langchain4j's `langchain4j-open-ai` module — so any of the following work:
 
 1. Go to https://platform.openai.com/api-keys (sign in / create an account).
 2. **Create new secret key** → name it (e.g. `triagemate-demo`) → copy it immediately.
-3. Fill `.env`:
-   ```
-   LLM_BASE_URL=https://api.openai.com/v1
-   LLM_API_KEY=<key from step 2>
-   LLM_MODEL=gpt-4o-mini
+3. Fill `secrets.properties`:
+   ```properties
+   triage.integrations.llm.base-url=https://api.openai.com/v1
+   triage.integrations.llm.api-key=<key from step 2>
+   triage.integrations.llm.model=gpt-4o-mini
    ```
 
 ## Option B: An internal/company LLM gateway
@@ -26,34 +26,38 @@ langchain4j's `langchain4j-open-ai` module — so any of the following work:
 Many orgs proxy LLM calls through an internal gateway for cost control and audit
 logging. Ask your platform/infra team for:
 
-- The gateway's OpenAI-compatible base URL (→ `LLM_BASE_URL`)
-- An API key for it (→ `LLM_API_KEY`)
-- Which model name to request (→ `LLM_MODEL`)
+- The gateway's OpenAI-compatible base URL (→ `triage.integrations.llm.base-url`)
+- An API key for it (→ `triage.integrations.llm.api-key`)
+- Which model name to request (→ `triage.integrations.llm.model`)
 
 ## Option C: Any other OpenAI-compatible provider
 
 Azure OpenAI, OpenRouter, a self-hosted vLLM/Ollama server, etc. all work as long as
-they expose a `/chat/completions`-compatible endpoint — set `LLM_BASE_URL` to that
-provider's base URL and `LLM_API_KEY`/`LLM_MODEL` accordingly per their docs.
+they expose a `/chat/completions`-compatible endpoint — set the `base-url` to that
+provider's base URL and `api-key`/`model` accordingly per their docs.
 
 ## Confirm access
 
 ```bash
-curl "$LLM_BASE_URL/chat/completions" \
-  -H "Authorization: Bearer $LLM_API_KEY" \
+curl "https://api.openai.com/v1/chat/completions" \
+  -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
-  -d "{\"model\":\"$LLM_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"say hi\"}]}"
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"say hi"}]}'
 ```
 
 A `200` with a completion response confirms it's working.
 
-## Fill `.env` and run
+## Fill `secrets.properties` and run
 
 ```bash
-cp .env.example .env   # fill in LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
-export $(grep -v '^#' .env | xargs)
+cp secrets.properties.example secrets.properties
+# fill in triage.integrations.llm.{base-url,api-key,model}
 mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
 ```
+
+> The ADK path reads these three settings from `secrets.properties` (Spring dotted
+> keys). Env vars `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` and `-D` system
+> properties still work too and take precedence.
 
 ## Notes
 

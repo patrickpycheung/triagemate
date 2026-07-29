@@ -1,9 +1,10 @@
 node_modules/
 .agent.work/
 .agent.work.archive/
+# Secrets live in a gitignored Java properties file (see secrets.properties.example)
+secrets.properties
 *.env
 .env*
-!.env.example
 manifest-secrets*
 __pycache__/
 *.pyc

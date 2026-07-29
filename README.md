@@ -66,12 +66,13 @@ updating live. Only the ServiceNow connector goes live; the evidence stays mock.
 
 Run this **where the dev instance is reachable** (e.g. the corporate-network laptop),
 with a service account that has **read + write on `incident`**. Secrets are kept in a
-gitignored `.env` file, not exported by hand — copy the template and fill it in:
+gitignored `secrets.properties` file (a standard Java properties file that Spring Boot
+auto-imports) — copy the template, fill it in, and just run. No shell `export` needed:
 
 ```bash
-cp .env.example .env   # fill in SNOW_BASE_URL / SNOW_USER / SNOW_PASSWORD
+cp secrets.properties.example secrets.properties
+# fill in triage.integrations.servicenow.{base-url,user,secret}
 
-export $(grep -v '^#' .env | xargs)
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 
@@ -103,9 +104,9 @@ By default a deterministic engine runs the flow offline. To use a real LLM-drive
 **Google ADK** agent over the same tools:
 
 ```bash
-cp .env.example .env   # fill in LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+cp secrets.properties.example secrets.properties
+# fill in triage.integrations.llm.{base-url,api-key,model}
 
-export $(grep -v '^#' .env | xargs)
 mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
 ```
 

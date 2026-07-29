@@ -60,6 +60,6 @@
 - [**Confluence — getting credentials**](integrations/CONFLUENCE.md) — Used by: real Confluence gateway (`triage.connectors.confluence=real`).  `2026-07-29`
 - [**GitLab — getting credentials**](integrations/GITLAB.md) — Used by: real GitLab gateway (`triage.connectors.gitlab=real`).  `2026-07-29`
 - [**LLM provider — getting credentials (live ADK agent mode)**](integrations/LLM.md) — Used by: the live **Google ADK** agent engine (`-Padk` build,  `2026-07-29`
-- [**Integration credentials**](integrations/README.md) — How to obtain the keys/tokens for each real connector. All of these fill in `.env`  `2026-07-29`
+- [**Integration credentials**](integrations/README.md) — How to obtain the keys/tokens for each real connector. All of these fill in  `2026-07-29`
 - [**ServiceNow — getting credentials**](integrations/SERVICENOW.md) — Used by: `RealServiceNowGateway` (`src/main/java/com/company/triage/gateway/real/`).  `2026-07-29`
 - [**Sumo Logic — getting credentials**](integrations/SUMOLOGIC.md) — Used by: real Sumo Logic gateway (`triage.connectors.sumo=real`).  `2026-07-29`

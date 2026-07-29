@@ -1,7 +1,7 @@
 # ServiceNow — getting credentials
 
 Used by: `RealServiceNowGateway` (`src/main/java/com/company/triage/gateway/real/`).
-Fills `.env` vars `SNOW_BASE_URL`, `SNOW_USER`, `SNOW_PASSWORD`.
+Fills `secrets.properties` keys `triage.integrations.servicenow.{base-url,user,secret}`.
 
 The app talks to ServiceNow's REST **Table API** over HTTP Basic auth. You need a
 **dedicated service account**, not your personal login — personal accounts get
@@ -16,7 +16,7 @@ easiest path if you don't already have one:
 2. **Manage** → **Instance** → **Request Instance** (or **Wake up instance** if you
    already have one — PDIs auto-hibernate after inactivity).
 3. Note the instance URL, e.g. `https://devNNNNN.service-now.com` → this is
-   `SNOW_BASE_URL`.
+   `triage.integrations.servicenow.base-url`.
 
 If you're using a corporate/team dev instance instead, ask your ServiceNow admin for
 a **dev/test instance URL** — never point this at a production instance.
@@ -48,16 +48,16 @@ curl -u svc-triagemate:<password> \
 A `200` with a JSON `result` array means you're good. A `401` means the credentials or
 role are wrong; a `403` usually means the role lacks table access.
 
-## 4. Fill `.env`
+## 4. Fill `secrets.properties`
 
 ```bash
-cp .env.example .env
+cp secrets.properties.example secrets.properties
 ```
 
-```
-SNOW_BASE_URL=https://devNNNNN.service-now.com
-SNOW_USER=svc-triagemate
-SNOW_PASSWORD=<the password from step 2>
+```properties
+triage.integrations.servicenow.base-url=https://devNNNNN.service-now.com
+triage.integrations.servicenow.user=svc-triagemate
+triage.integrations.servicenow.secret=<the password from step 2>
 ```
 
 Then run with the `snow-live` profile — see the main [README](../../README.md) →
@@ -70,5 +70,5 @@ Then run with the `snow-live` profile — see the main [README](../../README.md)
 - Writes append to `work_notes` (internal) by default. Switch to `comments`
   (customer-facing) with `triage.servicenow.write-field=comments` if you want to see
   that path instead — but `work_notes` is safer for a demo against a shared instance.
-- PDIs hibernate after ~1 hour idle. If `SNOW_BASE_URL` suddenly returns connection
+- PDIs hibernate after ~1 hour idle. If the base URL suddenly returns connection
   errors, go wake it up from the developer portal.

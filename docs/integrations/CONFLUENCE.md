@@ -1,7 +1,7 @@
 # Confluence — getting credentials
 
 Used by: real Confluence gateway (`triage.connectors.confluence=real`).
-Fills `.env` vars `CONFLUENCE_BASE_URL`, `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`.
+Fills `secrets.properties` keys `triage.integrations.confluence.{base-url,user,secret}`.
 
 Auth is Basic (email + API token) against the Confluence Cloud REST API.
 
@@ -28,12 +28,12 @@ curl -u you@example.com:<api-token> \
 
 A `200` with JSON content means it's working.
 
-## 4. Fill `.env`
+## 4. Fill `secrets.properties`
 
-```
-CONFLUENCE_BASE_URL=https://your-org.atlassian.net/wiki
-CONFLUENCE_EMAIL=you@example.com
-CONFLUENCE_API_TOKEN=<token from step 1>
+```properties
+triage.integrations.confluence.base-url=https://your-org.atlassian.net/wiki
+triage.integrations.confluence.user=you@example.com
+triage.integrations.confluence.secret=<token from step 1>
 ```
 
 ## Notes

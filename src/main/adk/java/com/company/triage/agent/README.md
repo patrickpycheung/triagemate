@@ -5,7 +5,8 @@ is never blocked by it. Activating it is build-day-1's first spike (JS-1b): prov
 live `LlmAgent` + tool round-trip against the enterprise endpoint.
 
 ## Files
-- `AdkModelFactory` — builds the model backend from `LLM_BASE_URL/LLM_API_KEY/LLM_MODEL`
+- `AdkModelFactory` — builds the model backend from `triage.integrations.llm.*` in
+  `secrets.properties` (or `LLM_BASE_URL/LLM_API_KEY/LLM_MODEL` env / `-D` overrides)
   via `google-adk-langchain4j` + `langchain4j-open-ai`.
 - `TriageMateTools` — the six gateway-backed `@Schema` tool methods ADK exposes to the model.
 - `BoundsCallback` — max-tool-calls leash (J8), to attach to `beforeToolCallback`.
