@@ -99,7 +99,8 @@ network** (default deterministic engine), so it is your guaranteed floor.
    really called ServiceNow/Sumo/Confluence/GitLab. Emphasise **advisory-only + bounded**.
 2. **This is a high Copilot model reasoning, on rails.** Same quality ceiling as a fully
    autonomous agent, but controlled, repeatable, and auditable.
-3. **(Optional) D3 contrast** — *only if network is healthy and ToS is clear*: switch to T4
+3. **(Optional) D3 contrast** — *only if the network is healthy* (C6 risk acceptance is the
+   same one D1 is already running under — see Notes): switch to T4
    and paste the same incident into Copilot CLI with no access to our systems. Let it
    answer for ~30s, then land the point: it produces a *plausible* diagnosis, but it cannot
    name `payment_service.py:44`, cannot say which deploy correlates, and cannot tell you
@@ -134,16 +135,19 @@ stage — flip and continue.
 - [ ] JDK + Maven present (`mvn -v`) — a JRE alone cannot build `-Padk`.
 - [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0012345` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
-- [ ] Decide **now** whether D3 runs — network + ToS ok? If unsure, **skip it**. (No MCP
+- [ ] Decide **now** whether D3 runs — network ok? If unsure, **skip it**. (No MCP
       setup needed: D3 is tool-less by design — have the incident summary on the clipboard.)
 - [ ] Browser tabs open on 8080 and 8081.
 
 ---
 
 ## Notes & guardrails
-- **ToS**: D3 (Copilot CLI) and driving the seat via a proxy are the
-  ToS-sensitive parts — fine at human-present demo scale; get IT/legal sign-off before any
-  **unattended** production use (DDS `copilot-cli-runtime`, E3).
+- **ToS applies to D1, not only D3.** Driving the corporate Copilot seat through a proxy
+  is *programmatic* use, which is exactly what C6 ([[copilot-cli-runtime]]) gates — so the
+  ruling governs the **primary** path. Operating position: fine at human-present demo
+  scale; required before anything unattended. If the ruling is "no programmatic use",
+  D1 is off and **D2 becomes the demo**.
+  The gate's id is **C6** (`copilot-cli-runtime`); E3 is the exploration that produced it.
 - **Guardrails intact**: D1 keeps advisory-only writes, `BoundsCallback` max-tool-calls,
   and allowlisted Sumo scopes — the model can't reassign/close/re-prioritise.
 - **Why not Copilot CLI as the primary path**: non-determinism + the ≥7-tool headless MCP

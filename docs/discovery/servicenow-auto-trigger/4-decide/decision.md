@@ -16,7 +16,14 @@ ticket."
 
 ## Recommendation (retained for when auto-trigger is revived)
 
-**Demo path** — **Flow Designer (A1) + a public tunnel (B1)**:
+> **⏸️ Superseded 2026-07-29 — and internally inconsistent.** The "public tunnel" path
+> below contradicts this document's own opening ("Cloudflare is internal so public
+> tunnels are out"). On the **corp laptop** no public tunnel is installable, so this is
+> **not** the demo path. DDS [[servicenow-local-trigger]] supersedes it with **K1
+> outbound polling**, which needs no tunnel and was verified working. Read what follows
+> as the **production / PDI** path for a future non-corporate environment only.
+
+**Production / PDI path** — **Flow Designer (A1) + a public tunnel (B1)**:
 1. Run the app locally; expose it with `ngrok http 8080` → a public HTTPS URL.
 2. In a ServiceNow **PDI** (Personal Developer Instance), build a Flow:
    - Trigger: **Record Created** on **Incident**, condition e.g.

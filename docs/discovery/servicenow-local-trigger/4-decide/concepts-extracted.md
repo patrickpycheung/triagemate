@@ -14,16 +14,29 @@ MID Server (C) is the future sanctioned-production path, not the hackathon path.
 - **K3 — Trigger-mode switch**: `triage.trigger=manual|poll` (manual = today's
   `POST /api/diagnose/{n}`; poll = K1). Keeps the demo's human-driven path and the
   automated path as one config flip.
-- **K4 — Proxy-aware egress**: document/support JVM proxy settings so the corp laptop
-  reaches the instance through the corporate proxy.
+- **K4 — Proxy-aware egress** *(contingency only — not required)*: the 2026-07-29 spike
+  reached the instance **directly**, so no proxy is needed. Retained in case egress policy
+  changes: document/support JVM proxy settings (`-Dhttps.proxyHost/-Dhttps.proxyPort`).
 - **K5 (deferred)** — MID Server productionization path, if/when IT sanctions it.
 
 ## Impact on the Copilot-CLI DDS (the reason we ran this first)
 Connectivity does NOT cap that DDS at interactive-only: **headless/automated is
-achievable via K1 polling.** The remaining headless question there is purely
-**Copilot-CLI licensing/ToS for unattended use**, to be decided in that DDS.
+achievable via K1 polling.** The remaining *connectivity* question is closed.
 
-## GATING SPIKE — run on the REAL corp laptop (only place it's valid) 🤔→🔬
+What is still open in that DDS is **not** connectivity but: **C6** (licensing/ToS for
+programmatic + unattended use — the hard gate for headless), **C1** (does a proxy
+authenticate with the corp Copilot seat, and is the proxy binary permitted by endpoint
+policy?), and **C2** (end-to-end run through the proxy). C6 alone does not clear headless
+— C1/C2 must also pass. See that DDS's spike list.
+
+## GATING SPIKE — ✅ RESOLVED 2026-07-29 (operator-run, on the real corp laptop) 🔬
+**Outcome: outbound HTTPS + basic auth to the ServiceNow instance WORKS. No proxy
+workaround was needed.** K1 outbound polling is therefore confirmed viable and this
+unknown is CLOSED — see `STATUS.md`. The commands below are retained for reproduction
+only; do **not** read them as outstanding work.
+
+<details><summary>Original spike (kept for reproduction)</summary>
+
 Confirm the app's one hard dependency: outbound HTTPS to the ServiceNow instance.
 
 ```bash
@@ -47,3 +60,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" \
   (even manual needs it) — escalate to IT for an egress allowlist to the instance. 🔴
 
 Report the HTTP code back and this unknown closes.
+
+**Actual result (2026-07-29): case 1 — direct 200/401. K1 confirmed, no proxy needed.**
+
+</details>

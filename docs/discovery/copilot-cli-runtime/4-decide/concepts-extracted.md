@@ -22,9 +22,18 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
 - **C5 (optional, deferred) — MCP surface (E5/E1)**: only if we later want Copilot IDE /
   Copilot CLI to drive the same tools; wrap existing gateways once. Not on the hackathon
   path.
-- **C6 (BLOCKER, operator/IT/legal — ADM-4)**: get an explicit ruling on whether the
-  **corporate Copilot agreement** permits programmatic (and specifically **unattended**)
-  use, incl. via a local proxy. Interactive use is the safe fallback if the answer is "no".
+- **C6 (operator/IT/legal — ADM-4)**: get an explicit ruling on whether the **corporate
+  Copilot agreement** permits programmatic (and specifically **unattended**) use, incl.
+  via a local proxy. Interactive use is the safe fallback if the answer is "no".
+
+  **Operating position (operator, 2026-07-29) — scope this precisely, it governs D1:**
+  - **Human-present hackathon demo** (D1 driving the proxy, D3 invoking Copilot CLI):
+    **proceed**, as an accepted, time-boxed risk. This is *not* "C6 does not apply" —
+    C6 does apply, and the risk is knowingly taken.
+  - **Unattended / production** (K1 poller running without a human): **BLOCKED** until
+    the ruling lands. This is the hard gate.
+  - If the ruling is "no programmatic use at all", **D1 is off**: fall back to D2
+    (deterministic, no LLM) or an authorised enterprise LLM endpoint.
 
 ## Spikes to run (operator-gated; can't be done from the dev box)
 1. **[C6] ToS/licensing** — ask IT/legal: may we drive the corporate Copilot seat from an

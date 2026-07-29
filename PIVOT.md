@@ -53,7 +53,17 @@ Full rationale: `docs/discovery/servicenow-triage-java/4-decide/decision.md`.
 ## Where the work lives now
 
 - **Active DDS** (Java pivot): `docs/discovery/servicenow-triage-java/`
-- **Active CDS** (Java design): `docs/design-java/` — concepts **J1–J8**
+- **Later DDS** (2026-07-29, all Phase 4 complete — read these for the *current* trigger
+  and LLM-backend decisions, which supersede parts of the above):
+  - `docs/discovery/servicenow-local-trigger/` → **K1 outbound polling** is the trigger
+    (supersedes the manual-only deferral in `servicenow-auto-trigger/`)
+  - `docs/discovery/copilot-cli-runtime/` → **E2**: Copilot seat as an OpenAI-compatible
+    LLM backend via a local proxy; **C6** ToS gate
+  - `docs/discovery/orchestrator-vs-copilot-cli/` → demo shape **D1+D2+D3**
+- **Live demo runbook**: `docs/design-java/DEMO-RUNBOOK.md`
+- **Open design issues**: `/FOUND-ISSUES.md`
+- **Active CDS** (Java design): `docs/design-java/` — concepts **J1–J9** (J9
+  contact-suggestion was added post-pivot, after this file's original J1–J8 list)
 - **Suspended DDS**: `docs/discovery/servicenow-triage/` (⏸️ banner)
 - **Suspended CDS**: `docs/design/` (⏸️ banner)
 - **Paused scaffold**: `manifest.yml`, `src/`, `test/` (Forge/Rovo — kept, unused)
@@ -64,7 +74,11 @@ Still valid and reused (not re-derived):
 - **Problem statement, constraints, success criteria** (1-elicit).
 - **RC3 — Log↔Code reasoning** → J6 (agent matches a log line to its emitting
   source line, cites file:line).
-- **RC5 — Work-note postback with human confirm** → J5 (advisory, confirmed write).
+- **RC5 — Work-note postback** → J5 (advisory, **automatic** write — the human-confirm
+  gate RC5 originally carried was **removed** on 2026-07-23; trust comes from *what the
+  app may do* (post two labelled advisory comments, never touch assignment/state/
+  priority), not from a human gate. See J5 "Write (automatic, two comments)" and J8
+  "Guardrails").
 - **RC6 — Demo safety** (fixtures, fallbacks, seeded bug) → J7.
 - **S3′ Sumo fixture + seed-repo** (`docs/design/concepts/log-code-reasoning/`,
   `seed-repo/`) → reused as demo data for J7.
@@ -72,4 +86,6 @@ Still valid and reused (not re-derived):
 Superseded / dropped:
 - **RC2 Rovo-agent**, **forge-actions**, **RC4 chat trigger** — Rovo/Forge-specific,
   paused. Their intent (single investigator, tool allowlist, manual trigger) is
-  preserved in J1/J2/J3 in a Spring/ADK form.
+  preserved in J1/J2/J3 in a Spring/ADK form. **Trigger update (2026-07-29)**: the manual
+  trigger is now the *fallback* (K3) — **K1 outbound polling** is the current decision.
+  See DDS `servicenow-local-trigger`.

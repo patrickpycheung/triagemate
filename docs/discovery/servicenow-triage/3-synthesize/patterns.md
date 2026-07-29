@@ -1,5 +1,13 @@
 # Phase 3: Patterns Across Explorations
 
+> **⏸️ ROUND-1 SYNTHESIS — superseded within this same DDS.** P1 ("a standalone
+> orchestrator is unavoidable") and P2 ("correlation is largely DETERMINISTIC") were
+> reconciled from Explorations A–D **before** Round 2 added Exploration E (Rovo-native).
+> Round 2 inverted both, and `4-decide/concepts-extracted.md` extracted the **Rovo-native,
+> LLM-first** concepts RC1/RC3 instead — see `3-synthesize/README.md` for the spiral.
+> Then the 2026-07-23 pivot (`PIVOT.md`) superseded the Rovo answer in turn, landing on a
+> local Spring Boot + ADK app. **Read this file as the Round-1 record, not as guidance.**
+
 Reconciled from Explorations A–D + Gemini research + verification spike. Overlap = HIGH confidence.
 
 ## P1 — A standalone orchestrator is unavoidable (HIGH — A, C, Gemini agree)

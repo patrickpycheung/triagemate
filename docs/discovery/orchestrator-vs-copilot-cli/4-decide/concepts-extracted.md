@@ -13,10 +13,18 @@
 - **D1 — Primary demo path = our orchestration on a high model.** Run `-Padk` `LlmAgent`
   pointed at the E2 Copilot proxy with `--model` set to a high tier. Best-of-both:
   high-quality reasoning + full control + trace/citations.
+  **⚠️ D1 is gated by C6, not just D3.** C6 ([[copilot-cli-runtime]]) is a blocker on
+  **programmatic** use of the corporate Copilot seat "incl. via a local proxy" — driving
+  the proxy from our app IS programmatic use, so the ToS ruling governs the *primary*
+  path. Current operating position: proceed at **human-present hackathon scale**; a ruling
+  is required before any **unattended** use. If the ruling is "no programmatic use at
+  all", D1 falls back to D2 (deterministic) or an authorised enterprise LLM endpoint.
 - **D2 — Guaranteed fallback = deterministic engine.** Offline, can't fail; the stage safety net.
 - **D3 — Optional contrast segment = Copilot CLI, no tools.** A short segment handing the
-  same incident to Copilot CLI *without* access to our four systems — *only if* network +
-  ToS are safe, never the load-bearing path. Skippable without hurting the story.
+  same incident to Copilot CLI *without* access to our four systems — *only if* the
+  network is healthy, and under the **same C6 human-present risk acceptance that already
+  covers D1** (D3 does not need a landed ruling that D1 is proceeding without). Never the
+  load-bearing path; skippable without hurting the story.
 
   ⚠️ **Scope caveat (corrected 2026-07-29).** D3 was first written as "run the same incident
   **fully autonomously**". That is **not buildable under the scope already decided**: an
@@ -27,7 +35,10 @@
   this path. D3 is therefore re-scoped to a **tool-less contrast**: it needs zero build,
   removes the MCP dependency and the headless bug from the stage, and reinforces D4 (the
   frontier model is identical — the delta on screen is purely the evidence trail).
-  The binding constraint on D3 is the **missing tool layer**, not just network/ToS.
+
+  To be precise about what the constraint now is: the missing tool layer is what **ruled
+  out the original autonomous D3**. The re-scoped, tool-less D3 does not need that layer,
+  so its only remaining gates are **network + C6/ToS**.
 - **D4 — Lead the narrative with the evidence trail** (sources consulted, log↔code
   citation, advisory-only) — the differentiator judges can verify, and the thing autonomy
   can't guarantee.
@@ -42,4 +53,7 @@
 ## Open items
 - Pick the exact high model to demo once the E2 proxy is up on the corp laptop (spike
   from the [[triagemate-copilot-backend-decision]] DDS).
-- ToS gate (E3) still governs whether the D3 flourish is allowed live.
+- **ToS gate (C6 in [[copilot-cli-runtime]]; explored there as E3) governs BOTH D1 and
+  D3** — D1 because driving the seat through a proxy is programmatic use, D3 because it
+  invokes Copilot CLI directly. It is not a D3-only concern. Use the id **C6** for the
+  gate (E3 is the exploration that produced it).

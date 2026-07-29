@@ -1,5 +1,11 @@
 # Phase 3: Promising Approach
 
+> **⏸️ ROUND-1 SYNTHESIS — superseded twice.** The "convergent design" below (standalone
+> **Python** orchestrator, deterministic correlation) was Round 1's answer; Round 2
+> reversed it to Rovo-native (RC1/RC3 in `4-decide/concepts-extracted.md`), and the
+> 2026-07-23 `PIVOT.md` reversed that to a local **Java** Spring Boot + ADK app.
+> Historical record — not the current design.
+
 ## The convergent design (all explorations point here)
 
 **A standalone Python orchestrator, triggered by a new ServiceNow ticket, that runs a deterministic log↔code correlation engine and posts an autonomous root-cause work-note back to the ticket — with a pluggable LLM reasoning layer on top.**

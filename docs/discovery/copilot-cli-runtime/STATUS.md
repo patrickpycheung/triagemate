@@ -29,7 +29,8 @@ There are **two very different architectures**, not one:
   (LiteLLM `github_copilot` provider / `copilot-api`). Our EXISTING app points
   `LLM_BASE_URL` at `http://localhost:4000` and is otherwise unchanged. ⭐
 
-Both draw on the same Copilot seat; **the ToS/licensing question (E3) gates both** and
+Both draw on the same Copilot seat; **the ToS/licensing question — concept id `C6`,
+explored as E3 — gates both** and
 is the real spike. E1 also inherits current `copilot -p`+MCP fragility.
 
 ## Explorations
