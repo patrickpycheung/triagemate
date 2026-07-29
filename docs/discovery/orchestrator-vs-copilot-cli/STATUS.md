@@ -6,7 +6,7 @@
 ## DECISION (operator-confirmed)
 Demo runs on **our orchestration driving a high Copilot-served model** (D1), with the
 **deterministic engine as the guaranteed offline fallback** (D2), and an **optional 30s
-fully-autonomous Copilot CLI flourish** (D3) only if network + ToS allow. Runbook:
+no-tools Copilot CLI contrast** (D3) only if network + ToS allow. Runbook:
 `docs/design-java/DEMO-RUNBOOK.md`.
 
 
@@ -22,7 +22,9 @@ fully-autonomous Copilot CLI flourish** (D3) only if network + ToS allow. Runboo
 ## Recommended demo shape
 - **D1** primary = our `LlmAgent` loop on a **high model via the E2 Copilot proxy**.
 - **D2** guaranteed fallback = deterministic offline engine.
-- **D3** optional wow = Copilot CLI fully-autonomous run (only if network/ToS safe).
+- **D3** optional contrast = Copilot CLI with **no tools** (only if network/ToS safe).
+  Re-scoped 2026-07-29 from "fully-autonomous" — autonomy needs the C5 MCP layer that
+  `copilot-cli-runtime` deferred; see the scope caveat in `4-decide/concepts-extracted.md`.
 - **D4** lead with the evidence trail (sources, log↔code citation, advisory-only).
 
 ## Files

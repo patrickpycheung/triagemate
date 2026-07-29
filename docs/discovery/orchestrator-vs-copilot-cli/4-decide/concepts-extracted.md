@@ -14,9 +14,20 @@
   pointed at the E2 Copilot proxy with `--model` set to a high tier. Best-of-both:
   high-quality reasoning + full control + trace/citations.
 - **D2 — Guaranteed fallback = deterministic engine.** Offline, can't fail; the stage safety net.
-- **D3 — Optional "wow" flourish = Copilot CLI autonomous.** A short segment showing the
-  same incident run fully autonomously in Copilot CLI — *only if* network + ToS are safe,
-  never the load-bearing path. Skippable without hurting the story.
+- **D3 — Optional contrast segment = Copilot CLI, no tools.** A short segment handing the
+  same incident to Copilot CLI *without* access to our four systems — *only if* network +
+  ToS are safe, never the load-bearing path. Skippable without hurting the story.
+
+  ⚠️ **Scope caveat (corrected 2026-07-29).** D3 was first written as "run the same incident
+  **fully autonomously**". That is **not buildable under the scope already decided**: an
+  autonomous run needs MCP servers fronting ServiceNow / Sumo / Confluence / GitLab, which
+  is concept **C5** in DDS [[copilot-cli-runtime]] — explicitly deferred off the hackathon
+  path — and no MCP servers exist in the repo (only the `E5-mcp-buildout` exploration).
+  The same DDS also flagged Copilot CLI's **≥7-tool headless MCP bug** as a reason to avoid
+  this path. D3 is therefore re-scoped to a **tool-less contrast**: it needs zero build,
+  removes the MCP dependency and the headless bug from the stage, and reinforces D4 (the
+  frontier model is identical — the delta on screen is purely the evidence trail).
+  The binding constraint on D3 is the **missing tool layer**, not just network/ToS.
 - **D4 — Lead the narrative with the evidence trail** (sources consulted, log↔code
   citation, advisory-only) — the differentiator judges can verify, and the thing autonomy
   can't guarantee.

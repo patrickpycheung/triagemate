@@ -24,6 +24,11 @@ choose between "good reasoning" and "safe demo."
 As an **optional wow flourish** ("it can also run fully autonomously") and as the
 **interactive** power-user mode later (E1) — never as the load-bearing demo path.
 
+> **Superseded in Phase 4 (2026-07-29).** The "it can also run fully autonomously" framing
+> is not deliverable at hackathon scope — autonomy needs the C5 MCP layer that
+> [[copilot-cli-runtime]] deferred. D3 was re-scoped to a **no-tools contrast** segment;
+> see the caveat in `4-decide/concepts-extracted.md`.
+
 ## Net
 For the demo: **G1 spine on a high model, G2 as optional garnish.** Quality gap: small
 and model-driven. Reliability/control gap: large and in our favour.

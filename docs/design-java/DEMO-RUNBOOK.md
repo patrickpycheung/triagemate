@@ -6,8 +6,16 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
   served by your Copilot subscription** through a local OpenAI-compatible proxy.
 - **D2 (fallback)** — the **deterministic offline engine**, kept hot on a second port; the
   demo cannot hard-fail on stage.
-- **D3 (optional)** — a 30-second **fully-autonomous Copilot CLI** run for wow, *only if
-  network + Copilot ToS allow*. Droppable with zero impact on the story.
+- **D3 (optional)** — a 30-second **Copilot CLI contrast** run: the same incident handed to
+  Copilot CLI with **no access to our systems**, to show what the evidence trail buys.
+  Droppable with zero impact on the story.
+
+> **D3 is deliberately a no-tools contrast, not an autonomous triage.** A genuinely
+> autonomous Copilot CLI run would need MCP servers fronting ServiceNow / Sumo / Confluence
+> / GitLab — that build-out is concept **C5** in DDS `copilot-cli-runtime`, explicitly
+> deferred off the hackathon path, and none exist in this repo. Copilot CLI also has a
+> known ≥7-tool headless MCP bug. So D3 runs tool-less by design: it costs nothing to
+> prepare and it *strengthens* D4 instead of competing with it.
 
 > Run all of this on the **corporate laptop** (the one that reaches ServiceNow). The
 > Copilot proxy + high models require your corporate Copilot seat.
@@ -70,7 +78,7 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
 | T2 | **Primary (D1)** — our loop + high model | `mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk` | 8080 |
 | T3 | **Fallback (D2)** — deterministic, offline | `mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
-| T4 | **Flourish (D3, optional)** — Copilot CLI | `copilot -p "Triage INC0012345 and post an advisory work note"` | — |
+| T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0012345: <paste the summary>. Diagnose it."` | — |
 | — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
 
 Start T1 → T2 → T3 **before** you present, so both instances are warm. T3 needs **no
@@ -86,9 +94,13 @@ network** (default deterministic engine), so it is your guaranteed floor.
    really called ServiceNow/Sumo/Confluence/GitLab. Emphasise **advisory-only + bounded**.
 2. **This is a high Copilot model reasoning, on rails.** Same quality ceiling as a fully
    autonomous agent, but controlled, repeatable, and auditable.
-3. **(Optional) D3 flourish** — *only if T1/network are healthy and ToS is clear*: switch
-   to T4 and let Copilot CLI run the same incident autonomously for ~30s. Frame it as "it
-   can even do this with zero orchestration from us." Then stop and return to the result.
+3. **(Optional) D3 contrast** — *only if network is healthy and ToS is clear*: switch to T4
+   and paste the same incident into Copilot CLI with no access to our systems. Let it
+   answer for ~30s, then land the point: it produces a *plausible* diagnosis, but it cannot
+   name `payment_service.py:44`, cannot say which deploy correlates, and cannot tell you
+   who to talk to — because it never read the logs, the wiki or the repo. **The frontier
+   model is the same one we just used; the difference on screen is the evidence trail.**
+   Then stop and return to the 8080 result.
 
 ---
 
@@ -113,13 +125,14 @@ stage — flip and continue.
 - [ ] `secrets.properties` model id matches an id from `/v1/models`.
 - [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0012345` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
-- [ ] Decide **now** whether D3 runs — network + ToS ok? If unsure, **skip it**.
+- [ ] Decide **now** whether D3 runs — network + ToS ok? If unsure, **skip it**. (No MCP
+      setup needed: D3 is tool-less by design — have the incident summary on the clipboard.)
 - [ ] Browser tabs open on 8080 and 8081.
 
 ---
 
 ## Notes & guardrails
-- **ToS**: D3 (autonomous Copilot CLI) and driving the seat via a proxy are the
+- **ToS**: D3 (Copilot CLI) and driving the seat via a proxy are the
   ToS-sensitive parts — fine at human-present demo scale; get IT/legal sign-off before any
   **unattended** production use (DDS `copilot-cli-runtime`, E3).
 - **Guardrails intact**: D1 keeps advisory-only writes, `BoundsCallback` max-tool-calls,
