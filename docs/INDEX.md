@@ -54,10 +54,10 @@
 
 - [**STATUS — DDS: Run TriageMate on a GitHub Copilot subscription**](discovery/copilot-cli-runtime/STATUS.md) — **E2 — use the Copilot subscription as a local OpenAI-compatible LLM backend (LiteLLM /  · 9 docs  `2026-07-29`
 - [**STATUS — DDS: Our orchestration vs Copilot CLI autonomous (for the demo)**](discovery/orchestrator-vs-copilot-cli/STATUS.md) — Demo runs on **our orchestration driving a high Copilot-served model** (D1), with the  · 7 docs  `2026-07-29`
-- [**STATUS — DDS: Automatic trigger on ServiceNow incident creation**](discovery/servicenow-auto-trigger/STATUS.md) — (operator decision 2026-07-24: cloud dev instance can't reach the corp-network laptop;  · 4 docs  `2026-07-24`
-- [**STATUS — DDS: ServiceNow (cloud) → local app on corporate laptop**](discovery/servicenow-local-trigger/STATUS.md) — app on a **corporate laptop** (no Tailscale, Cloudflare blocked, no public inbound)?  · 8 docs  `2026-07-29`
-- [**STATUS — DDS: ServiceNow Triage Copilot (Java / Spring Boot pivot)**](discovery/servicenow-triage-java/STATUS.md) — checkpoints passed — Phase 1 "Yes — proceed"; Phase 4 concepts J1–J8 "Yes — lock &  · 14 docs  `2026-07-28`
-- [**STATUS — ServiceNow Technical Triage Assistant**](discovery/servicenow-triage/STATUS.md) — Automatically triage a newly-created technical ServiceNow ticket by pulling code (GitLab master), logs (Sumo Logic), and docs (Confluence), correlating log lines to code, and posting a root-cause…  · 30 docs  `2026-07-23`
+- [**STATUS — DDS: Automatic trigger on ServiceNow incident creation**](discovery/servicenow-auto-trigger/STATUS.md) — (operator decision 2026-07-24: cloud dev instance can't reach the corp-network laptop;  · 4 docs  `2026-07-29`
+- [**STATUS — DDS: ServiceNow (cloud) → local app on corporate laptop**](discovery/servicenow-local-trigger/STATUS.md) — Consumed downstream by DDS `copilot-cli-runtime` (C4).  · 8 docs  `2026-07-29`
+- [**STATUS — DDS: ServiceNow Triage Copilot (Java / Spring Boot pivot)**](discovery/servicenow-triage-java/STATUS.md) — checkpoints passed — Phase 1 "Yes — proceed"; Phase 4 concepts J1–J8 "Yes — lock &  · 14 docs  `2026-07-29`
+- [**STATUS — ServiceNow Technical Triage Assistant**](discovery/servicenow-triage/STATUS.md) — Automatically triage a newly-created technical ServiceNow ticket by pulling code (GitLab master), logs (Sumo Logic), and docs (Confluence), correlating log lines to code, and posting a root-cause…  · 30 docs  `2026-07-29`
 
 ## integrations
 
