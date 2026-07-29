@@ -1,14 +1,13 @@
 # Demo Walkthrough — TriageMate
 
 What the running Spring Boot app does, end to end, and how to run it. Screenshots are
-from the real app (`app/`) driven by Playwright against the offline `mock` profile —
+from the real app driven by Playwright against the offline `mock` profile —
 no network, no LLM, no external systems.
 
 ## Run it
 
 ```bash
-cd app
-mvn spring-boot:run            # needs JDK 21 (a compiler, not just a JRE)
+mvn spring-boot:run            # from the repo root; needs JDK 21 (a compiler, not just a JRE)
 # open http://localhost:8080 → the incident number INC0012345 is pre-filled → Diagnose
 ```
 
@@ -49,7 +48,7 @@ trace proving it really consulted each source.
 
 ## The worked example
 
-The mock dataset (`app/src/main/java/.../gateway/mock/`, reusing the S3′ Sumo fixture
+The mock dataset (`src/main/java/.../gateway/mock/`, reusing the S3′ Sumo fixture
 and `seed-repo`) models incident **INC0012345 / order INC-ORD-4471**: discounted
 orders fail at checkout because a percentage discount is applied *after* tax in the
 gateway while the expected total discounts *before* tax — surfaced as
@@ -64,12 +63,12 @@ the ServiceNow connector to real:
 
 ```bash
 export SNOW_BASE_URL=https://devNNNNN.service-now.com  SNOW_USER=<svc>  SNOW_PASSWORD=<pw>
-cd app && mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 
 Type a real incident number → the *Sources consulted* and *First-pass diagnosis* entries
 appear in that ticket's Work notes / Activity stream. Full steps + the service-account
-and write-field notes are in [`../../app/README.md`](../../app/README.md) → "Live demo".
+and write-field notes are in [`../../README.md`](../../README.md) → "Live demo".
 Evidence stays mock/curated; only ServiceNow is live. Run it where the dev instance is
 reachable (the corporate-network laptop).
 

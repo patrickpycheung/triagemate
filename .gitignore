@@ -12,3 +12,12 @@ STATUS-INFLIGHT.md
 
 *.iml
 .idea/
+
+# Java build output
+target/
+*.class
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Rovo/Forge (paused)
+.wrangler/

@@ -27,7 +27,6 @@ The assigned engineer still decides everything.
 ## How to start it
 
 ```bash
-cd app
 mvn spring-boot:run
 ```
 
@@ -53,7 +52,6 @@ narrow Sumo Logic window, the GitLab line that emits the error) → **auto-post 
 advisory comments**. In the `mock` profile the comments are written to the app log and
 shown in the UI; nothing external is touched.
 
-> **Full step-by-step run + presentation script:** [`app/README.md`](app/README.md).
 > **Screenshot walkthrough:** [`docs/design-java/DEMO.md`](docs/design-java/DEMO.md).
 
 ## Post the comments to a real ServiceNow ticket (optional)
@@ -68,7 +66,6 @@ with a service account that has **read + write on `incident`**:
 ```bash
 export SNOW_BASE_URL=https://devNNNNN.service-now.com
 export SNOW_USER=<service-account>  SNOW_PASSWORD=<password>
-cd app
 mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
 ```
 
@@ -78,14 +75,12 @@ Activity** stream. To post customer-facing *Additional comments* instead, add
 `--triage.servicenow.write-field=comments`.
 
 Connectors switch independently (`triage.connectors.{servicenow,confluence,sumo,gitlab}=mock|real`,
-default mock). Full steps + the service-account notes: [`app/README.md`](app/README.md)
-→ "Live demo". Auto-trigger on ticket creation is deferred — see
+default mock). Auto-trigger on ticket creation is deferred — see
 [`docs/discovery/servicenow-auto-trigger/`](docs/discovery/servicenow-auto-trigger/).
 
 ## Verify it works
 
 ```bash
-cd app
 mvn test          # offline demo path            → 3 tests pass
 mvn -Padk test    # + live ADK agent loop        → 5 tests pass
 ```
@@ -97,29 +92,26 @@ By default a deterministic engine runs the flow offline. To use a real LLM-drive
 
 ```bash
 export LLM_BASE_URL=https://llm.internal/v1  LLM_API_KEY=***  LLM_MODEL=gpt-4o-mini
-cd app && mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
+mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk
 ```
 
 ## Repository layout
 
 ```
-app/                     Spring Boot application (the build)
-  src/main/java/...       api · orchestration · gateway (mock + real) · model
-  src/main/adk/...         ADK LlmAgent engine (profile: adk)
-  src/main/resources/...   application config + demo UI
-  README.md                full run + presentation runbook
+pom.xml                  Spring Boot build (run from repo root)
+src/main/java/...        api · orchestration · gateway (mock + real) · model
+src/main/adk/...         ADK LlmAgent engine (profile: adk)
+src/main/resources/...   application config + demo UI
 docs/
   design-java/             active design (concepts J1–J8) · DEMO.md · screenshots
   discovery/               DDS problem exploration + decisions
   archive/                 retired Forge/Rovo prototype (reference only)
 PIVOT.md                   why this is Spring Boot + ADK, not Rovo
-scripts/                   helper scripts (e.g. Playwright screenshots)
+rovo/                     paused Forge/Rovo prototype (JS agent, on hold)
 ```
 
 ## Design & concept
 
-- **Pitch deck** and **workflow diagram** are published as artifacts (private; share
-  from the artifact page) — links in [`app/README.md`](app/README.md).
 - **Design**: [`docs/design-java/`](docs/design-java/) (concepts J1–J8, `STATUS.md`).
 - **Discovery / decisions**: [`docs/discovery/servicenow-triage-java/`](docs/discovery/servicenow-triage-java/).
 
