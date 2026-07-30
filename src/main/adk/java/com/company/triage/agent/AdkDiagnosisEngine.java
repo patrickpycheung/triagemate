@@ -169,9 +169,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 })
                 .build();
 
-        String finalJson = runAgent(agent, incidentNumber, trace);
-
-        DiagnosisReport report = parse(finalJson, incidentNumber);
+        DiagnosisReport report = runAgentAndParse(agent, incidentNumber, trace);
         // Schema-shaped JSON can still violate the J4 contract's semantic rules (FND-17):
         // an empty candidate list, or an evidenceRef pointing at no Evidence in this
         // report. Deserialization alone would let the UI render that without complaint.
@@ -181,22 +179,49 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     }
 
     /**
-     * Runs the agent loop and returns the model's final text (expected: the J4 JSON).
-     * Isolated so JS-1b touches exactly one method when adjusting the runner API.
+     * Runs the agent loop and returns a parsed J4 report — with one repair retry
+     * (FND-42) on the SAME session if the first final response doesn't parse, so the
+     * retry re-prompts the model with the parse error rather than re-investigating
+     * from scratch. Still fails (same as before FND-42) if the repair attempt also
+     * doesn't parse; {@code DiagnosisOrchestrator}'s FND-7 fallback degrades from there.
+     *
+     * <p>Isolated so JS-1b touches exactly one method when adjusting the runner API.
      */
-    private String runAgent(LlmAgent agent, String incidentNumber, List<String> trace) {
+    private DiagnosisReport runAgentAndParse(LlmAgent agent, String incidentNumber, List<String> trace) {
         InMemoryRunner runner = new InMemoryRunner(agent);
         Session session = runner.sessionService()
                 .createSession(AGENT_NAME, USER_ID)
                 .blockingGet();
-
-        Content message = Content.fromParts(Part.fromText(
-                "Diagnose ServiceNow incident " + incidentNumber
-                        + ". Investigate with the tools, then return ONLY the JSON report."));
-
         // Cap total LLM calls (J8) — a hard backstop on top of the tool-call bounds.
-        RunConfig runConfig = RunConfig.builder().setMaxLlmCalls(maxToolCalls + 4).build();
+        // +5, not +4: headroom for the initial investigation loop PLUS one possible
+        // FND-42 repair round trip.
+        RunConfig runConfig = RunConfig.builder().setMaxLlmCalls(maxToolCalls + 5).build();
 
+        String finalJson = send(runner, session, runConfig,
+                "Diagnose ServiceNow incident " + incidentNumber
+                        + ". Investigate with the tools, then return ONLY the JSON report.");
+        try {
+            return JSON.readValue(finalJson, DiagnosisReport.class);
+        } catch (Exception firstError) {
+            log.warn("agent returned unparseable JSON for {} — one repair retry (FND-42)",
+                    incidentNumber, firstError);
+            trace.add("adk: final response did not parse as JSON — one repair retry (FND-42)");
+            String repaired = send(runner, session, runConfig,
+                    "Your last response did not parse as the required JSON contract ("
+                            + firstError.getMessage() + "). Return ONLY the corrected JSON object — "
+                            + "no prose, no markdown code fences.");
+            try {
+                return JSON.readValue(repaired, DiagnosisReport.class);
+            } catch (Exception secondError) {
+                log.warn("repair retry also failed to parse for {} — degrading", incidentNumber, secondError);
+                throw new IllegalStateException(
+                        "agent JSON did not match the J4 contract after one repair retry", secondError);
+            }
+        }
+    }
+
+    private static String send(InMemoryRunner runner, Session session, RunConfig runConfig, String text) {
+        Content message = Content.fromParts(Part.fromText(text));
         StringBuilder finalText = new StringBuilder();
         runner.runAsync(USER_ID, session.id(), message, runConfig)
                 .blockingForEach(event -> collect(event, finalText));   // tool trace comes from the callback
@@ -208,17 +233,6 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
             event.content()
                     .flatMap(Content::parts)
                     .ifPresent(parts -> parts.forEach(p -> p.text().ifPresent(finalText::append)));
-        }
-    }
-
-    private DiagnosisReport parse(String json, String incidentNumber) {
-        try {
-            return JSON.readValue(json, DiagnosisReport.class);
-        } catch (Exception e) {
-            // No repair retry (FND-35) — fails fast; DiagnosisOrchestrator's FND-7
-            // fallback degrades the run to the deterministic engine from here.
-            log.warn("agent returned unparseable JSON for {} — degrading (no repair retry)", incidentNumber, e);
-            throw new IllegalStateException("agent JSON did not match the J4 contract", e);
         }
     }
 }

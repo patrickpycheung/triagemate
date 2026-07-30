@@ -69,4 +69,31 @@ class AdkLiveRoundTripTest {
             assertThat(result.report().incidentNumber()).isEqualTo("INC0012345");
         }
     }
+
+    /**
+     * FND-42: a malformed final response gets exactly one repair retry, on the SAME
+     * session (the fake server's second "final" turn only returns valid JSON after
+     * the tool-result turn has already happened once — a fresh session would restart
+     * at the tool-call turn, not the malformed-final turn, so this also proves the
+     * retry reuses context rather than re-investigating).
+     */
+    @Test
+    void malformedFinalResponseGetsOneRepairRetryThenSucceeds() throws Exception {
+        try (FakeOpenAiServer fake = FakeOpenAiServer.startWithOneMalformedFinalResponse()) {
+            System.setProperty("LLM_BASE_URL", "http://127.0.0.1:" + fake.port() + "/v1");
+            System.setProperty("LLM_API_KEY", "test-key");
+            System.setProperty("LLM_MODEL", "fake");
+
+            AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
+                    new MockServiceNowGateway(), new MockConfluenceGateway(),
+                    new MockSumoGateway(), new MockGitLabGateway(),
+                    List.of("prod/payment", "prod/order-api"), 20, 30, 8,
+                    List.of("order-payments/payment-service"));
+
+            DiagnosisResult result = engine.diagnose("INC0012345");
+
+            assertThat(result.report().incidentNumber()).isEqualTo("INC0012345");
+            assertThat(result.trace()).anyMatch(s -> s.contains("one repair retry (FND-42)"));
+        }
+    }
 }

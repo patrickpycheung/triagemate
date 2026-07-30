@@ -1,6 +1,6 @@
 # Found issues
 
-**Backlog: 3 open, deferred design decisions** (not bugs — see each entry). FND-1…FND-41
+**Backlog: 2 open, deferred design decisions** (not bugs — see each entry). FND-1…FND-42
 resolved; full detail in `docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
@@ -21,20 +21,6 @@ Format: `## FND-<n> — <one-line title> · **HIGH|MEDIUM|LOW**`, then **Where**
   trivia.
 
 ---
-
-## FND-42 — No in-engine repair retry on malformed ADK JSON · **LOW**
-
-**Where**: `AdkDiagnosisEngine.parse()`.
-**What**: J2 previously (falsely — FND-35) claimed "one repair retry" on malformed
-final JSON. The actual behavior (fail fast, let `DiagnosisOrchestrator`'s FND-7
-fallback degrade to the deterministic engine) is correct and tested, not a bug. A
-genuine repair retry — catch the parse failure, re-prompt the model once with the
-error, only THEN give up — would reduce spurious whole-run degradations caused by a
-single JSON hiccup on an otherwise-healthy run.
-**Why it matters**: this is new agent behavior (a design decision: how many retries,
-what re-prompt text, does it count against the tool-call/LLM-call budget), not a
-one-line fix — picking the approach is the hard part, hence logged rather than built
-in this pass.
 
 ## FND-43 — Poller cursor can skip a batch-limit's worth of same-timestamp incidents · **LOW**
 

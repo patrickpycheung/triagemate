@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Minimal fake OpenAI-compatible Chat Completions endpoint for the in-session JS-1b
@@ -18,6 +19,12 @@ import java.util.Map;
  *   turn 2 (a tool-role message present) → return the final J4 JSON report
  * This exercises the full ADK loop: tool schema → tool_call → tool execution →
  * result fed back → final content parsed into DiagnosisReport.
+ *
+ * <p>{@code malformedFinalResponses}: how many of the "final" turns (turn 2 onward —
+ * anything after the tool call) return deliberately malformed JSON before returning
+ * the valid {@link #J4_JSON}. 0 (the default via {@link #start()}) exercises the
+ * happy path; 1 (via {@link #startWithOneMalformedFinalResponse()}) exercises FND-42's
+ * repair retry — turn 2 is malformed, turn 3 (the repair re-prompt) is valid.
  */
 final class FakeOpenAiServer implements AutoCloseable {
 
@@ -27,13 +34,30 @@ final class FakeOpenAiServer implements AutoCloseable {
     private FakeOpenAiServer(HttpServer server) { this.server = server; }
 
     static FakeOpenAiServer start() throws IOException {
+        return start(0);
+    }
+
+    /** FND-42 regression fixture: one malformed final response, then a valid one. */
+    static FakeOpenAiServer startWithOneMalformedFinalResponse() throws IOException {
+        return start(1);
+    }
+
+    private static FakeOpenAiServer start(int malformedFinalResponses) throws IOException {
         HttpServer s = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger finalTurnsSeen = new AtomicInteger(0);
         s.createContext("/v1/chat/completions", exchange -> {
             String body = new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8);
-            // Second turn iff our prior tool_call id has been echoed back (robust to
-            // however the client formats the tool-result role).
+            // Second (and later) turn iff our prior tool_call id has been echoed back
+            // (robust to however the client formats the tool-result role).
             boolean toolResultsPresent = body.contains("call_1");
-            String json = toolResultsPresent ? finalResponse() : toolCallResponse();
+            String json;
+            if (!toolResultsPresent) {
+                json = toolCallResponse();
+            } else if (finalTurnsSeen.getAndIncrement() < malformedFinalResponses) {
+                json = malformedFinalResponse();
+            } else {
+                json = finalResponse();
+            }
             byte[] out = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, out.length);
@@ -67,6 +91,14 @@ final class FakeOpenAiServer implements AutoCloseable {
         Map<String, Object> message = new HashMap<>();
         message.put("role", "assistant");
         message.put("content", J4_JSON);
+        return completion(message, "stop");
+    }
+
+    /** FND-42 fixture: a final response that fails to parse as the J4 contract. */
+    private static String malformedFinalResponse() {
+        Map<String, Object> message = new HashMap<>();
+        message.put("role", "assistant");
+        message.put("content", "here is my diagnosis: {not actually valid json,,,");
         return completion(message, "stop");
     }
 
