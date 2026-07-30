@@ -34,7 +34,8 @@ class AdkLiveRoundTripTest {
             AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
                     new MockServiceNowGateway(), new MockConfluenceGateway(),
                     new MockSumoGateway(), new MockGitLabGateway(),
-                    List.of("prod/payment", "prod/order-api"), 20, 30, 8);
+                    List.of("prod/payment", "prod/order-api"), 20, 30, 8,
+                    List.of("order-payments/payment-service"));
 
             DiagnosisResult result = engine.diagnose("INC0012345");
 
@@ -58,7 +59,8 @@ class AdkLiveRoundTripTest {
             AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
                     new MockServiceNowGateway(), new MockConfluenceGateway(),
                     new MockSumoGateway(), new MockGitLabGateway(),
-                    List.of("prod/payment"), 20, 30, 0);   // zero budget → deny every tool
+                    List.of("prod/payment"), 20, 30, 0,   // zero budget → deny every tool
+                    List.of("order-payments/payment-service"));
 
             DiagnosisResult result = engine.diagnose("INC0012345");
 

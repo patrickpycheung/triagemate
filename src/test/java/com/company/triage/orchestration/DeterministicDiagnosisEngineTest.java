@@ -5,6 +5,8 @@ import com.company.triage.model.Contact;
 import com.company.triage.model.DiagnosisReport;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -15,7 +17,8 @@ class DeterministicDiagnosisEngineTest {
 
     private final DeterministicDiagnosisEngine engine = new DeterministicDiagnosisEngine(
             new MockServiceNowGateway(), new MockConfluenceGateway(),
-            new MockSumoGateway(), new MockGitLabGateway());
+            new MockSumoGateway(), new MockGitLabGateway(),
+            List.of("prod/payment", "prod/order-api"));
 
     @Test
     void diagnosesTheSeededIncidentEndToEnd() {

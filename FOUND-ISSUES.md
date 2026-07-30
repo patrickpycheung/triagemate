@@ -1,6 +1,7 @@
 # Found issues
 
-**Backlog: empty.** ✅ All 32 entries (FND-1…FND-32) resolved. Last drained 2026-07-30.
+**Backlog: 3 open, deferred design decisions** (not bugs — see each entry). FND-1…FND-41
+resolved; full detail in `docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
 Resolved entries move to [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md)
@@ -21,7 +22,44 @@ Format: `## FND-<n> — <one-line title> · **HIGH|MEDIUM|LOW**`, then **Where**
 
 ---
 
-_(no open entries)_
+## FND-42 — No in-engine repair retry on malformed ADK JSON · **LOW**
+
+**Where**: `AdkDiagnosisEngine.parse()`.
+**What**: J2 previously (falsely — FND-35) claimed "one repair retry" on malformed
+final JSON. The actual behavior (fail fast, let `DiagnosisOrchestrator`'s FND-7
+fallback degrade to the deterministic engine) is correct and tested, not a bug. A
+genuine repair retry — catch the parse failure, re-prompt the model once with the
+error, only THEN give up — would reduce spurious whole-run degradations caused by a
+single JSON hiccup on an otherwise-healthy run.
+**Why it matters**: this is new agent behavior (a design decision: how many retries,
+what re-prompt text, does it count against the tool-call/LLM-call budget), not a
+one-line fix — picking the approach is the hard part, hence logged rather than built
+in this pass.
+
+## FND-43 — Poller cursor can skip a batch-limit's worth of same-timestamp incidents · **LOW**
+
+**Where**: `IncidentPoller.pollOnce()`.
+**What**: if more than `triage.trigger.poll.batch-limit` (default 10) incidents share
+the exact same `sys_created_on` second, the cursor's "unbroken handled prefix"
+advance could move past ones never actually fetched (they'd be beyond the query's
+`sysparm_limit`). Needs either a strictly-greater-than tie-break key (e.g. `sys_id`)
+or a documented acceptance of the edge case.
+**Why it matters**: real-world likelihood is low (needs a true creation-time
+collision at second granularity within one poll tick) but the fix shape is a design
+choice (extra query field vs. accepted limitation), not obviously mechanical.
+
+## FND-44 — Several ADK guardrails are prompt-only, not code-enforced · **LOW**
+
+**Where**: `AdkDiagnosisEngine`'s `INSTRUCTION` — "ONE bounded Sumo Logic search",
+result/citation ordering, "only for pages/files you already cited."
+**What**: these are asked of the model via the system prompt, not structurally
+enforced the way the Sumo scope/window/GitLab-project allowlists (FND-20/38) are. A
+model that ignores the instruction (or is prompt-injected into ignoring it) could
+call `search_logs` more than once, or cite a page/file it never actually searched.
+**Why it matters**: whether/how to enforce this in code (e.g. a per-tool call count
+inside `BoundsCallback`, or validating citations against the actual tool-call trace
+in `DiagnosisReportValidator`) is a real design fork with more than one reasonable
+answer — logged for a future round rather than picked here.
 
 ## History
 

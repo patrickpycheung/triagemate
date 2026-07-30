@@ -85,8 +85,21 @@ hard-fail on stage. Two consequences worth stating here:
 - **Runner**: `runner.runAsync(userId, sessionId, msg, runConfig)` → `Flowable<Event>`;
   orchestrator (J1) subscribes, surfaces the final structured report and the event
   stream (→ J8 trace + J7 UI "it really consulted the sources").
-- **Structured output**: final step is constrained to emit the J4 JSON contract
-  (schema-guided; validate + one retry on malformed).
+- **Structured output**: final step is constrained (by prompt, see `INSTRUCTION`) to
+  emit the J4 JSON contract. **No repair retry (FND-35, corrected 2026-07-30 — this
+  line and the Verification section below both claimed "one repair retry on
+  malformed JSON"; no such retry exists anywhere in the codebase).**
+  `AdkDiagnosisEngine.parse()` throws immediately on the first parse failure — the
+  log line there ("one repair retry recommended") is exactly that, a recommendation
+  in a log message, not implemented behavior. The exception propagates to
+  `DiagnosisOrchestrator`, whose existing FND-7 fallback catches it and degrades to
+  the deterministic engine (same path as any other engine failure) — so a malformed
+  response is NOT unhandled, it just degrades a run-level up rather than
+  self-correcting via a re-prompt. A genuine in-engine repair retry (re-prompt the
+  model with the parse error, one attempt) would reduce spurious FND-7 fallbacks on
+  an otherwise-healthy run and is a real potential improvement — but it's new agent
+  behavior, not a doc correction, so it's logged as a future FND rather than built
+  here.
 
 ## Versions (Spike JS-1 verified, Maven Central)
 `com.google.adk:google-adk:1.7.0` · `google-adk-langchain4j:1.7.0` (primary model
@@ -107,7 +120,10 @@ enterprise endpoint → one successful tool round-trip returning parsed JSON. Ti
 - A `beforeToolCallback` denial (tool not in the **global** allowlist — see the
   FND-13 correction above, there is no per-step allowlist) is observable and the
   run continues/aborts per policy.
-- Malformed final JSON triggers exactly one repair retry, then a degraded report.
+- Malformed final JSON throws immediately (no repair retry — FND-35, see Design
+  above) and is caught by `DiagnosisOrchestrator`'s FND-7 fallback, which degrades
+  to the deterministic engine: `DiagnosisOrchestratorTest#engineTimeoutOnPrimaryDegradesToFallback`
+  covers the same catch-and-degrade path for a different triggering exception.
 
 ## Open / risks
 - RxJava (`Flowable`/`Single`) ergonomics for a Java-team new to it → the reactive

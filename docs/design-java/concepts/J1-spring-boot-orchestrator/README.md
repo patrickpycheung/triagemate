@@ -93,6 +93,19 @@ class DiagnosisController {
   overlap — one engine call, one writeback), `#sequentialRunsOfTheSameIncidentAreNotCoalesced`
   (non-overlapping calls are NOT coalesced — a deliberate manual re-trigger still runs).
 
+- **HTTP-level timeout on ServiceNow calls (FND-34, fixed 2026-07-30)**: the wall-clock
+  timeout above only bounds `engine.diagnose()`. The two `addWorkNote` writeback calls
+  in `runOnce()` and `IncidentPoller`'s own `findIncidentsCreatedSince` call run
+  directly on the caller's thread (K3's HTTP request thread, or K1's single scheduler
+  thread) with no wrapper — and `RestClient.Builder` previously had no configured
+  timeout at all, so a network partition could hang either thread forever, unbounded.
+  Closed via `spring.http.client.connect-timeout`/`read-timeout` (5s/20s), which Spring
+  Boot applies to any autoconfigured `RestClient.Builder` — including
+  `RealServiceNowGateway`'s injected one — with no code change there. Real
+  Confluence/Sumo/GitLab calls build their own `RestClient` directly (not
+  Spring-managed) and stay covered only by the existing virtual-thread wall-clock
+  timeout above, since they run solely inside `engine.diagnose()`.
+
 ## Open / risks
 - Sync vs async response (long agent runs). MVP: synchronous with a timeout;
   revisit if runs exceed ~30s in the demo.

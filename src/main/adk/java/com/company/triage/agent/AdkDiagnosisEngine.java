@@ -32,10 +32,12 @@ import java.util.List;
  * over the gateway tools (J3) and emits the J4 JSON report. Active only when
  * {@code triage.engine=adk} AND the app is built with {@code -Padk}.
  *
- * <p>This is Spike JS-1b: the wiring is written to the confirmed ADK 1.7.0 surface
- * (LlmAgent.builder().model().tools()); the run/session/event-collection calls marked
- * "JS-1b" must be pinned against the 1.7.0 javadoc on build day, and one live
- * round-trip proven, before this path is demoed.
+ * <p>Wiring is pinned against the confirmed ADK 1.7.0 surface
+ * (LlmAgent.builder().model().tools()) — spike JS-1b is done; {@link
+ * AdkLiveRoundTripTest} proves a live round trip against a fake OpenAI-compatible
+ * server, and real spike C2 (see {@code docs/discovery/copilot-cli-runtime}) proved
+ * one against a real Copilot-served model. Corrected 2026-07-30: this javadoc
+ * previously still described the wiring as unproven/spike-only.
  */
 @Component
 @ConditionalOnProperty(name = "triage.engine", havingValue = "adk")
@@ -94,11 +96,12 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                               @Value("${triage.sumo.allowed-scopes:prod/payment,prod/order-api}") List<String> sumoScopes,
                               @Value("${triage.sumo.max-results:20}") int sumoMaxResults,
                               @Value("${triage.sumo.max-window-minutes:30}") int sumoMaxWindowMinutes,
-                              @Value("${triage.agent.max-tool-calls:10}") int maxToolCalls) {
+                              @Value("${triage.agent.max-tool-calls:10}") int maxToolCalls,
+                              @Value("${triage.gitlab.allowed-projects:order-payments/payment-service}") List<String> gitLabProjects) {
         // Comma-separated @Value binds cleanly to List<String>; the YAML list is a
         // human-readable mirror. JS-1b: switch to @ConfigurationProperties if preferred.
         TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes,
-                sumoMaxResults, sumoMaxWindowMinutes);
+                sumoMaxResults, sumoMaxWindowMinutes, gitLabProjects);
         this.maxToolCalls = maxToolCalls;
     }
 
@@ -124,7 +127,19 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     public DiagnosisResult diagnose(String incidentNumber) {
         List<String> trace = new ArrayList<>();
         BoundsCallback bounds = new BoundsCallback(maxToolCalls, ALLOWED_TOOLS);
+        // FND-33: pin the incident for this run so get_incident/find_similar_incidents
+        // can't be pointed at a different one by the model — see TriageMateTools's
+        // CURRENT_INCIDENT javadoc.
+        TriageMateTools.bindIncident(incidentNumber);
 
+        try {
+            return diagnoseBound(incidentNumber, trace, bounds);
+        } finally {
+            TriageMateTools.clearIncident();
+        }
+    }
+
+    private DiagnosisResult diagnoseBound(String incidentNumber, List<String> trace, BoundsCallback bounds) {
         LlmAgent agent = LlmAgent.builder()
                 .name(AGENT_NAME)
                 .description("Bounded advisory incident triage")
@@ -200,7 +215,9 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         try {
             return JSON.readValue(json, DiagnosisReport.class);
         } catch (Exception e) {
-            log.warn("agent returned unparseable JSON for {} — one repair retry recommended", incidentNumber, e);
+            // No repair retry (FND-35) — fails fast; DiagnosisOrchestrator's FND-7
+            // fallback degrades the run to the deterministic engine from here.
+            log.warn("agent returned unparseable JSON for {} — degrading (no repair retry)", incidentNumber, e);
             throw new IllegalStateException("agent JSON did not match the J4 contract", e);
         }
     }

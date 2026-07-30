@@ -61,6 +61,40 @@ class DiagnosisOrchestratorTest {
         assertThat(r.writebackPosted()).as("FND-25: real writes actually happened").isTrue();
     }
 
+    /**
+     * FND-36: previously an exception from the SECOND {@code addWorkNote} call
+     * propagated straight out of {@code run()}, losing the whole diagnosis result (the
+     * report was already produced, the first comment already posted) and reporting
+     * {@code writebackPosted} from the config flag rather than what actually happened.
+     * A partial writeback must not lose the diagnosis, and must disclose itself.
+     */
+    static class SecondWriteFailsServiceNow implements ServiceNowGateway {
+        final List<String> notes = Collections.synchronizedList(new ArrayList<>());
+        public IncidentContext getIncident(String n) { return null; }
+        public List<com.company.triage.model.NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) { return List.of(); }
+        public List<ResolvedIncident> findSimilarIncidents(IncidentContext c) { return List.of(); }
+        public Optional<ServiceOwnership> findOwnership(String a) { return Optional.empty(); }
+        public void addWorkNote(String number, String note) {
+            notes.add(note);
+            if (notes.size() == 2) throw new RuntimeException("ServiceNow PATCH failed (simulated)");
+        }
+    }
+
+    @Test
+    void partialWritebackFailureIsDisclosedNotLost() {
+        var snow = new SecondWriteFailsServiceNow();
+        DiagnosisReport report = sampleReport();
+        DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
+        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, true, 5000).run("INC0012345");
+
+        assertThat(snow.notes).hasSize(2);   // first write landed, second was attempted and failed
+        assertThat(r.report()).isSameAs(report);   // diagnosis itself is not lost
+        assertThat(r.writebackPosted()).as("FND-36: a partial write is not a success").isFalse();
+        assertThat(r.trace()).anyMatch(s -> s.contains("writeback failed partway through"));
+    }
+
     @Test
     void writebackDisabledPostsNothing() {
         var snow = new RecordingServiceNow();

@@ -133,6 +133,13 @@ public class IncidentPoller {
         }
         if (found.isEmpty()) return;
 
+        // FND-41: sort defensively rather than trust the gateway's ordering. The cursor-
+        // advance logic below assumes oldest-first (RealServiceNowGateway does query
+        // ORDERBYsys_created_on, but nothing here re-checked that) — an out-of-order
+        // batch would silently corrupt the "unbroken handled prefix" invariant this
+        // class exists to guarantee.
+        found = found.stream().sorted(java.util.Comparator.comparing(NewIncident::createdAt)).toList();
+
         log.info("poll: {} new incident(s)", found.size());
 
         // The cursor may only advance across an unbroken run of handled incidents, oldest

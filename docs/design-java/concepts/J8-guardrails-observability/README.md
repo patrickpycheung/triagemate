@@ -19,15 +19,24 @@ tools, within these limits").
   download whole repos, execute code found in docs, or send data to unapproved
   destinations.
 - **Least privilege + allowlists**: read-only service accounts; allowlisted
-  Confluence spaces, GitLab projects, Sumo `_sourceCategory` scopes, ServiceNow
-  fields.
-- **Bounds enforced in code, across three layers (FND-18/24 corrected the claims
+  GitLab projects (`triage.gitlab.allowed-projects`) and Sumo `_sourceCategory`
+  scopes (`triage.sumo.allowed-scopes`); ServiceNow writes go to one configured
+  field (`triage.servicenow.write-field`), never model-chosen. Confluence search
+  has **no space-scoping mechanism at all** (corrected 2026-07-30 — this line
+  previously claimed "allowlisted Confluence spaces" as if it were a fourth
+  enforced bound; `ConfluenceGateway.search(query)` has no space parameter to
+  allowlist). That is a deliberate design choice, not an oversight: J6 documents
+  Confluence as intentionally "cheap, broad" — containment there comes from the
+  read-only service account's own space permissions and a small result cap (5),
+  not an app-level allowlist.
+- **Bounds enforced in code, across three layers (FND-18/24/32 corrected the claims
   below to match what's actually enforced, and where)**:
   - `beforeToolCallback` (`BoundsCallback`, J2) — a **global** tool allowlist (all
     eight registered tools, every step; there is no per-step allowlist, see J2's
     FND-13 correction) and a max-tool-calls budget.
-  - `TriageMateTools` (J6, FND-20) — per-call result caps and a bounded Sumo time
-    window; these are NOT model-supplied and NOT enforced by `beforeToolCallback`.
+  - `TriageMateTools` (J6, FND-20/FND-38) — per-call result caps, a bounded Sumo
+    time window, and the GitLab project allowlist; these are NOT model-supplied
+    and NOT enforced by `beforeToolCallback`.
   - `DiagnosisOrchestrator` (J1, FND-15) — a wall-clock timeout on the whole engine
     call, on either engine.
   A tool *existing* ≠ the model may call it anywhere — but "anywhere" is bounded at

@@ -6,6 +6,23 @@ spring:
   # demo. Its triage.integrations.* values override the env placeholders below.
   config:
     import: "optional:file:secrets.properties"
+  http:
+    client:
+      # FND-34: DiagnosisOrchestrator's timeout-ms only bounds engine.diagnose() — the
+      # two ServiceNow writeback calls in runOnce() and IncidentPoller's own
+      # findIncidentsCreatedSince call run directly on the caller's thread (K3's HTTP
+      # request thread, or K1's single scheduler thread) with no wrapper at all, and
+      # RestClient.Builder previously had no configured timeout, so a network partition
+      # or a proxy that accepts a connection and never responds could hang either thread
+      # forever. This is Spring Boot's global HTTP-client property namespace: it applies
+      # to any Spring-autoconfigured RestClient.Builder, including RealServiceNowGateway's
+      # injected one — no code change needed there. Real Confluence/Sumo/GitLab calls
+      # build their own RestClient directly (not Spring-managed) and stay covered only by
+      # the orchestrator's existing virtual-thread wall-clock timeout (best-effort
+      # cancellation, see DiagnosisOrchestrator's javadoc) since they run solely inside
+      # engine.diagnose() — the writeback/poller gap this closes is specific to ServiceNow.
+      connect-timeout: 5s
+      read-timeout: 20s
 
 server:
   port: 8080
@@ -79,6 +96,13 @@ triage:
       - prod/order-api
     max-results: 20
     max-window-minutes: 30
+
+  gitlab:
+    # J8 allowlist (FND-38: was documented as enforced but search_code accepted any
+    # model-supplied project unchecked, same class of gap as FND-20's Sumo bound).
+    # Enforced server-side in TriageMateTools.searchCode, not by beforeToolCallback.
+    allowed-projects:
+      - order-payments/payment-service
 
   # Credentials for real connectors. Set these in secrets.properties (preferred, see
   # above) as triage.integrations.*, or via the env vars below. Blank in the offline demo.

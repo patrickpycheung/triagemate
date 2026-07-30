@@ -130,21 +130,39 @@ public class DiagnosisOrchestrator {
         long t0 = System.currentTimeMillis();
         DiagnosisResult result = diagnoseWithFallback(incidentNumber);
 
+        // FND-36: writebackPosted must reflect what ACTUALLY happened, not just whether
+        // writeback was enabled — those diverged the moment either write could fail.
+        // Previously an exception from either addWorkNote call propagated straight out
+        // of run(), losing the whole diagnosis result (already-produced report, first
+        // comment already posted) and surfacing as a raw 500 — for K1 that meant a
+        // writeback-only failure looked identical to a diagnosis failure and re-ran the
+        // whole (expensive, LLM-backed) diagnosis on a later tick instead of just
+        // retrying the write. A partial writeback (first comment posted, second failed)
+        // is caught here rather than left non-atomic-and-silent: disclosed in the trace,
+        // writebackPosted reports false, and the diagnosis itself is still returned.
+        boolean writebackPosted = false;
         if (writebackEnabled) {
-            // Automatic, advisory, two comments — sources first so the diagnosis is auditable.
-            serviceNow.addWorkNote(incidentNumber, result.report().toSourcesNote());
-            result.trace().add("servicenow.addWorkNote → posted 'Sources consulted' comment");
-            serviceNow.addWorkNote(incidentNumber, result.report().toDiagnosisNote());
-            result.trace().add("servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)");
+            try {
+                // Automatic, advisory, two comments — sources first so the diagnosis is auditable.
+                serviceNow.addWorkNote(incidentNumber, result.report().toSourcesNote());
+                result.trace().add("servicenow.addWorkNote → posted 'Sources consulted' comment");
+                serviceNow.addWorkNote(incidentNumber, result.report().toDiagnosisNote());
+                result.trace().add("servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)");
+                writebackPosted = true;
+            } catch (RuntimeException e) {
+                log.warn("writeback for {} failed partway through ({}: {}) — diagnosis still returned",
+                        incidentNumber, e.getClass().getSimpleName(), e.getMessage());
+                result.trace().add("⚠ writeback failed partway through (%s: %s) — at most one of the two "
+                        .formatted(e.getClass().getSimpleName(), e.getMessage())
+                        + "advisory comments may have posted; diagnosis itself is unaffected");
+            }
         } else {
             result.trace().add("writeback disabled (triage.writeback.enabled=false) — comments not posted");
         }
 
         log.info("diagnosis for {} completed in {} ms ({} steps, writeback={})",
-                incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackEnabled);
-        // FND-25: writebackPosted reflects what actually happened in THIS method, not a
-        // client-side guess — this is the only place that knows for certain.
-        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackEnabled);
+                incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackPosted);
+        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted);
     }
 
     private DiagnosisResult diagnoseWithFallback(String incidentNumber) {

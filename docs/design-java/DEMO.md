@@ -14,7 +14,7 @@ mvn spring-boot:run            # from the repo root; needs JDK 21 (a compiler, n
 # open http://localhost:8080 → the incident number INC0012345 is pre-filled → Diagnose
 ```
 
-Verified in-session: `mvn test` → **3/3 pass**, `mvn -Padk test` → **5/5 pass**, app
+Verified in-session: `mvn test` → **34/34 pass**, `mvn -Padk test` → **49/49 pass**, app
 boots in ~1.3s and serves the full diagnosis end-to-end offline.
 
 ## 1 · Trigger

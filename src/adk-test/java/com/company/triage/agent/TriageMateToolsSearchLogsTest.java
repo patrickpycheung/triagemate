@@ -33,7 +33,8 @@ class TriageMateToolsSearchLogsTest {
     private RecordingSumo wireWith(int maxResults, int maxWindowMinutes) {
         RecordingSumo sumo = new RecordingSumo();
         TriageMateTools.wire(new NoopServiceNow(), new NoopConfluence(), sumo, new NoopGitLab(),
-                List.of("prod/payment"), maxResults, maxWindowMinutes);
+                List.of("prod/payment"), maxResults, maxWindowMinutes,
+                List.of("order-payments/payment-service"));
         return sumo;
     }
 
@@ -91,6 +92,42 @@ class TriageMateToolsSearchLogsTest {
                 "prod/not-allowed", "q", "2026-07-30T11:00:00Z", "2026-07-30T12:00:00Z"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not allowlisted");
+    }
+
+    /**
+     * FND-38: {@code search_code} previously accepted any model-supplied project string
+     * unchecked — J8 documented a GitLab-project allowlist that did not exist in code.
+     * Same fix shape as FND-20's Sumo scope bound: enforced in {@code TriageMateTools},
+     * not just claimed in the docs.
+     */
+    @Test
+    void outOfAllowlistGitLabProjectIsRejected() {
+        wireWith(20, 30);
+        assertThatThrownBy(() -> TriageMateTools.searchCode("some/other-project", "TOKEN"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not allowlisted");
+    }
+
+    @Test
+    void allowlistedGitLabProjectIsPassedThrough() {
+        RecordingGitLab gitLab = new RecordingGitLab();
+        TriageMateTools.wire(new NoopServiceNow(), new NoopConfluence(), new RecordingSumo(), gitLab,
+                List.of("prod/payment"), 20, 30, List.of("order-payments/payment-service"));
+
+        TriageMateTools.searchCode("order-payments/payment-service", "TOKEN");
+
+        assertThat(gitLab.lastProject).isEqualTo("order-payments/payment-service");
+        assertThat(gitLab.lastTerm).isEqualTo("TOKEN");
+    }
+
+    static class RecordingGitLab implements GitLabGateway {
+        String lastProject;
+        String lastTerm;
+        public List<CodeSearchResult> searchCode(String project, String term) {
+            lastProject = project; lastTerm = term;
+            return List.of();
+        }
+        public List<Contact> recentCommitters(String project, String filePath) { return List.of(); }
     }
 
     // --- minimal no-op stand-ins for the gateways searchLogs doesn't exercise ---

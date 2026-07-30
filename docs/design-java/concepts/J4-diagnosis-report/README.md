@@ -66,8 +66,11 @@ UI (J7) mere renderings of it. This is the demo's spine.
   edited away.
 
 ## Verification
-- Round-trips through Jackson; `DiagnosisReportValidator` (FND-17, wired into
-  `AdkDiagnosisEngine.parse()`) rejects a report with an empty `candidateSystems`,
-  empty `evidence`, or a `evidenceRefs` entry with no matching `Evidence.id` — 7
-  cases in `DiagnosisReportValidatorTest`. Deliberately narrow: only the two
-  properties this contract already promised, not every conceivable invariant.
+- Round-trips through Jackson; `DiagnosisReportValidator` (FND-17, corrected
+  2026-07-30 — this line previously said "wired into `AdkDiagnosisEngine.parse()`";
+  it's actually called from `diagnose()`, immediately after `parse()` returns, and
+  as of FND-39 also from `DeterministicDiagnosisEngine.diagnose()` — see that card)
+  rejects a report with an empty `candidateSystems`, empty `evidence`, or a
+  `evidenceRefs` entry with no matching `Evidence.id` — 7 cases in
+  `DiagnosisReportValidatorTest`. Deliberately narrow: only the two properties this
+  contract already promised, not every conceivable invariant.

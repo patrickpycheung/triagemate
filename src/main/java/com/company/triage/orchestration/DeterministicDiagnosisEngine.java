@@ -33,19 +33,29 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
     private static final Pattern ORDER_ID = Pattern.compile("\\bINC-ORD-\\d+\\b");
     private static final Pattern ERROR_TOKEN = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b");
-    private static final List<String> SUMO_SCOPE_ALLOWLIST = List.of("prod/payment", "prod/order-api");
 
     private final ServiceNowGateway serviceNow;
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
     private final GitLabGateway gitLab;
+    private final List<String> sumoScopeAllowlist;
 
     public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
-                                        SumoGateway sumo, GitLabGateway gitLab) {
+                                        SumoGateway sumo, GitLabGateway gitLab,
+                                        @org.springframework.beans.factory.annotation.Value(
+                                                "${triage.sumo.allowed-scopes:prod/payment,prod/order-api}")
+                                        List<String> sumoScopeAllowlist) {
         this.serviceNow = serviceNow;
         this.confluence = confluence;
         this.sumo = sumo;
         this.gitLab = gitLab;
+        // FND-40: previously a hardcoded copy of the same list TriageMateTools reads
+        // from triage.sumo.allowed-scopes (config) — the two lists happened to agree
+        // only by coincidence; a config change would silently affect the ADK path but
+        // not this one. This engine doesn't take model-chosen scope (it's a fixed
+        // script), so there was no guardrail-bypass risk, but "which scope is default"
+        // now has one source of truth instead of two independently-maintained copies.
+        this.sumoScopeAllowlist = sumoScopeAllowlist;
     }
 
     @Override
@@ -89,7 +99,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         trace.add("confluence.search → %d page(s)".formatted(docs.size()));
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
-        String scope = SUMO_SCOPE_ALLOWLIST.get(0);   // allowlisted scope only
+        String scope = sumoScopeAllowlist.get(0);   // allowlisted scope only
         LogSearchRequest req = new LogSearchRequest(scope,
                 orderId == null ? "error" : orderId,
                 inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), 20);
@@ -152,6 +162,14 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                           + "compare expected vs charged for a discounted+taxed order (see payment_service.py:44)."
                         : "Reproduce a failing checkout and capture the correlation id.",
                 Confidence.MEDIUM, true);
+
+        // FND-39: J4's validator was previously wired only into the ADK engine — an
+        // asymmetric-trust gap (2 independent architecture reviews, 2026-07-30). This
+        // engine's report is hand-assembled from a fixed script, not model output, so
+        // this is pure defense-in-depth (a future edit to this method breaking the J4
+        // contract fails loudly here instead of silently reaching the UI) rather than a
+        // response to any real observed failure mode.
+        com.company.triage.model.DiagnosisReportValidator.validate(report);
 
         trace.add("report assembled: %d candidates, %d evidence items, assignment=%s"
                 .formatted(candidates.size(), evidence.size(), assignment.group()));

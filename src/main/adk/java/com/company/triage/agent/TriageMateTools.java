@@ -31,27 +31,57 @@ public final class TriageMateTools {
     // bound the model can set is not a bound.
     private static int sumoMaxResults = 20;
     private static int sumoMaxWindowMinutes = 30;
+    // J8 claimed "allowlisted GitLab projects" while search_code accepted any model-
+    // supplied project string unchecked — same class of gap as FND-20, fixed the same
+    // way: enforced here, not just documented.
+    private static List<String> gitLabAllowlist = List.of("order-payments/payment-service");
+
+    /**
+     * The incident this run is diagnosing (FND-33). Bound once per run by
+     * {@link AdkDiagnosisEngine#diagnose} before the agent starts, not supplied by the
+     * model: {@code get_incident}/{@code find_similar_incidents} previously took a
+     * free-form {@code incidentNumber} argument like any other tool param, so nothing
+     * stopped the model from fetching or (via the report it produces) effectively
+     * diagnosing a DIFFERENT incident than the one it was actually asked about — an
+     * identity-binding gap, not a data-access one (the allowlists above bound WHICH
+     * systems/scopes are reachable; nothing bound WHICH incident). A {@code ThreadLocal}
+     * is safe here for the same reason the static gateway fields above are: ADK tool
+     * methods are static, and one diagnosis run owns the thread it executes on.
+     */
+    private static final ThreadLocal<String> CURRENT_INCIDENT = new ThreadLocal<>();
 
     private TriageMateTools() {}
 
     static void wire(ServiceNowGateway sn, ConfluenceGateway cf, SumoGateway su,
-                     GitLabGateway gl, List<String> allowlist, int maxResults, int maxWindowMinutes) {
+                     GitLabGateway gl, List<String> allowlist, int maxResults, int maxWindowMinutes,
+                     List<String> gitLabProjectAllowlist) {
         serviceNow = sn; confluence = cf; sumo = su; gitLab = gl; sumoAllowlist = allowlist;
         sumoMaxResults = maxResults; sumoMaxWindowMinutes = maxWindowMinutes;
+        gitLabAllowlist = gitLabProjectAllowlist;
+    }
+
+    /** Pins the incident for this run (FND-33). Call before the agent starts. */
+    static void bindIncident(String incidentNumber) {
+        CURRENT_INCIDENT.set(incidentNumber);
+    }
+
+    /** Releases the binding at the end of a run so a thread-pool reuse can't leak it. */
+    static void clearIncident() {
+        CURRENT_INCIDENT.remove();
     }
 
     @Schema(name = "get_incident",
-            description = "Fetch a ServiceNow incident's full context by number.")
-    public static IncidentContext getIncident(
-            @Schema(name = "incidentNumber") String incidentNumber) {
-        return serviceNow.getIncident(incidentNumber);
+            description = "Fetch the full context of the incident under investigation. Takes no arguments "
+                    + "— it always returns the one incident this run is diagnosing.")
+    public static IncidentContext getIncident() {
+        return serviceNow.getIncident(CURRENT_INCIDENT.get());
     }
 
     @Schema(name = "find_similar_incidents",
-            description = "Find previously resolved incidents with similar symptoms and their resolution groups.")
-    public static List<ResolvedIncident> findSimilarIncidents(
-            @Schema(name = "incidentNumber") String incidentNumber) {
-        return serviceNow.findSimilarIncidents(serviceNow.getIncident(incidentNumber));
+            description = "Find previously resolved incidents similar to the incident under investigation, "
+                    + "and their resolution groups. Takes no arguments.")
+    public static List<ResolvedIncident> findSimilarIncidents() {
+        return serviceNow.findSimilarIncidents(serviceNow.getIncident(CURRENT_INCIDENT.get()));
     }
 
     @Schema(name = "find_ownership",
@@ -105,6 +135,9 @@ public final class TriageMateTools {
     public static List<CodeSearchResult> searchCode(
             @Schema(name = "project") String project,
             @Schema(name = "searchTerm") String searchTerm) {
+        if (!gitLabAllowlist.contains(project)) {
+            throw new IllegalArgumentException("project not allowlisted: " + project);   // J8 guardrail
+        }
         return gitLab.searchCode(project, searchTerm);
     }
 

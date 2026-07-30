@@ -50,8 +50,10 @@ final class FakeOpenAiServer implements AutoCloseable {
 
     private static String toolCallResponse() {
         Map<String, Object> fn = Map.of(
+                // FND-33: get_incident takes no arguments — it's pinned to the run's
+                // incident via TriageMateTools.bindIncident, not model-supplied.
                 "name", "get_incident",
-                "arguments", "{\"incidentNumber\":\"INC0012345\"}");
+                "arguments", "{}");
         Map<String, Object> toolCall = Map.of(
                 "id", "call_1", "type", "function", "function", fn);
         Map<String, Object> message = new HashMap<>();

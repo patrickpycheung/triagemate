@@ -12,10 +12,16 @@ by the analysis: Confluence (cheap, broad) → Sumo (targeted, bounded) → GitL
 already gathered rather than a fresh people-search.
 
 ## Confluence (`ConfluenceGateway.search`)
-- Plain **keyword** search (FND-29: this was documented as CQL — Confluence Query
-  Language — but the real and mock implementations both do keyword matching, not
-  CQL syntax) → retrieve a **few** highly-relevant pages: app descriptions,
-  runbooks, known-error docs, ownership, acronym/system-name interpretation.
+- **Real** (`RealConfluenceGateway`): genuine **CQL** (Confluence Query Language) —
+  builds `text ~ "<query>"` and posts it as the `cql` param to
+  `/wiki/rest/api/content/search` (re-verified 2026-07-30 against
+  `RealConfluenceGateway.java:41`: the FND-29 fix landed in J3's doc on 2026-07-30
+  but was never propagated to this card — this file kept the stale "both do keyword
+  matching" claim until now). **Mock** (`MockConfluenceGateway`): plain in-memory
+  keyword matching over a small fixture set — deliberately simpler, no CQL syntax
+  involved, since it isn't querying a real Confluence. Either way → retrieve a
+  **few** highly-relevant pages: app descriptions, runbooks, known-error docs,
+  ownership, acronym/system-name interpretation.
 - Best-effort: on failure the run degrades gracefully (evidence just omitted).
 - Reuse `auspost-mcp` Confluence client.
 
@@ -43,8 +49,12 @@ verification-s3/sumo-fixture.json`).
 
 ## GitLab (`GitLabGateway.searchCode`) — targeted, optional, last
 Only when logs/docs yield a concrete term (error code, endpoint, class, message).
-Search **one** allowlisted project for the term; return only matching files /
-surrounding lines — never clone. Mock: reuse the seed repo (`order_api.py`,
+Search **one** allowlisted project for the term (FND-38, fixed 2026-07-30: this was
+documented as enforced but `search_code` previously accepted any model-supplied
+project string unchecked — same class of gap as FND-20's Sumo bound, same fix shape:
+`triage.gitlab.allowed-projects`, checked server-side in `TriageMateTools.searchCode`,
+not by `beforeToolCallback`); return only matching files / surrounding lines — never
+clone. Mock: reuse the seed repo (`order_api.py`,
 `payment_service.py`), which lives at `docs/design/concepts/log-code-reasoning/
 verification-s3/seed-repo/` (FND-26: not repo-root `seed-repo/` — moved into the
 suspended Rovo-era CDS during the pivot) and emits the seeded distinctive log line.
@@ -74,6 +84,10 @@ the exact** line it matched.
   call budget, J2/J8). Window clamping and result capping: `TriageMateToolsSearchLogsTest`
   (FND-20) — a too-wide window is clamped anchored on the end time, and the configured
   `max-results` (not a hardcoded value) is what actually reaches the gateway.
+- A GitLab project outside `triage.gitlab.allowed-projects` is rejected in
+  `TriageMateTools.searchCode` the same way (FND-38):
+  `outOfAllowlistGitLabProjectIsRejected` / `allowlistedGitLabProjectIsPassedThrough`
+  in `TriageMateToolsSearchLogsTest`.
 
 ## Open / risks
 - GitLab intranet reachability (mock covers demo). Sumo query-cost/limits.
