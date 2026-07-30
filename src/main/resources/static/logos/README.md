@@ -11,8 +11,11 @@ identify which system each triage step consulted.
 | `sumologic.svg` | vectorlogo.zone | square icon | blue icon — clear |
 | `gitlab.svg` | simple-icons (CC0 drawing) | square glyph | orange tanuki — clearest |
 
-All four normalised to a single `<path fill="currentColor">` so the badge tints them from
-the `--sn` / `--cf` / `--sl` / `--gl` CSS variables, matching the existing UI idiom.
+All four normalised to a single `<path fill="currentColor">` so a badge can tint them via
+`color`. **Note**: the `--sn` / `--cf` / `--sl` / `--gl` brand variables these are intended to
+use exist only in the DDS prototype `sketch.html`, **not yet in `static/index.html`** (which
+defines `--bg --card --ink --muted --acc --ok --warn`). They must be added to the real UI
+when J11's LT5 lands; until then these files are staged but unreferenced.
 Each keeps its own `viewBox` (note `sumologic.svg` uses a non-zero origin,
 `22.84 23.58 64 64` — don't "tidy" it to `0 0 64 64`, that would crop the mark).
 

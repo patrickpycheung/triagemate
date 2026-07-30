@@ -1,7 +1,7 @@
 # J11 — Live Thinking Trace (animated per-step agent trace)
 
-**State**: 🔴 Exploring (CDS Round 1, 2026-07-31) · **Complexity**: Complex ·
-**Depends on**: J1, J2, J4, J7, J8 · **Amends**: J7 (UI), J8 (observability)
+**State**: 🟠 Evolving (CDS Round 3, 2026-07-31) · **Complexity**: Complex ·
+**Depends on**: J1, J2, J4, J7, J8 · **Amends**: J1 (response shape), J7 (UI), J8 (observability)
 **Source**: DDS `docs/discovery/live-thinking-trace-ui/` (Phase 4, concepts LT1–LT7)
 
 ## Essence
@@ -51,12 +51,25 @@ New package `com.company.triage.orchestration.trace` in `src/main/java/` (so `sr
 may import it; the reverse stays forbidden).
 
 ```java
-record TraceStep(int seq, Platform platform, String tool, String label, String result,
-                 State state, long startedAtEpochMs, Long durationMs,
+record TraceStep(int seq, int attempt, String callId,          // callId: correlation key
+                 Platform platform, String tool, String label, String result,
+                 StepState state, long startedAtEpochMs, Long durationMs,
                  DiagnosisResult.Engine engine) {}
-enum Platform { SERVICENOW, CONFLUENCE, SUMO, GITLAB, TRIAGEMATE }
-enum State    { PENDING, ACTIVE, DONE, FAILED, DENIED }
+enum Platform  { SERVICENOW, CONFLUENCE, SUMO, GITLAB, TRIAGEMATE }
+enum StepState { PENDING, ACTIVE, DONE, FAILED, DENIED }
 ```
+
+**`callId` and `attempt` were added in Round 3** — doc-test found the Round-2 shape could not
+actually support its own transport (see the three fixes below). `callId` is
+`ToolContext.functionCallId()` on the ADK path and a synthetic `det-<seq>` on the
+deterministic path; `attempt` is 0 for the primary engine call and 1 for an FND-7 fallback.
+Naming: the enum is **`StepState`**, not `State` — `State` collides confusingly and the LT1
+spike already created `StepState`.
+
+**A step is a mutable row, not an append.** `before` emits the row `ACTIVE`; `after`/`onError`
+**replace the row with the same `callId`**, they do not append a second one. Without a
+correlation key the UI could not know which `ACTIVE` row a later `DONE` resolves — the
+Round-2 shape had this hole.
 
 - `label` (in-progress verb) and `result` are **separate fields** so the resolve animation
   has both at once.
@@ -80,12 +93,21 @@ step emission. *(The DDS claimed "16 across 2 files" from a grep; the compiler f
 file. See `verification-lt1-spi/findings.md`.)*
 
 **Three invariants that are easy to get wrong:**
-1. **One sink per engine call, never one per run.** The orchestrator **discards the primary
-   engine's whole result and trace** on an FND-7 degrade. A run-scoped sink would accumulate
-   the *abandoned* ADK steps plus the deterministic run with `seq` restarting at 0 — and a
-   timed-out virtual thread is **not killed** (FND-15 cancellation is best-effort), so the
-   orphan can keep emitting *after* the fallback starts. Discard the primary's steps exactly
-   as its trace is discarded; prepend one synthetic `FALLBACK_STARTED` boundary step.
+1. **One sink per engine call — and on degrade the primary's segment is FROZEN, not deleted.**
+   ⚠️ **Round-3 correction (3 independent reviews).** Round 2 said "discard the primary's
+   steps exactly as its trace is discarded". **That is unachievable once LT4 streams live**:
+   by the time the fallback starts, the ADK steps are already in the buffer *and already
+   painted on screen*, so a server-side discard would require the client to un-draw rows —
+   and silently deleting them would itself breach the honesty contract. Worse, the timed-out
+   virtual thread is **not killed** (FND-15 cancellation is best-effort), so the orphan keeps
+   writing.
+   **Resolution — segment per attempt.** Key the buffer `runId#attempt`. On degrade: freeze
+   attempt 0, mark it **ABANDONED** and keep its rows visible but visually struck through;
+   append a `FALLBACK_STARTED` boundary; open attempt 1 with a fresh sink and `seq` restarting
+   at 0 *within that segment*. Late writes from the orphaned attempt-0 thread land in a dead
+   segment and are ignored — which turns the un-killable orphan from a corruption risk into a
+   no-op. This is *more* honest than discarding: the audience sees the agent tried, failed,
+   and fell back, which is exactly the D2 story the runbook tells.
 2. **All three `DiagnosisResult` reconstruction sites must carry `steps` forward** — the
    orchestrator rebuilds the record three times (for `engine`, then `writebackPosted`); a
    back-compat constructor at any of them silently drops the steps.
@@ -101,9 +123,25 @@ and deterministic dotted keys (`confluence.search`) → `{platform, label}`. Non
 
 ⚠️ The intended "build-failing test that `ALLOWED_TOOLS ⊆ catalog`" **cannot fire as
 described**: `ALLOWED_TOOLS` is `private static final` in `src/main/adk/`, which compiles
-only under `-Padk`. Move the canonical tool-name set into `StepCatalog` in `src/main/java/`,
-have `AdkDiagnosisEngine` reference it, and assert the subset in a `src/test/` test so bare
-`mvn test` enforces it.
+only under `-Padk`, so bare `mvn test` would never run the check.
+
+⛔ **But do NOT fix it by moving the tool-name set into `StepCatalog`** (Round-2 said to;
+Round-3 review rejected it). That would make an **observability/UI component the source of
+truth for which tools are permitted** — inverting J8's security ownership and violating
+J11's own "compose, don't conflate" rule. A catalog entry must never be able to *grant*
+permission.
+**Resolution**: put the canonical permitted-tool set in a **neutral security-owned registry**
+in `src/main/java/` (J8's layer, e.g. `guardrails/ToolRegistry`), have *both*
+`AdkDiagnosisEngine.ALLOWED_TOOLS` and `StepCatalog` reference it, and assert
+`registry ⊆ catalog` in a `src/test/` test. The catalog must *cover* the permitted set; it
+must not *define* it.
+
+⚠️ **The catalog cannot label a hallucinated tool** — and that is the main `DENIED` case.
+`BoundsCallback` denies names *outside* the allowlist, which are by construction absent from
+the catalog. Specify a fallback: unknown tool → `Platform.TRIAGEMATE`, label
+`"Blocked an unrecognised tool call"`, and carry `BoundsCallback.denialReason()` into
+`result` so allowlist-rejection and budget-exhaustion stay distinguishable (today they are,
+in the text trace; the new UI must not lose that).
 
 ### LT3 — Replay renderer (v1; works on **both** engines)
 
@@ -167,6 +205,34 @@ paying for a durability property it will never use.
 in bursts rather than as they happen — drop the interval to ~500 ms before reconsidering SSE.
 
 Binding on the chosen option:
+#### The `runId` protocol (added Round 3 — **3 independent reviews found it missing**)
+
+Round 2 decided "poll a per-`runId` buffer" without ever defining what a `runId` *is*. It
+appeared in four lines of this card and **nowhere in the repo** — no type, no generator, no
+endpoint, and critically **no channel by which a client learns it before the run ends**. The
+only channel today is the POST, which returns at the *end*. The whole live path dead-ended.
+
+**Resolution — the client mints the id.** The one option needing no extra "start" round-trip
+and no change to the POST response:
+
+1. Client generates a `runId` (UUID) **before** calling, sending it as an optional
+   `X-Triage-Run-Id` header on `POST /api/diagnose/{incidentNumber}`.
+2. Client immediately polls `GET /api/runs/{runId}/steps?since={seq}` (~500 ms), returning
+   `{attempts: [{attempt, state, steps: [...]}], done: bool}`.
+3. The POST still returns its usual `200 DiagnosisResult` at the end, unchanged. The client
+   stops on `done` or when the POST resolves — whichever is first.
+4. **No header ⇒ no buffer.** Absent the header the orchestrator uses `TraceSink.NOOP` and
+   allocates nothing — which is exactly what **K1 must do** (see the bound below).
+5. **FND-31 coalescing**: caller B blocks in `awaitExisting` and never runs an engine, so it
+   owns no segment. Alias B's `runId` to the canonical run's buffer so it watches the same
+   live steps instead of a permanently empty one.
+
+**Bound the buffer** (J10 parity — that card holds itself to `completed-cap: 500`; this one
+had no cap at all): cap retained runs (~20) with a TTL (~5 min), evicting oldest-first.
+Otherwise K1 running unattended, with no client draining it, grows the map forever.
+
+**Two corrections, binding regardless of transport:**
+
 - **Streaming must be purely ADDITIVE.** Keep `POST /api/diagnose/{incidentNumber}` → `200
   DiagnosisResult`; `index.html` reads `data.engine` (FND-16) and `data.writebackPosted`
   (FND-25) from it. End every stream with the complete result (or a typed terminal payload
@@ -175,8 +241,9 @@ Binding on the chosen option:
   separate — `DiagnosisOrchestratorTest#sequentialRunsOfTheSameIncidentAreNotCoalesced`
   proves it — so an incident-keyed buffer leaks events across runs. Map incident → *current*
   `runId` only for the FND-31 concurrent-coalescing case.
-- **`spring.mvc.async.request-timeout` has no Spring Boot default** → falls to embedded
-  Tomcat's **30 s**, silently conflicting with the 90 s engine deadline. Set it explicitly.
+- ~~**`spring.mvc.async.request-timeout`**~~ — **withdrawn Round 3.** That property governs
+  Spring MVC *async dispatch*, which ordinary polling does not use; it was a leftover from
+  the rejected SSE branch. It becomes binding again only if SSE is ever reinstated.
 
 ### LT5 — Visual vocabulary (prototyped, render-verified)
 
@@ -194,12 +261,18 @@ motion-only. Reuses J7's existing `.ev` left-rail idiom.
 ### LT6 — Vendor logos ✅ **DONE** (operator ruling 2026-07-30/31)
 
 All four real marks live in `src/main/resources/static/logos/`, normalised to a single
-`<path fill="currentColor">` so J7's `--sn/--cf/--sl/--gl` vars tint them; uniform 32 px
+`<path fill="currentColor">` so a brand colour can tint them; uniform 32 px
 square badges; attribution footer present. GitLab + Confluence from simple-icons;
 **ServiceNow + Sumo Logic from vectorlogo.zone**, because simple-icons has no ServiceNow
 entry at all and ships Sumo Logic only as a wordmark that renders as a smudge at badge size.
 ⚠️ `sumologic.svg` keeps a non-zero viewBox origin (`22.84 23.58 64 64`) — "tidying" it to
 `0 0 64 64` crops the mark.
+
+⚠️ **`--sn/--cf/--sl/--gl` do not exist yet in the shipped UI** (Round-3 correction — an
+earlier draft, and `logos/README.md`, both claimed the logos are tinted by "J7's" vars).
+`static/index.html` defines only `--bg --card --ink --muted --acc --ok --warn`; the four
+brand vars live solely in the DDS prototype `sketch.html`. **J7 must gain them** as part of
+landing LT5 — until then the marks would render in the inherited text colour.
 
 ### LT7 — Provenance chips (separable)
 
@@ -227,11 +300,11 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
   correlation key.
 - 🔬 **LT5 visual vocabulary ✅ rendered** — `sketch.html` verified in headless Chromium
   (states progress, disclosure toggles work); LT6's four real logos render legibly.
-- ⏳ Pending: LT2 catalog subset test, LT3 replay-frame wording review, LT4 transport choice
-  + its `spring.mvc.async.request-timeout` fix, real ADK latency, projector legibility.
+- ⏳ Pending: LT2 registry/catalog subset test, LT3 replay-frame wording review, real ADK
+  per-step latency, projector legibility. *(Transport is DECIDED — polling; the
+  `spring.mvc.async.request-timeout` item was withdrawn as SSE-only.)*
 
 ## Open / risks
-- **Transport fork (LT4)**: polling vs SSE — ADM-2, decide in Round 2/3.
 - **Real ADK per-step latency** — unmeasured (`timeout-ms: 90000` is self-documented as a
   guess). Needs the corp laptop + proxy; decides how much LT4 actually matters.
 - **Projector legibility** of glow-pulse vs spinner — reasoned, not measured. One dry run.

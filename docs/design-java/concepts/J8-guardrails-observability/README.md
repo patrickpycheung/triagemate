@@ -18,7 +18,13 @@ tools, within these limits").
   not broaden its own permissions, fetch arbitrary secrets, run unlimited searches,
   download whole repos, execute code found in docs, or send data to unapproved
   destinations.
-- **Least privilege + allowlists**: read-only service accounts; allowlisted
+- **Least privilege + allowlists**: least-privilege service accounts — **read-only** for
+  Confluence / Sumo / GitLab, but ServiceNow needs **read + write on `incident`**.
+  *(Corrected 2026-07-31: this line read "read-only service accounts" flatly, which was
+  false and always had been — posting the two advisory work notes is the app's entire
+  payoff, and both `application.yml:112` and `RealServiceNowGateway.java:29` specify
+  read+write.)* That write is narrow by design: append to one journal field; never
+  reassign, close, or re-prioritise. Allowlisted
   GitLab projects (`triage.gitlab.allowed-projects`) and Sumo `_sourceCategory`
   scopes (`triage.sumo.allowed-scopes`); ServiceNow writes go to one configured
   field (`triage.servicenow.write-field`), never model-chosen. Confluence search
@@ -51,6 +57,9 @@ one refers to was removed 2026-07-23 (see J5/`PIVOT.md`); recording an "accept/
 reject" decision that no longer happens would be actively misleading. Later: final
 actual assignment + resolution — the data that proves whether the tool reduces
 assignment bouncing.
+- **Amended by J11** (live thinking trace): an *additive* `List<TraceStep>` structured
+  channel is being designed alongside this; `DiagnosisResult.trace` stays byte-identical and
+  is neither replaced nor parsed. See `../J11-live-thinking-trace/README.md`.
 - **Actual MVP**: one plain-text line per notable event (`SLF4J`, via
   `DiagnosisOrchestrator`/the engines), not structured JSON — surfaced to the UI
   (J7) as `DiagnosisResult.trace`, plus the machine-readable `DiagnosisResult.engine`

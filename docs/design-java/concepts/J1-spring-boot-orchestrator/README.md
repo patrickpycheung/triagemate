@@ -69,6 +69,12 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 - **Maven**: single Spring Boot app module for the hackathon (multi-module later);
   Java 21, Spring Boot 3.4.x, mirrors `auspost-mcp` conventions.
 
+> **Amended by J11** — the response gains a 5th component `List<TraceStep> steps`, and
+> `DiagnosisEngine` becomes `diagnose(String, TraceSink)`. The documented four-property
+> shape above stays wire-compatible (additive). J11 also adds a polling endpoint
+> `GET /api/runs/{runId}/steps`; `POST /api/diagnose/{incidentNumber}` is unchanged.
+> See `../J11-live-thinking-trace/README.md`.
+
 ## Interface sketch
 ```java
 @RestController @RequestMapping("/api/diagnose")

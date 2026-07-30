@@ -1,6 +1,6 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: J1–J10 Built; **J11 (live-thinking-trace) in CDS Round 2** — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
+**Phase**: J1–J10 Built; **J11 (live-thinking-trace) in CDS Round 3** — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
 Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
 **Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
 plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
@@ -41,7 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R2 — animated per-step trace; LT6 logos DONE, LT1 SPI spiked; transport decided) | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R3 — doc-test found + fixed 5 design holes: runId protocol, correlation key, degrade-vs-live-display, LT2 ownership, buffer bounds. NOT converged: 2 spikes need physical access) | J1, J2, J4, J7, J8 |
 
 ## Spikes
 

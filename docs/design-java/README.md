@@ -66,7 +66,8 @@ com.company.triage
 ## Concepts
 J1 orchestrator · J2 adk-agent-loop · J3 connector-tools · J4 diagnosis-report ·
 J5 servicenow-gateway · J6 knowledge-tools · J7 demo-ui-and-dataset ·
-J8 guardrails-observability · J9 contact-suggestion · J10 incident-poller.
+J8 guardrails-observability · J9 contact-suggestion · J10 incident-poller ·
+J11 live-thinking-trace (🟠 in design).
 
 Each concept is a single `README.md` — no `design.md`, no `mechanics/`. That is
 **deliberate** for hackathon/RAPID rigor: one file per concept that stays current beats

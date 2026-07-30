@@ -1,8 +1,11 @@
 # Found issues
 
-**Backlog: 4 open** — 2 deferred design decisions (FND-43/44) + 2 raised by `/doc-test dds`
-on 2026-07-30 (FND-45/46). None are bugs in shipped behaviour; see each entry. FND-1…FND-42
-resolved; full detail in `docs/audit/found-issues-archive.md`.
+**Backlog: 9 open** — 2 deferred design decisions (FND-43/44), 2 from `/doc-test dds`
+2026-07-30 (FND-45/46), and **5 from `/doc-test cds` 2026-07-31 (FND-47…51), which unlike
+the earlier ones ARE real defects in shipped code** — most notably FND-48 (a bad incident
+number renders a raw JS TypeError, live demo risk) and FND-47 (`environment` always null
+against a real ServiceNow instance). FND-1…FND-42 resolved; detail in
+`docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
 Resolved entries move to [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md)
@@ -57,7 +60,67 @@ uses (`run-deterministic.sh`, all-mock), not of the engine in general. Fix is wo
 possibly pinning the connectors in that launcher — small, but it touches the D2 stage
 guarantee, so it is worth doing deliberately rather than in passing.
 
+## FND-47 — `RealServiceNowGateway` reads `u_environment` but never requests it · **MEDIUM**
+
+**Where**: `RealServiceNowGateway.java:65-66` (`sysparm_fields`) vs `:77`.
+**What**: the field list omits `u_environment`, but `getIncident` reads it. ServiceNow
+returns only requested fields, so `IncidentContext.environment` is **always null against a
+real instance** → J4's `environment` (rendered at `index.html:121`) is blank on every real
+run. Invisible to mock-only tests. Found independently by two architecture reviews
+(`/doc-test cds`, 2026-07-31).
+**Why deferred not fixed**: one-word fix, but it needs a real-instance verification we can't
+do offline, and it should land with FND-48's other real-connector gaps in one pass.
+
+## FND-48 — No API error contract; a bad incident number shows a JS TypeError on stage · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/api/` (no `@ControllerAdvice` anywhere),
+`index.html:52-53`.
+**What**: `DiagnosisTimeoutException`, `DiagnosisReportInvalidException` and
+`IllegalStateException("incident not found")` all fall through to bare Spring 500s, and the
+UI never checks `res.ok` — so a mistyped incident number renders
+`Error: TypeError: Cannot read properties of undefined` instead of a message. Found by two
+architecture reviews. **This is the one with live demo risk.**
+**Fix shape**: ~20-line `@ControllerAdvice` mapping the three to 404/504/502 with a JSON
+body, plus a `res.ok` check in the UI.
+
+## FND-49 — `triage.engine=adk` without `-Padk` silently runs deterministic, unannounced · **MEDIUM**
+
+**Where**: `application.yml` (`triage.engine`), `DiagnosisOrchestrator.java:79-89`.
+**What**: the ADK bean doesn't exist off-profile, so the property matches nothing and
+deterministic wins silently. Nothing logs the active engine at startup, and the UI only
+banners `DEGRADED_TO_DETERMINISTIC` — so the *misconfiguration* path is uncovered while the
+*runtime-failure* path is covered. This is FND-8's exact failure class (narrating "frontier
+model" over a scripted run) via a different route. Found by two architecture reviews.
+**Fix shape**: log the active engine class at startup, or fail fast when `triage.engine=adk`
+resolves to a non-ADK bean.
+
+## FND-50 — FND-37's normalization is incomplete: K1 bypasses it · **LOW**
+
+**Where**: `DiagnosisController.java:34` vs `IncidentPoller.java` (passes the raw gateway
+value straight to `orchestrator.run`).
+**What**: FND-37 added `trim().toUpperCase()` in the *controller* only, so K1 and K3 can
+still fail to coalesce on a case difference — defeating FND-31 for exactly the mixed-trigger
+case it was built for. **A gap in my own 2026-07-30 fix**, found by an architecture review.
+**Fix shape**: move the normalization to the top of `DiagnosisOrchestrator.run()` so every
+trigger normalizes identically.
+
+## FND-51 — `triage.servicenow.write-field` is interpolated into PATCH JSON unvalidated · **LOW**
+
+**Where**: `RealServiceNowGateway.java:44`, `:131`.
+**What**: the configured field name is concatenated directly into the PATCH body with no
+restriction to `work_notes`/`comments`, so a typo or hostile config could write to another
+incident field — violating J8's "only comment, never reassign/close/re-prioritise"
+invariant at the config layer rather than the model layer. Also `:241`'s hand-rolled JSON
+escaping covers only `\`, `"` and `\n` (a `\r` or tab in evidence text yields invalid JSON;
+Jackson is already on the classpath).
+**Fix shape**: bind the field to a two-value enum; use `ObjectMapper.writeValueAsString`.
+
 ## FND-43 — Poller cursor can skip a batch-limit's worth of same-timestamp incidents · **LOW**
+
+> **Re-confirmed 2026-07-31** by two independent architecture reviews in `/doc-test cds`,
+> which found it from the code without knowing it was logged. Still deferred, but the
+> independent re-discovery raises confidence that it is real rather than theoretical.
+
 
 **Where**: `IncidentPoller.pollOnce()`.
 **What**: if more than `triage.trigger.poll.batch-limit` (default 10) incidents share

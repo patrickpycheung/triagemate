@@ -48,6 +48,11 @@ final resolution. Requirements (from the analysis):
 - a small set of Sumo logs (**reuse S3′ `sumo-fixture.json`**),
 - at least one **known error + resolution** with a seeded distinctive log line.
 
+> **Amended by J11** — `J11-live-thinking-trace` replaces the flat trace card with an
+> animated per-step trace (platform logo, in-progress state, resolve-in-place). It also
+> requires J7 to gain the `--sn/--cf/--sl/--gl` brand CSS variables, which do **not** exist
+> in `static/index.html` today. See `../J11-live-thinking-trace/README.md`.
+
 ## Demo scenario (locked narrative)
 "A user reports an operation failed with a vague description. The copilot clarifies
 the symptom, finds a similar resolved incident, locates the runbook, runs one narrow
