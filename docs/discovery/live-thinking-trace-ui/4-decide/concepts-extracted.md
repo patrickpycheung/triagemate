@@ -63,6 +63,9 @@ enum State    { PENDING, ACTIVE, DONE, FAILED, DENIED }
   method; existing `diagnose(String)` becomes a `default` passing `TraceSink.NOOP`. That
   direction is deliberate — engines implement the 2-arg form, so no engine can silently
   drop steps. All 34/50 tests keep compiling with zero assertion changes.
+- **`TraceSink` must be thread-safe** (Codex, P-10c): on the ADK path it is invoked from
+  ADK/RxJava callback threads, *not* the single virtual thread the orchestrator submits to.
+  Neither exploration D nor the original callback verification caught this.
 - **Rejected**: `ApplicationEventPublisher` (needs correlation ids + subscriber registry);
   a `ThreadLocal` — the FND-33 precedent does *not* transfer (that exists only because
   ADK's tool methods are `static`; here the orchestrator runs engines on **virtual
@@ -102,13 +105,33 @@ a costume); fabricated reasoning copy for an engine that doesn't reason; ETA bar
 ### T4 — Live step streaming, ADK-only (v2; **needed if D1 is the primary demo path**)
 
 Not optional polish if the demo runs D1: v1 alone leaves a genuine **10–60 s blank** on the
-agent path. Wire ADK's three verified callback edges (P-5) —
-`beforeToolCallbackSync` → `ACTIVE`, `afterToolCallbackSync(…, Object result)` → `DONE`,
-`onToolErrorCallbackSync` → `FAILED` — and surface them via **polling a per-incident step
-buffer** (A's recommendation, on structural grounds: automatically correct for FND-31
-coalescing, mid-run joiners, page reloads, and the index-0 prepend). Reject SSE/WebSocket
-for now: 3 new failure modes, and Gemini's WebFlux advice doesn't apply to this servlet stack.
-Callbacks **must** return `Optional.empty()` — a non-empty return rewrites the tool result.
+agent path. Wire ADK's three verified callback edges (P-5) — **all three, since
+`onToolError` is required for the failure edge and `afterToolCallback` is NOT a `finally`
+hook**: `beforeToolCallbackSync` → `ACTIVE`, `afterToolCallbackSync(…, Object result)` →
+`DONE`, `onToolErrorCallbackSync` → `FAILED`. Join the edges with
+**`ToolContext.functionCallId()`** (not a counter — ADK may execute several calls from one
+`Event` in parallel). All three **must** return `Optional.empty()` — a non-empty return
+overrides/short-circuits the tool.
+
+**Transport is an OPEN fork (P-10d), deliberately not pre-resolved:**
+
+| | A — poll a per-incident buffer | Codex — SSE + `Last-Event-ID` replay |
+|---|---|---|
+| Shape | client re-reads full buffer each tick | `POST → 202 + runId`, `GET /{runId}/events` |
+| Race/reload/joiners | inherently correct | solved via monotonic `id` + retained short-TTL log |
+| New surface | 1 endpoint | 2 endpoints + emitter lifecycle |
+| Risks | polling latency, chattier | 30 s async-timeout trap, proxy buffering, concurrent `send()` |
+
+Lean: **polling if v2 is built under time pressure; SSE if it gets proper time** (better end
+state, and Codex's replay design answers A's main structural objection). Gemini's WebFlux
+advice does not apply — this is the servlet stack.
+
+**Two traps that must be handled either way:**
+- `spring.mvc.async.request-timeout` has **no Boot default** → embedded Tomcat's **30 s**,
+  which silently conflicts with the 90 s engine deadline. Set `request-timeout: 3m` (or a
+  per-emitter `new SseEmitter(180_000L)`).
+- **The `TraceSink` must be thread-safe** — ADK callbacks may run on ADK/RxJava threads,
+  not the orchestrator's virtual thread. Feeds back into T1.
 
 ### T5 — Visual vocabulary (already prototyped and verified)
 
@@ -163,9 +186,12 @@ its own right.
    tune live; pick during CDS.
 4. **Projector check** on the glow-pulse-vs-spinner reasoning (C flags this as reasoned,
    not measured) — one dry run.
-5. Whether a model can emit **multiple function calls in one turn** (would break a naive
-   monotonic step counter; `ParallelAgent` is ruled out as the cause — it's a separate
-   agent type and we use a flat `LlmAgent`).
+5. ✅ **CLOSED** — *"can a model emit multiple function calls in one turn?"* **Yes**, and ADK
+   may execute them in **parallel** (Codex, P-10a); my earlier reasoning from
+   `ParallelAgent` being a separate agent type was wrong. Moot for the design because
+   **`ToolContext.functionCallId()`** is the proper correlation key — but the monotonic
+   counter idea is retired.
+6. **v2 transport fork** — polling vs SSE+`Last-Event-ID` (T4). Only bites if v2 is built.
 
 ## Explicitly out of scope
 

@@ -75,13 +75,42 @@ Callbacks$OnToolErrorCallbackSync:
    observing must not mutate. Worth an explicit test, given this repo's history
    (FND-8/16/25 were all "the observability layer misrepresented reality").
 
-## Residual uncertainty
+## Update — third independent confirmation + the correlation key (Codex, 2026-07-30)
 
-- Whether ADK can issue **parallel** tool calls in our flat-`LlmAgent` config (affects
-  step-id strategy, point 3).
+The Codex engineering pass inspected the same artifact independently (by bytecode, plus the
+public 1.7.0 javadocs) and confirmed the callback triple. **Three independent verifications
+now agree.** It also resolved point 3 above and corrected one of my conclusions:
+
+- ✅ **`ToolContext.functionCallId()` returns `Optional<String>`** — and `FunctionCall` has
+  its own `id()`. **This is the correct correlation key for joining the `before` → `after`
+  edges**, and it removes the need for a monotonic counter entirely. Use it.
+- ⚠️ **My "a monotonic counter is safe" conclusion was wrong.** I reasoned that because
+  `ParallelAgent` is a separate agent type, a flat `LlmAgent` must be sequential. Codex
+  found that **one `Event` may carry several `FunctionCall` parts and ADK may execute them
+  in parallel**, and completion responses may likewise be merged — that is a property of
+  the tool-execution path, not of agent composition. Moot in practice now, since
+  `functionCallId()` is a proper key, but the counter approach is retired.
+- ⚠️ **`onToolErrorCallback` is required for the failure edge; `afterToolCallback` must
+  NOT be treated as a `finally` hook.** Confirms and sharpens the design: all three edges
+  must be registered, not just two.
+- ✅ Return-value semantics confirmed a third time, for all three callbacks: **non-empty
+  `Optional` overrides** (short-circuits execution / replaces the result / converts the
+  failure); empty continues. The trace sink must always return `Optional.empty()`.
+- ⚠️ **Thread-safety requirement neither I nor exploration D flagged**: *"ADK callbacks may
+  run on ADK/RxJava execution threads rather than the orchestration virtual thread. Make
+  the progress sink thread-safe."* D's `TraceSink` design must account for this — it is
+  not confined to the single virtual thread the orchestrator submits.
+- Also available for observability, but **not** as precise execution timing:
+  `Event.functionCalls()` / `Event.functionResponses()` off the `Flowable<Event>`. There is
+  no dedicated tool-start event type; a function-call event means *"the model requested
+  these calls"*, not *"this tool body has begun"*. Callbacks are the accurate edges.
+
+## Residual uncertainty (remaining)
+
 - Whether `afterToolCallback` fires when `beforeToolCallback` **denied** the call
   (`BoundsCallback` returns a non-empty `Optional` to short-circuit). If it does, a denied
   step could be double-counted; if it doesn't, denied steps need their terminal state set
   from the `before` edge itself. **Needs a test against the fake OpenAI server** —
   `AdkLiveRoundTripTest` already has a zero-budget "deny every tool" case that is the
-  perfect place to assert this.
+  perfect place to assert this. Codex's note that the before-callback "short-circuits tool
+  execution" *suggests* `after` does not fire, but that is an inference, not verified.

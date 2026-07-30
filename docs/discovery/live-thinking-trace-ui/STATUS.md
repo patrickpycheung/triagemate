@@ -75,6 +75,16 @@ What survives both: **capture real per-step durations as data, then render hones
   `connectors: mock (fixtures, no network)` chip is a candidate FND in its own right.
 - **Gemini's transport advice discarded**: it recommended Spring **WebFlux** SSE; verified
   there is no WebFlux in `pom.xml` (servlet stack, `spring-boot-starter-web`).
+- **Codex added what the Claude passes missed** (P-10): the before→after correlation key is
+  **`ToolContext.functionCallId()`** — which also *retired my own* "a monotonic counter is
+  safe" conclusion, since ADK may execute several calls from one `Event` in parallel;
+  `spring.mvc.async.request-timeout` has **no Boot default** and falls to Tomcat's **30 s**,
+  silently conflicting with the 90 s engine deadline; and the **`TraceSink` must be
+  thread-safe** because ADK callbacks run on ADK/RxJava threads, not the orchestrator's
+  virtual thread.
+- **One fork left genuinely open rather than papered over**: v2 transport — exploration A
+  wants polling, Codex wants SSE + `Last-Event-ID` replay (which does answer A's main
+  structural objection). It is a v2-only question; v1 needs no transport.
 
 ## Artifacts
 
@@ -85,9 +95,9 @@ What survives both: **capture real per-step durations as data, then render hones
 - `2-diverge/verification-adk-callbacks.md` — the closed spike
 - `2-diverge/research/frontier-trace-ui-gemini.md` — product survey, UX literature
   (Nielsen 100 ms; Buell & Norton "labor illusion", 2011), trademark terms
-- `2-diverge/research/spring-sse-adk-codex.md` — ⏳ Codex engineering pass (pending at
-  time of writing; confirmatory only — the ADK API was verified directly and the case
-  against SSE-for-v1 rests on the 2–19 ms arithmetic)
+- `2-diverge/research/spring-sse-adk-codex.md` — ✅ Codex engineering pass (681 lines).
+  Third independent confirmation of the ADK callback triple, **plus** the correlation key
+  and two traps the Claude explorations missed — see P-10.
 - `3-synthesize/patterns.md` — P-1…P-9 + open tensions
 - `4-decide/concepts-extracted.md` — T1…T7, spikes, out-of-scope
 

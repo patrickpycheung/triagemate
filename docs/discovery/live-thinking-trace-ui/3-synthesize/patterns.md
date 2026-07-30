@@ -174,6 +174,48 @@ a *fixture*, and nothing on screen says so. The fix is a derived provenance chip
 config. That is a *better* stage line than the unqualified one, and it is arguably a
 FND-class gap in the current UI regardless of whether this feature ships.
 
+## P-10 — Codex's additions: the v2 transport question is genuinely OPEN, plus two traps
+
+The Codex engineering pass (landed after synthesis began) confirmed the ADK callback triple
+independently — **third** agreement — and contributed four things:
+
+**a) The correlation key exists: `ToolContext.functionCallId()`** (`Optional<String>`), plus
+`FunctionCall.id()`. This is the right way to join `before` → `after` edges, and it
+**retires the monotonic-counter idea** — including my own conclusion that a counter was
+safe. I had reasoned from `ParallelAgent` being a separate agent type; Codex found that
+**one `Event` may carry several `FunctionCall` parts and ADK may execute them in parallel**,
+which is a property of the tool-execution path, not of agent composition. My inference was
+wrong; the finding is moot only because a proper key exists.
+
+**b) Trap: `spring.mvc.async.request-timeout` has NO Spring Boot default** — it falls
+through to the servlet container's, which for embedded Tomcat is **30 seconds**. That
+**silently conflicts with our 90 s engine deadline**: an SSE stream would be torn down at
+30 s while the diagnosis is still legitimately running. This is a concrete instance of
+exploration A's abstract objection #1, and it must be configured explicitly
+(`request-timeout: 3m`, or a per-emitter `new SseEmitter(180_000L)`) if v2 uses SSE.
+
+**c) Trap: the trace sink must be thread-safe.** *"ADK callbacks may run on ADK/RxJava
+execution threads rather than the orchestration virtual thread."* Neither exploration D nor
+my own verification flagged this — D's `TraceSink` is handed into `diagnose()` and would be
+called from whichever thread ADK runs the callback on, **not** only the single virtual
+thread the orchestrator submits. Affects T1's design directly.
+
+**d) A genuine disagreement on v2 transport, which I am NOT going to paper over.**
+Exploration A recommends **polling a per-incident buffer**; Codex recommends **SSE with
+`POST → 202 + runId`, then `GET /{runId}/events`, monotonic SSE `id`s and `Last-Event-ID`
+replay over a short-TTL bounded event log**. Notably, Codex's `Last-Event-ID` + retained-log
+design *does* answer A's strongest structural objection (the attachment race, mid-run
+joiners, page reloads) — A assumed streaming would need bespoke work for those, and Codex
+supplies the standard mechanism. Against it: two new endpoints, emitter lifecycle
+management, the 30 s trap above, proxy-buffering requirements (`text/event-stream`, nginx
+`proxy_buffering off`), and thread-safe concurrent `send()`.
+
+**This fork does not need resolving now** — it is entirely a **v2** question, and v1
+(replay) needs no transport at all. Recorded as an explicit open decision for CDS rather
+than a false consensus. My lean, on hackathon-risk grounds: polling for v2 if v2 is built
+under time pressure; SSE if v2 gets proper time, since it is the better end state and
+Codex's replay design is sound.
+
 ## P-9 — Pre-rendering the plan is the honesty trap in a new costume
 
 C's closing finding, and it is sharper than it first looks. The most *persuasive* version
