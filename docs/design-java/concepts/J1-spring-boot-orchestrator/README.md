@@ -16,8 +16,27 @@ agents shouting at each other.
 - **`DiagnosisOrchestrator`** — owns the run: builds `IncidentContext` (J5), invokes
   the active `DiagnosisEngine` (J2 — either the ADK agent or the offline deterministic
   engine, selected by `triage.engine`), collects the report (J4), triggers the
-  work-note write (J5), emits the run trace (J8). Enforces a hard wall-clock timeout +
-  max-tool-calls.
+  work-note write (J5), emits the run trace (J8).
+  **Wall-clock timeout (FND-15, fixed 2026-07-30)**: every engine call — on **either**
+  engine, since deterministic also makes real HTTP calls once `triage.connectors.*=real`
+  — runs on a virtual thread bounded by `triage.orchestrator.timeout-ms` (default
+  45000). Previously enforced nowhere: a hung gateway hung the request forever,
+  including on the K1 poller's single scheduler thread, where nobody would notice. A
+  timeout on the ADK engine feeds the ordinary FND-7 fallback below; a timeout when
+  deterministic is already the active engine propagates (nothing left to fall back to).
+  Tool-call budget is a **J8/J2 concern on the ADK engine specifically**
+  (`BoundsCallback`) — the deterministic engine runs a fixed script, not a
+  model-selected loop, so a call-count budget doesn't apply to it the same way; this
+  card previously implied a single uniform bound across both engines, which was wrong.
+  **Concurrent-diagnosis coalescing (FND-31, fixed 2026-07-30)**: the manual K3 trigger
+  (`DiagnosisController`) and the automatic K1 trigger (`IncidentPoller`) both call
+  `run(incidentNumber)` — the one place their calls meet. Concurrent calls for the SAME
+  incident number now coalesce: the second caller waits for the first's result instead
+  of starting a duplicate diagnosis, so only one ServiceNow write happens. This is
+  exactly the demo shape (polling on, presenter also clicks manually) and previously
+  produced two full diagnoses and up to four advisory comments. Deliberately separate
+  from `IncidentPoller`'s own in-flight/completed bookkeeping, which solves a different
+  problem (don't re-poll something already handled, across scheduler ticks over time).
   **Auto-fallback (FND-7, fixed 2026-07-30)**: when the ADK engine is active and fails
   to converge (its own `LlmCallsLimitExceededException` backstop, or any other
   model/proxy/network failure), the orchestrator degrades to the deterministic engine
@@ -47,7 +66,12 @@ class DiagnosisController {
 - Boots with `mvn spring-boot:run`; `POST /api/diagnose/INC0012345` returns a
   well-formed `DiagnosisReport` end-to-end in `mock` profile with **no external
   network**.
-- Wall-clock timeout and max-tool-calls are honored (inject a slow mock).
+- Wall-clock timeout: `DiagnosisOrchestratorTest#engineTimeoutPropagatesWhenNoFallback`,
+  `#engineTimeoutOnPrimaryDegradesToFallback` (both inject a slow engine lambda).
+- Concurrency coalescing:
+  `#concurrentRunsForSameIncidentCoalesceIntoOneEngineCallAndOneWriteback` (latch-forced
+  overlap — one engine call, one writeback), `#sequentialRunsOfTheSameIncidentAreNotCoalesced`
+  (non-overlapping calls are NOT coalesced — a deliberate manual re-trigger still runs).
 
 ## Open / risks
 - Sync vs async response (long agent runs). MVP: synchronous with a timeout;

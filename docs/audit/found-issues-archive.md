@@ -14,6 +14,76 @@ Drained 2026-07-30 by `/found-issues-resolve`.
 
 ---
 
+## FND-14 — J5 claims `addWorkNote` is idempotent; only the mock actually dedupes · **MEDIUM**
+
+**Where**: `J5/README.md:34,50` vs
+`src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:104-115` and
+`MockServiceNowGateway:105`.
+
+**What**: `MockServiceNowGateway` skips an identical note. `RealServiceNowGateway.addWorkNote`
+PATCHes unconditionally — no "does an identical AI note already exist?" check.
+
+**Why it matters**: J5 cites this idempotency as a guardrail, and the J10 poller's FND-1
+write-up lists it as the *fourth* layer against duplicate work. Against a real instance that
+layer is absent — a retried or re-triggered run posts duplicate advisory comments onto a
+real customer-visible ticket. This is the entry I'd fix first: it is the only one where a
+claimed safety layer is missing on the **real** connector rather than in prose.
+
+**Found by**: Phase 2 (agent A).
+
+- **Resolution**: fixed:this-commit (RealServiceNowGateway checks sys_journal_field for an exact-match existing entry before PATCHing; RealServiceNowGatewayTest via MockRestServiceServer)
+- **Escape**: test-coverage — the real connector's HTTP behavior had no regression test at all; only the mock's dedupe was ever exercised, so the two connectors silently diverged on a claimed safety property.
+
+---
+
+## FND-15 — J1 claims a wall-clock timeout and max-tool-calls it does not enforce · **MEDIUM**
+
+**Where**: `J1/README.md:19-20,50` ("Enforces a hard wall-clock timeout + max-tool-calls",
+"honored (inject a slow mock)") vs
+`src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java`.
+
+**What**: the orchestrator enforces neither. It only measures elapsed time for a log line.
+Max-tool-calls exists solely in `-Padk` `BoundsCallback`, so **the default deterministic
+path has no tool bound at all**, and no timeout exists anywhere in `src/main`. The stated
+verification ("inject a slow mock") was never performed.
+
+**Why it matters**: a hung gateway hangs the request indefinitely — including on the K1
+poller's thread, where nobody is watching. The deterministic path being unbounded is
+tolerable (no LLM, fixed work) but is not what J1 says.
+
+**Found by**: Phase 2 (both agents), Claude conflict.
+
+- **Resolution**: fixed:this-commit (every engine call now runs on a virtual thread bounded by triage.orchestrator.timeout-ms=45000; a timeout on the primary feeds the normal FND-7 fallback)
+- **Escape**: contract-drift — J1 stated a guarantee ('honored, inject a slow mock') that was never actually tested, so the gap between claim and code was invisible until doc-vs-code validation looked for the promised test and found none.
+
+---
+
+## FND-31 — The manual endpoint bypasses the poller's in-flight/completed state · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/api/DiagnosisController.java` →
+`DiagnosisOrchestrator.run()` vs
+`src/main/java/com/company/triage/orchestration/IncidentPoller.java` (`inFlight`,
+`completed`).
+
+**What**: the poller's duplicate-suppression sets live **inside the poller**. A manual
+`POST /api/diagnose/{number}` calls the orchestrator directly, so it neither consults nor
+updates them. With polling enabled, a manual trigger can diagnose an incident the poller is
+mid-run on, or one it has already completed — two concurrent diagnoses of the same ticket,
+and four advisory comments (or two, plus a duplicate the real gateway won't dedupe — see
+FND-14).
+
+**Why it matters**: this is precisely the demo shape — polling on, presenter triggers
+manually to show the flow. It's also the one finding Gemini produced, and neither Codex nor
+Claude found it. Cheapest fix is probably to move the guard out of the poller into the
+orchestrator, where both entry points meet.
+
+**Found by**: Gemini conflict (HIGH) — sole source.
+
+- **Resolution**: fixed:this-commit (DiagnosisOrchestrator.run() coalesces concurrent calls for the same incident number via a ConcurrentHashMap<String,CompletableFuture> — the second caller awaits the first's result instead of starting a duplicate; two latch-forced concurrency tests)
+- **Escape**: design-review — K1 (poller) and K3 (manual) were designed and built in separate sessions without a round asking 'what happens when both fire on the same incident at once?'. The guard existed in exactly one of the two entry points.
+
+---
+
 ## FND-8 — A degraded run is indistinguishable from a live one at a glance · **HIGH**
 
 **Where**: `src/main/resources/static/index.html` (trace rendering) and the

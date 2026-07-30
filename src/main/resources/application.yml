@@ -39,6 +39,14 @@ triage:
     # diagnosis). No human in the loop. It only comments; never reassigns/closes/re-prioritises.
     enabled: true
 
+  orchestrator:
+    # FND-15: wall-clock bound on a single engine call (either engine — the deterministic
+    # one makes real HTTP calls too once triage.connectors.*=real). A hung gateway or proxy
+    # previously hung the request forever, including on the K1 poller's single scheduler
+    # thread. A timeout on the ADK engine degrades via the normal FND-7 fallback; on the
+    # deterministic engine it propagates (nothing left to fall back to).
+    timeout-ms: 45000
+
   servicenow:
     # Which incident journal the two comments append to:
     #   work_notes — internal, visible to fulfillers in the activity stream (default)

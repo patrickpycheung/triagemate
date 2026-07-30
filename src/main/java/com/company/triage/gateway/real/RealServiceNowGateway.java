@@ -41,12 +41,17 @@ public class RealServiceNowGateway implements ServiceNowGateway {
     private final RestClient http;
     private final String writeField;   // "work_notes" (internal) or "comments" (customer-facing)
 
-    public RealServiceNowGateway(IntegrationProperties props,
+    public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties props,
                                  @Value("${triage.servicenow.write-field:work_notes}") String writeField) {
         var sn = props.servicenow();
         String basic = Base64.getEncoder()
                 .encodeToString((sn.user() + ":" + sn.secret()).getBytes());
-        this.http = RestClient.builder()
+        // Injected RestClient.Builder (Spring Boot autoconfigures a fresh prototype per
+        // injection point) rather than RestClient.builder() directly, so tests can bind a
+        // MockRestServiceServer to it (see RealServiceNowGatewayTest) — FND-14 needed a
+        // real regression test against actual HTTP request/response shapes, not just a
+        // unit test of an extracted predicate.
+        this.http = builder
                 .baseUrl(sn.baseUrl())
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
@@ -101,18 +106,46 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 text(row, "support_group"), text(row, "business_criticality"), "cmdb_ci_service"));
     }
 
-    /** Appends the note to the incident's work_notes (or comments) journal. Advisory only. */
+    /**
+     * Appends the note to the incident's work_notes (or comments) journal. Advisory only.
+     *
+     * <p><b>Idempotent (FND-14).</b> {@code MockServiceNowGateway} always skipped an
+     * identical AI note; this connector previously PATCHed unconditionally — a real
+     * safety layer that J5/J10 both document and only actually existed against the mock.
+     * A retried request (a flaky proxy, a manual re-trigger, K1 re-selecting an incident
+     * after a cursor edge case) posted duplicate advisory comments onto a real,
+     * customer-visible ticket. Checked against actual history for that field via
+     * {@code sys_journal_field} — exact match only, same semantics as the mock.
+     */
     @Override
     public void addWorkNote(String number, String workNote) {
         JsonNode row = firstRow("/api/now/table/incident", "number=" + number, "sys_id");
         if (row == null) { log.warn("cannot post note; incident {} not found", number); return; }
         String sysId = text(row, "sys_id");
+
+        if (alreadyPosted(sysId, workNote)) {
+            log.info("[ServiceNow] identical AI work note already present on {} — skipping", number);
+            return;
+        }
+
         http.patch()
                 .uri("/api/now/table/incident/{sysId}", sysId)
                 .header("Content-Type", "application/json")
                 .body("{\"" + writeField + "\":" + jsonString(workNote) + "}")
                 .retrieve().toBodilessEntity();
         log.info("posted advisory {} to {}", writeField, number);
+    }
+
+    /** Recent journal entries for this field, exact-string-compared against {@code workNote}. */
+    private boolean alreadyPosted(String sysId, String workNote) {
+        JsonNode entries = rows("/api/now/table/sys_journal_field",
+                "element_id=" + sysId + "^element=" + writeField + "^ORDERBYDESCsys_created_on",
+                "value");
+        if (entries == null) return false;
+        for (JsonNode entry : entries) {
+            if (workNote.equals(text(entry, "value"))) return true;
+        }
+        return false;
     }
 
     /**

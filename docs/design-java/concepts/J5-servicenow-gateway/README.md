@@ -31,7 +31,14 @@ via `addWorkNote(number, note)`, **sources first**, then the diagnosis:
 
 Sources first makes the diagnosis auditable — every claim is one click from its
 evidence. Both are **advisory**: they **never** touch assignment, state, or priority.
-Idempotent (skip if an identical AI note already exists). Toggle with
+Idempotent (skip if an identical AI note already exists) — **on both connectors**
+(FND-14, fixed 2026-07-30). This previously held only for `MockServiceNowGateway`;
+`RealServiceNowGateway.addWorkNote` PATCHed unconditionally, so a retried request
+(a flaky proxy, a manual re-trigger, a poller edge case) could post a duplicate
+advisory comment onto a real, customer-visible ticket. It now checks
+`sys_journal_field` for an exact-match existing entry first — same semantics as the
+mock, verified against actual HTTP request/response shapes in
+`RealServiceNowGatewayTest` (not just an extracted predicate). Toggle with
 `triage.writeback.enabled` (default true; safe in `mock` — the mock just logs).
 The earlier human-confirm gate is **removed** (see `PIVOT.md` / J8).
 

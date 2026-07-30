@@ -1,6 +1,7 @@
 # Found issues
 
-**Backlog: 24 open (FND-9…FND-32)** — raised by `/doc-test cds` on 2026-07-30.
+**Backlog: 21 open (FND-9…FND-32, minus FND-14/15/31 — resolved)** — raised by
+`/doc-test cds` on 2026-07-30.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
 Resolved entries move to [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md)
@@ -36,8 +37,15 @@ default, and four staleness bugs in the workspace README. See commit `b8b2dd0`.
 **One systemic cause explains most of what remains**: the J-cards were written at design
 time (J1–J8 "Drafted") and the implementation moved past them without the cards following.
 That is a *process* observation, not 24 independent mistakes — worth one fix to how cards
-are updated, not 24 patches. Three entries below (FND-14, FND-15, FND-31) are more than
-drift and are the ones I'd action first.
+are updated, not 24 patches.
+
+Three entries were flagged as more than drift and action-first; **two are now resolved**
+(see the archive): **FND-14** (real-connector idempotency) and **FND-15** (no timeout, no
+tool bound) — plus **FND-31**, found alongside them during the fix (the manual endpoint
+bypassing the poller's dedupe state), all three fixed together since they shared the same
+rendezvous point, `DiagnosisOrchestrator`. **FND-16** remains open below — it's mine, from
+the same FND-8 session, and directly related: the degraded-run UI banner matches a trace
+*string* instead of the `engine` field that exists for exactly this.
 
 ---
 
@@ -121,44 +129,6 @@ The allowlist fixed in `b8b2dd0` is **global** (all eight tools, all the time); 
 the doc or implement staged agents — but the doc should not claim the stronger one.
 
 **Found by**: Phase 2 (agent B), Claude conflict (HIGH).
-
----
-
-## FND-14 — J5 claims `addWorkNote` is idempotent; only the mock actually dedupes · **MEDIUM**
-
-**Where**: `J5/README.md:34,50` vs
-`src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:104-115` and
-`MockServiceNowGateway:105`.
-
-**What**: `MockServiceNowGateway` skips an identical note. `RealServiceNowGateway.addWorkNote`
-PATCHes unconditionally — no "does an identical AI note already exist?" check.
-
-**Why it matters**: J5 cites this idempotency as a guardrail, and the J10 poller's FND-1
-write-up lists it as the *fourth* layer against duplicate work. Against a real instance that
-layer is absent — a retried or re-triggered run posts duplicate advisory comments onto a
-real customer-visible ticket. This is the entry I'd fix first: it is the only one where a
-claimed safety layer is missing on the **real** connector rather than in prose.
-
-**Found by**: Phase 2 (agent A).
-
----
-
-## FND-15 — J1 claims a wall-clock timeout and max-tool-calls it does not enforce · **MEDIUM**
-
-**Where**: `J1/README.md:19-20,50` ("Enforces a hard wall-clock timeout + max-tool-calls",
-"honored (inject a slow mock)") vs
-`src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java`.
-
-**What**: the orchestrator enforces neither. It only measures elapsed time for a log line.
-Max-tool-calls exists solely in `-Padk` `BoundsCallback`, so **the default deterministic
-path has no tool bound at all**, and no timeout exists anywhere in `src/main`. The stated
-verification ("inject a slow mock") was never performed.
-
-**Why it matters**: a hung gateway hangs the request indefinitely — including on the K1
-poller's thread, where nobody is watching. The deterministic path being unbounded is
-tolerable (no LLM, fixed work) but is not what J1 says.
-
-**Found by**: Phase 2 (both agents), Claude conflict.
 
 ---
 
@@ -382,29 +352,6 @@ card — it exists only as an inline default. Every other `triage.*` key is decl
 construction — better to state what is covered than how many.
 
 **Found by**: Phase 2 (agent B).
-
----
-
-## FND-31 — The manual endpoint bypasses the poller's in-flight/completed state · **MEDIUM**
-
-**Where**: `src/main/java/com/company/triage/api/DiagnosisController.java` →
-`DiagnosisOrchestrator.run()` vs
-`src/main/java/com/company/triage/orchestration/IncidentPoller.java` (`inFlight`,
-`completed`).
-
-**What**: the poller's duplicate-suppression sets live **inside the poller**. A manual
-`POST /api/diagnose/{number}` calls the orchestrator directly, so it neither consults nor
-updates them. With polling enabled, a manual trigger can diagnose an incident the poller is
-mid-run on, or one it has already completed — two concurrent diagnoses of the same ticket,
-and four advisory comments (or two, plus a duplicate the real gateway won't dedupe — see
-FND-14).
-
-**Why it matters**: this is precisely the demo shape — polling on, presenter triggers
-manually to show the flow. It's also the one finding Gemini produced, and neither Codex nor
-Claude found it. Cheapest fix is probably to move the guard out of the poller into the
-orchestrator, where both entry points meet.
-
-**Found by**: Gemini conflict (HIGH) — sole source.
 
 ---
 
