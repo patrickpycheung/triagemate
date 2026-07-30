@@ -99,10 +99,28 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         this.maxToolCalls = maxToolCalls;
     }
 
+    /**
+     * The exact tool names the app permits, as ADK sees them (J8 allowlist).
+     *
+     * <p>These are the {@code @Schema(name = ...)} values from {@link TriageMateTools} —
+     * snake_case — <b>not</b> the Java method names passed to {@code FunctionTool.create}.
+     * ADK reports {@code tool.name()} from the schema, so an allowlist built from method
+     * names would reject every call.
+     */
+    private static final java.util.Set<String> ALLOWED_TOOLS = java.util.Set.of(
+            "get_incident",
+            "find_similar_incidents",
+            "find_ownership",
+            "search_confluence",
+            "search_logs",
+            "search_code",
+            "find_page_contributors",
+            "find_recent_committers");
+
     @Override
     public DiagnosisResult diagnose(String incidentNumber) {
         List<String> trace = new ArrayList<>();
-        BoundsCallback bounds = new BoundsCallback(maxToolCalls);
+        BoundsCallback bounds = new BoundsCallback(maxToolCalls, ALLOWED_TOOLS);
 
         LlmAgent agent = LlmAgent.builder()
                 .name(AGENT_NAME)
@@ -118,14 +136,15 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                         FunctionTool.create(TriageMateTools.class, "searchCode"),
                         FunctionTool.create(TriageMateTools.class, "findPageContributors"),
                         FunctionTool.create(TriageMateTools.class, "findRecentCommitters"))
-                // J8 leash: the app enforces max tool calls. Returning a non-empty
-                // Optional short-circuits the tool (denies it); empty lets it run.
+                // J8 leash: the app enforces BOTH which tools may run (allowlist) and how
+                // many times (budget). Returning a non-empty Optional short-circuits the
+                // tool (denies it); empty lets it run.
                 .beforeToolCallbackSync((invocation, tool, args, toolCtx) -> {
                     if (!bounds.allow(tool.name())) {
-                        trace.add("adk: DENIED %s — max tool calls (%d) exceeded"
-                                .formatted(tool.name(), maxToolCalls));
-                        return Optional.of(Map.of("error",
-                                "tool-call budget exhausted; stop calling tools and produce the report"));
+                        String why = bounds.denialReason(tool.name());
+                        trace.add("adk: DENIED %s — %s".formatted(tool.name(), why));
+                        return Optional.of(Map.of("error", why
+                                + "; stop calling that tool and produce the report from what you have"));
                     }
                     trace.add("adk tool call: " + tool.name());
                     return Optional.empty();

@@ -19,7 +19,8 @@ enterprise OpenAI-compatible endpoint via LangChain4j) picks search terms and
 interprets results.
 
 ```
-ServiceNow incident ──(manual: POST /diagnose/{incident})──▶ DiagnosisController
+ServiceNow incident ──(K1 poll, J10 — default OFF)──────────▶ IncidentPoller
+                    └─(K3 manual: POST /api/diagnose/{number})──▶ DiagnosisController
                                                                     │
                                                         DiagnosisOrchestrator
                                                      (ADK SequentialAgent, bounded)
@@ -30,7 +31,7 @@ ServiceNow incident ──(manual: POST /diagnose/{incident})──▶ Diagnosis
         └───────────────┴───────┬───────┴───────────────┘
                                 ▼
                     DiagnosisReport (strict JSON)
-                        ├─▶ ServiceNow work note (advisory, confirmed)
+                        ├─▶ ServiceNow work notes ×2 (advisory, AUTOMATIC — no human gate)
                         └─▶ Simple demo UI
 ```
 
@@ -44,13 +45,26 @@ com.company.triage
 ├── gateway        ServiceNow/Confluence/Sumo/GitLab Gateway (iface) + Real*/Mock*
 ├── model          IncidentContext, CandidateSystem, Evidence, SuggestedAssignment,
 │                  DiagnosisReport, ...
-└── config         AiConfig (LLM endpoint), Allowlists, profiles (mock|real)
+└── config         IntegrationProperties; per-connector selection via
+                   @ConditionalOnProperty(triage.connectors.*) — NOT Spring profiles
 ```
 
 ## Concepts
 J1 orchestrator · J2 adk-agent-loop · J3 connector-tools · J4 diagnosis-report ·
 J5 servicenow-gateway · J6 knowledge-tools · J7 demo-ui-and-dataset ·
-J8 guardrails-observability.
+J8 guardrails-observability · J9 contact-suggestion · J10 incident-poller.
+
+Each concept is a single `README.md` — no `design.md`, no `mechanics/`. That is
+**deliberate** for hackathon/RAPID rigor: one file per concept that stays current beats
+three that drift. Recorded here so the layout reads as a choice, not an omission.
+
+## Two engines (read this before the diagram above)
+
+`triage.engine` selects the active `DiagnosisEngine`: **`deterministic` is the default**
+(offline, no LLM — `matchIfMissing = true`) and `adk` is opt-in and needs the `-Padk`
+build. The orchestrator **auto-degrades** ADK failures to the deterministic engine and
+discloses it via `DiagnosisResult.engine`. So the ADK path above is the *opt-in* path, and
+a report is not necessarily LLM-produced — see J1, J2 and `DEMO-RUNBOOK.md`.
 
 ## Non-goals (hackathon)
 No Rovo/Forge, no MCP, no deployment, no vector DB / enterprise indexing, no

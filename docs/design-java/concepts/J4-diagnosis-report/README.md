@@ -21,7 +21,7 @@ UI (J7) mere renderings of it. This is the demo's spine.
     { "name": "Identity Gateway", "confidence": 0.68, "evidenceRefs": ["e2"] }
   ],
   "suggestedAssignment": {
-    "group": "Identity Platform Support", "confidence": "medium",
+    "group": "Identity Platform Support", "confidence": "MEDIUM",
     "evidenceRefs": ["e2","e4"]
   },
   "evidence": [
@@ -32,15 +32,15 @@ UI (J7) mere renderings of it. This is the demo's spine.
     { "id": "e5", "source": "gitlab", "summary": "order-api Foo.java:118 emits ORD-4031", "link": "..." }
   ],
   "suggestedContacts": [
-    { "name": "Priya Nair", "contact": "priya.nair@example.com",
+    { "name": "Priya Nair", "handle": "priya.nair@example.com",
       "source": "confluence+gitlab",
-      "why": "edited the runbook and committed reconcile()",
-      "link": "...", "recency": "recent" }
+      "reason": "edited the runbook and committed reconcile()",
+      "link": "...", "signal": "2 commits since v2.3.1" }
   ],
   "contradictingEvidence": ["Order API also emits ORD-4031 on a different path"],
   "missingInformation": ["Affected user ID", "Whether all users affected"],
   "recommendedNextAction": "Confirm the user has the ORDER_SUBMITTER entitlement",
-  "confidenceOverall": "medium",
+  "confidenceOverall": "MEDIUM",
   "advisory": true
 }
 ```
