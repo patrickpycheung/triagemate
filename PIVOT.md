@@ -61,8 +61,9 @@ Full rationale: `docs/discovery/servicenow-triage-java/4-decide/decision.md`.
     LLM backend via a local proxy; **C6** ToS gate
   - `docs/discovery/orchestrator-vs-copilot-cli/` → demo shape **D1+D2+D3**
 - **Live demo runbook**: `docs/design-java/DEMO-RUNBOOK.md`
-- **Open design issues**: `/FOUND-ISSUES.md` (currently empty — drained 2026-07-30;
-  resolved entries in `docs/audit/found-issues-archive.md`)
+- **Open design issues**: `/FOUND-ISSUES.md` (24 open: FND-9…FND-32, from `/doc-test cds`
+  2026-07-30 — mostly J-card-vs-code drift; resolved entries in
+  `docs/audit/found-issues-archive.md`)
 - **Active CDS** (Java design): `docs/design-java/` — concepts **J1–J9** (J9
   contact-suggestion was added post-pivot, after this file's original J1–J8 list)
 - **Suspended DDS**: `docs/discovery/servicenow-triage/` (⏸️ banner)
