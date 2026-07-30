@@ -1,7 +1,18 @@
 # J9 — Contact Suggestion ("Who to talk to")
 
 **State**: 🟢 Built · **Complexity**: Simple · **Depends on**: J4, J6 ·
-**Carries**: reuses the evidence J6 already gathered — no new source system
+**Carries**: reuses the evidence J6 already gathered — no new source system ·
+**DDS provenance**: **none** — see the note below
+
+> **Provenance note** (added 2026-07-30 by `/doc-test dds`, gap G6). Unlike every other
+> J-concept, **J9 was never extracted by any DDS** — the id `J9` appears in no
+> `docs/discovery/**` file. J1–J8 trace to `servicenow-triage-java/4-decide/concepts-extracted.md`
+> and J10 to `servicenow-local-trigger/4-decide/concepts-extracted.md`, but J9 originated
+> directly in implementation (FND-21/FND-2, reusing `ConfluenceGateway.contributors` and
+> `GitLabGateway.recentCommitters`) and was back-filled as a card. `docs/design-java/STATUS.md`
+> names three source DDS workspaces, which slightly over-claims for this one concept.
+> Not a defect in the design — it is a small, deliberate, RAPID-rigor shortcut — but recorded
+> so the graduation register reconciles instead of showing a phantom source.
 
 ## Essence
 After the triage has gathered its evidence, it also surfaces **who to talk to** about

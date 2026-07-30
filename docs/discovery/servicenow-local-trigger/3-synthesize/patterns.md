@@ -19,6 +19,20 @@ app for ~1% of C's effort. A is impossible without IT opening a sanctioned ingre
 - **Port-forwarding / public IP** — not available on a corp-managed laptop.
 - **ngrok** — same category as Cloudflare/Tailscale; assume blocked (C5/C7).
 
+> ⚠️ **`C*` namespace warning** (added 2026-07-30 by `/doc-test dds`, gap G5). This file uses
+> `C*` ids in **two different senses without qualifying them**, which is genuinely
+> ambiguous to a reader:
+> - **Above** (`C5`/`C7`, and `C1`/`C2` in `1-elicit/constraints.md`) — this workspace's own
+>   **CONSTRAINTS** (C1 cloud-hosted, C2 local laptop, C5/C7 blocked tunnels, C6 SN outbound
+>   REST).
+> - **Below** (`C6`, `C1`, `C2` in the next section) — **CONCEPTS/SPIKES of the
+>   `copilot-cli-runtime` DDS** (C6 ToS gate, C1 proxy sidecar, C2 end-to-end run).
+>
+> Note that **`C6` means two different things** across that boundary — a local constraint
+> *and* the Copilot ToS gate. `STATUS.md` does qualify it ("all in `copilot-cli-runtime`");
+> this file did not. A third meaning exists elsewhere: `servicenow-triage`'s Round-1
+> concepts C1–C7 (later renamed RC1–RC7). Always qualify `C*` with its workspace.
+
 ## What this means for the FIRST (Copilot-CLI) DDS
 Connectivity does **not** force interactive-only. "Headless/automated" stays on the
 table via polling. The remaining gates on headless are then that DDS's job, not a network

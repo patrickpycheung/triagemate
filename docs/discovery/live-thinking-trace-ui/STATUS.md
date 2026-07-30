@@ -5,7 +5,7 @@
 engineering pass + 2 direct `javap` verifications against the real ADK jar.
 **Started / completed**: 2026-07-30.
 **Graduation**: pending operator lock → then CDS concept `J11 — Live thinking trace`
-(owning T1–T3, T5), with amendments to J7/J8/J1/J2. T6 (logos) and T7 (provenance chip)
+(owning LT1–LT3, LT5), with amendments to J7/J8/J1/J2. LT6 (logos) and LT7 (provenance chip)
 are separable.
 
 ## One-line problem
@@ -20,7 +20,7 @@ vendor logos.** Full reasoning + concepts: `4-decide/concepts-extracted.md`.
 
 ADM class **ADM-2** — several viable options *and* real discriminating tests existed, both
 of which changed the answer. Decided on evidence, not preference. Trademark use is carved
-out as T6 rather than self-approved, with a safe default shipped meanwhile.
+out as LT6 rather than self-approved, with a safe default shipped meanwhile.
 
 ## What measurement changed the answer
 
@@ -42,12 +42,16 @@ What survives both: **capture real per-step durations as data, then render hones
   strings. Precedent is decisive: **FND-16 was this exact bug in this exact file**, and its
   resolution ("string-matching a trace line is not a contract") is quoted in
   `DiagnosisResult`'s javadoc today.
-- **The honesty question dissolves** once *sequence* (real in both engines — the
-  deterministic engine's javadoc says it runs "the SAME ordered steps the ADK agent runs")
-  is separated from *reveal cadence* (a display property). FND-8/16/25 never forbade
+- **The honesty question dissolves** once the *order actually taken* (recorded per run in
+  `seq`) is separated from *reveal cadence* (a display property). FND-8/16/25 never forbade
   animation; all three were the UI **inferring a fact the backend already knew and was
   never asked for**, all fixed identically — *add a real field, read the real field*. That
   idiom prescribes this design's shape rather than prohibiting it.
+  ⚠️ **Corrected by doc-test**: an earlier version justified this with "both engines run the
+  same ordered flow", citing the deterministic engine's javadoc. That inference is invalid —
+  the ADK engine is a flat `LlmAgent` where the *model* picks order and calls may run in
+  parallel. The claim is now the weaker, true one: *"the order shown is the order it
+  happened."*
 - **Spike closed, correcting an exploration.** Exploration A named "does ADK 1.7.0 expose
   `afterToolCallbackSync` with a usable result" its top gating spike and asserted the
   callback **does not exist** — which would have ruled out "resolves in place" on the agent
@@ -70,9 +74,12 @@ What survives both: **capture real per-step durations as data, then render hones
 - **New tension found in synthesis (P-9)**: pre-rendering the full step plan is the honesty
   trap in a new costume — `gitlab.searchCode` is *conditional*, so showing it upfront
   asserts work that may never happen. Resolution: pre-render only the unconditional prefix.
-- **Byproduct finding (T7)**: showing `4 ms` beside `servicenow.getIncident(...)` makes an
+- **Byproduct finding (LT7)**: showing `4 ms` beside `servicenow.getIncident(...)` makes an
   **existing** ambiguity acute — that call hit a fixture and nothing says so. A derived
-  `connectors: mock (fixtures, no network)` chip is a candidate FND in its own right.
+  provenance chip is a candidate FND in its own right. ⚠️ **But NOT one global chip**
+  (doc-test): connectors are per-connector mixable (FND-10), *and* "no network" is false on
+  the ADK path even with all connectors mock (the Copilot proxy). Needs **two** chips —
+  connector provenance + engine/backend — or LT7 commits the very defect it exists to fix.
 - **Gemini's transport advice discarded**: it recommended Spring **WebFlux** SSE; verified
   there is no WebFlux in `pom.xml` (servlet stack, `spring-boot-starter-web`).
 - **Codex added what the Claude passes missed** (P-10): the before→after correlation key is
@@ -98,21 +105,31 @@ What survives both: **capture real per-step durations as data, then render hones
 - `2-diverge/research/spring-sse-adk-codex.md` — ✅ Codex engineering pass (681 lines).
   Third independent confirmation of the ADK callback triple, **plus** the correlation key
   and two traps the Claude explorations missed — see P-10.
-- `3-synthesize/patterns.md` — P-1…P-9 + open tensions
-- `4-decide/concepts-extracted.md` — T1…T7, spikes, out-of-scope
+- `3-synthesize/patterns.md` — P-1…P-10 + open tensions
+- `4-decide/concepts-extracted.md` — LT1…LT7, spikes, out-of-scope
 
 ## Residual for the operator
 
 1. **Lock the decision** (DDS Phase 4 checkpoint, per this repo's convention).
 2. **Real vendor logos — yes or no?** Safe default (house glyphs) already chosen and needs
-   no ruling; swapping in real marks is a deliberate 4-line seam. Legal facts in T6.
-3. **Is v2 (live ADK streaming) in scope?** Not optional polish *if* D1 is the primary demo
-   path — v1 alone leaves a real 10–60 s blank there.
+   no ruling; swapping in real marks is a deliberate 4-line seam. Legal facts in LT6.
+3. ~~**Is v2 (live ADK streaming) in scope?**~~ — **WITHDRAWN, this was a false question**
+   (doc-test 2026-07-30). `DEMO-RUNBOOK.md` already **locks D1 as the primary path**, which
+   answers it: LT4 is mandatory, not conditional. Asking cost a round-trip on a decision the
+   runbook had already made. The real remaining choice is only *how* (polling vs SSE), which
+   is an ADM-2 technical fork recorded in LT4, not an operator question.
 
 ## Coherence with prior work
 
 Extends **J7** (demo UI) and **J8** (observability: `DiagnosisResult.trace` is J8's
 "flight recorder"). Reinforces **D4** from DDS `orchestrator-vs-copilot-cli` — "lead the
 narrative with the evidence trail" — by making that trail legible per step rather than a
-12 px list after the fact. Depends on nothing gated by **C6** (the Copilot ToS ruling):
-v1 works entirely on the offline deterministic path.
+12 px list after the fact.
+
+⚠️ **C6 dependency — corrected (doc-test 2026-07-30).** This section originally said the DDS
+"depends on nothing gated by C6 (the Copilot ToS ruling): v1 works entirely on the offline
+deterministic path." True of **v1 only**. Promoting **LT4 to mandatory** (residual 3 above)
+changes the picture: LT4 exists *specifically* to make the live ADK run legible, so the part
+of this design that is now non-optional **does** sit behind the C6 ToS gate. Split the
+statement: **v1 (LT1–LT3, LT5) is C6-independent and offline; LT4 inherits C6.** That gate
+remains satisfied for the human-present demo and unresolved for unattended use.

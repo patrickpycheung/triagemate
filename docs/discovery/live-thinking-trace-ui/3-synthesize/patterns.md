@@ -29,14 +29,26 @@ renderer on top of it.
 
 ## P-2 — The honesty question dissolves once you separate *sequence* from *cadence*
 
-B's reframe, which I judge correct:
+B's reframe, which I judge correct **once its premise is narrowed** (see the correction box):
 
-- The step **sequence and the work are real** in both engines —
-  `DeterministicDiagnosisEngine`'s own javadoc says it runs *"the SAME ordered steps the
-  ADK agent runs"*. Nothing is being invented.
+- The **work is real** in both engines, and the **order actually taken is recorded per run**
+  (`seq`). Nothing is being invented.
 - Only the **reveal cadence** is a display property.
 - So "did we add delay?" is the wrong test. The right test is: **for every pixel, is there
   a real field behind it?**
+
+> ⚠️ **PREMISE CORRECTED (doc-test 2026-07-30 — found independently by two perspectives).**
+> This section originally read *"the step sequence … [is] real in both engines —
+> `DeterministicDiagnosisEngine`'s own javadoc says it runs 'the SAME ordered steps the ADK
+> agent runs'"*. **That inference is invalid.** That javadoc is the *deterministic* engine
+> describing *its own* intent; it is not a contract the ADK engine honours. The built ADK
+> engine is a flat `LlmAgent` where the **model** picks tool order (J2/FND-13), and ADK may
+> execute several calls from one `Event` **in parallel** (see P-10a).
+>
+> The argument survives on a weaker, true claim: **"the order shown is the order it
+> happened"**, per run, from `seq`. It does *not* survive as "there is one canonical flow
+> both engines follow". Downstream effect: a pre-rendered step prefix (P-9) is legitimate
+> **only when `engine != ADK`**.
 
 A spinner asserts *"executing now"* — that would be false during a replay. A reveal
 cadence asserts nothing, *provided the frame says what it is*. And crucially: FND-8/16/25
@@ -81,7 +93,10 @@ phasing matters:
 | **v1** | replay, real durations, honest frame | **both** engines | de-risks the demo; correct on D2, the guaranteed floor |
 | **v2** | live step stream | ADK only | fills the genuine 10–60 s wait that v1 leaves blank |
 
-A prefers **polling a per-incident step buffer** over SSE for v2, and the reasoning is
+A prefers **polling a step buffer** over SSE for v2 — keyed by **`runId`, not by incident**
+(corrected in LT4 by doc-test: sequential runs of one incident are deliberately separate, and
+`DiagnosisOrchestratorTest#sequentialRunsOfTheSameIncidentAreNotCoalesced` asserts it, so an
+incident-keyed buffer would leak or overwrite a prior run's events). A's reasoning is
 structural, not merely cheaper: re-reading the full buffer each poll is automatically
 correct for FND-31 coalescing, mid-run joiners, page reloads, and the fact that
 `diagnoseWithFallback` **prepends** the degradation line at index 0 (so a trace is *not*
@@ -113,15 +128,27 @@ A read absence-in-*our-usage* (we only register `beforeToolCallbackSync`, for
 Consequences: `before` → `ACTIVE` step; `after` → `DONE` + real result; `onError` →
 `FAILED`. Also available: `beforeModelCallback`/`afterModelCallback` for a "thinking"
 (model-call) state distinct from "calling a tool", and `beforeAgentCallback`/`after…` for
-run boundaries. Two caveats: the callback must return `Optional.empty()` (a non-empty
-return **rewrites the tool result** — observing must not mutate, and given this repo's
-history that deserves an explicit test); and it is unconfirmed whether `after` fires when
-`before` **denied** the call.
+run boundaries.
 
-I also checked the parallel-tool-call worry: **`ParallelAgent` is a separate agent *type*
-in ADK**, not implicit `LlmAgent` behaviour, and we deliberately use a flat `LlmAgent`
-(FND-13). So a monotonic per-run counter is a safe correlation key, modulo a model
-emitting multiple function calls in one turn.
+> ⛔ **DANGEROUS WORDING CORRECTED (doc-test 2026-07-30).** This paragraph originally said
+> "the callback must return `Optional.empty()`". Taken literally for the **`before`** edge
+> that would **disable J8's guardrail leash entirely**: `BoundsCallback` denies an
+> out-of-allowlist or over-budget call *precisely by returning a non-empty `Optional`*
+> (`AdkDiagnosisEngine.java:160-170`). The rule is **"observation must not alter the result,
+> but policy must stay unaltered"** — so compose a trace-only observer (returning empty) on
+> the `after`/`onError` edges, and leave the `before` edge's non-empty denial untouched,
+> emitting `DENIED` from that same decision.
+>
+> ✅ This also **closes the "does `after` fire after a denial?" question** without a test:
+> a denial short-circuits execution, so the tool never runs and the `DENIED` terminal state
+> is simply set on the `before` edge.
+
+⚠️ **My parallel-tool-call conclusion here was WRONG — superseded by P-10a.** I reasoned that
+because `ParallelAgent` is a separate agent *type* in ADK and we use a flat `LlmAgent`, tool
+calls must be sequential and a monotonic counter would be a safe correlation key. Codex found
+that **one `Event` may carry several `FunctionCall` parts and ADK may execute them in
+parallel** — that is a property of the tool-execution path, not of agent composition. Use
+**`ToolContext.functionCallId()`** as the key; the counter idea is retired.
 
 ## P-6 — Logos: the evidence overturns the obvious answer
 
@@ -174,6 +201,29 @@ a *fixture*, and nothing on screen says so. The fix is a derived provenance chip
 config. That is a *better* stage line than the unqualified one, and it is arguably a
 FND-class gap in the current UI regardless of whether this feature ships.
 
+## P-9 — Pre-rendering the plan is the honesty trap in a new costume
+
+C's closing finding, and it is sharper than it first looks. The most *persuasive* version
+of this UI pre-renders the whole step plan greyed-out ("here are the 9 things I'm about to
+do"), then lights each row up as it happens. It reads as competence and it gives the
+audience a progress frame.
+
+But **`gitlab.searchCode` is conditional** in the emitter — it only runs if the log search
+yielded a concrete error token. Pre-rendering it asserts *"I will search the code"* before
+that is known, which is exactly the FND-8/16/25 failure mode (the UI stating something the
+backend hasn't established) wearing a different costume. Same applies to any other
+conditional step.
+
+Resolvable three ways, in descending honesty:
+1. **Append-as-they-occur** (no plan shown). Always true; loses the progress frame.
+2. **Pre-render only the unconditional prefix** and append conditional steps as they fire.
+   Honest and keeps most of the effect — the first 5 steps always run.
+3. Pre-render all 9 with conditional rows visually marked as *"if needed"*. Honest only if
+   that marking is unmissable at 3 m, which on a projector it probably isn't.
+
+Recommend **(2)**. Note this is a *design* constraint discovered in synthesis, not an
+implementation detail — it changes what the component can claim.
+
 ## P-10 — Codex's additions: the v2 transport question is genuinely OPEN, plus two traps
 
 The Codex engineering pass (landed after synthesis began) confirmed the ADK callback triple
@@ -198,7 +248,7 @@ exploration A's abstract objection #1, and it must be configured explicitly
 execution threads rather than the orchestration virtual thread."* Neither exploration D nor
 my own verification flagged this — D's `TraceSink` is handed into `diagnose()` and would be
 called from whichever thread ADK runs the callback on, **not** only the single virtual
-thread the orchestrator submits. Affects T1's design directly.
+thread the orchestrator submits. Affects LT1's design directly.
 
 **d) A genuine disagreement on v2 transport, which I am NOT going to paper over.**
 Exploration A recommends **polling a per-incident buffer**; Codex recommends **SSE with
@@ -215,29 +265,6 @@ management, the 30 s trap above, proxy-buffering requirements (`text/event-strea
 than a false consensus. My lean, on hackathon-risk grounds: polling for v2 if v2 is built
 under time pressure; SSE if v2 gets proper time, since it is the better end state and
 Codex's replay design is sound.
-
-## P-9 — Pre-rendering the plan is the honesty trap in a new costume
-
-C's closing finding, and it is sharper than it first looks. The most *persuasive* version
-of this UI pre-renders the whole step plan greyed-out ("here are the 9 things I'm about to
-do"), then lights each row up as it happens. It reads as competence and it gives the
-audience a progress frame.
-
-But **`gitlab.searchCode` is conditional** in the emitter — it only runs if the log search
-yielded a concrete error token. Pre-rendering it asserts *"I will search the code"* before
-that is known, which is exactly the FND-8/16/25 failure mode (the UI stating something the
-backend hasn't established) wearing a different costume. Same applies to any other
-conditional step.
-
-Resolvable three ways, in descending honesty:
-1. **Append-as-they-occur** (no plan shown). Always true; loses the progress frame.
-2. **Pre-render only the unconditional prefix** and append conditional steps as they fire.
-   Honest and keeps most of the effect — the first 5 steps always run.
-3. Pre-render all 9 with conditional rows visually marked as *"if needed"*. Honest only if
-   that marking is unmissable at 3 m, which on a projector it probably isn't.
-
-Recommend **(2)**. Note this is a *design* constraint discovered in synthesis, not an
-implementation detail — it changes what the component can claim.
 
 ## Tensions left open
 

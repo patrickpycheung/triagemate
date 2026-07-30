@@ -13,7 +13,7 @@ Applying the ADM method to the decision as a whole:
   new renderer; `List<String> trace` stays **byte-identical** so nothing existing breaks.
 - **Charter framing**: does not touch mission, budget, or authority. Two sub-questions do
   touch value-laden ground — the honesty principle (resolved *by design*, see below) and
-  third-party trademark use (a real legal surface → carved out as T6).
+  third-party trademark use (a real legal surface → carved out as LT6).
 
 Majority: **ADM-2** for the technical shape — several viable options *and* a real
 discriminating test existed (the 2–19 ms measurement and the `javap` check both changed the
@@ -27,19 +27,34 @@ same engine slow (so no fixed pace is correct). What survives both is: **capture
 per-step durations as data, then render honestly.**
 
 **The honesty principle is satisfied structurally, not by restraint.** Every pixel is
-backed by a real field: real step sequence (both engines run the same ordered flow), real
-durations, real results, real platform attribution. The reveal cadence is the only display
-property, and the frame says so explicitly.
+backed by a real field: real durations, real results, real platform attribution, and a real
+per-run step order recorded in `seq`. The reveal cadence is the only display property, and
+the frame says so explicitly.
+
+> ⚠️ **Premise corrected (doc-test 2026-07-30, found independently twice).** An earlier
+> version justified this with *"both engines run the same ordered flow"*. **That is false
+> for the ADK path.** The built engine is a single **flat `LlmAgent`** whose *model* chooses
+> tool order (J2/FND-13), and ADK may execute several calls from one `Event` **in
+> parallel** — a fact recorded elsewhere in this very document. I had read the deterministic
+> engine's javadoc (which describes running "the SAME ordered steps the ADK agent runs") as
+> a guarantee about ADK's runtime behaviour; it is that engine's statement of its own
+> intent, not a contract ADK honours.
+>
+> The honesty argument does **not** collapse — it needs a weaker, true claim. Assert only
+> *"the order shown is the order it happened"*, sourced per-run from `seq`. Do **not** claim
+> a canonical flow shared across engines. Consequence for LT3: a pre-rendered step prefix is
+> legitimate **only when `engine != ADK`**, since only the deterministic script has a
+> knowable fixed prefix.
 
 ---
 
 ## Concepts for CDS
 
-Suggested home: **one new concept card `J11 — Live thinking trace`** owning T1–T3+T5, with
-cross-reference amendments to J7 (UI), J8 (observability), J1/J2 (emission points). T6/T7
+Suggested home: **one new concept card `J11 — Live thinking trace`** owning LT1–LT3+LT5, with
+cross-reference amendments to J7 (UI), J8 (observability), J1/J2 (emission points). LT6/LT7
 are separable.
 
-### T1 — `TraceStep` model + `TraceSink` emission ⭐ (the spine — everything depends on it)
+### LT1 — `TraceStep` model + `TraceSink` emission ⭐ (the spine — everything depends on it)
 
 New package `com.company.triage.orchestration.trace` (in `src/main/java/`, so
 `src/main/adk/` can import it — that direction is already established and the reverse stays
@@ -47,10 +62,18 @@ forbidden).
 
 ```java
 record TraceStep(int seq, Platform platform, String tool, String label, String result,
-                 State state, long startedAtEpochMs, Long durationMs) {}
+                 State state, long startedAtEpochMs, Long durationMs,
+                 DiagnosisResult.Engine engine) {}   // engine: attempt identity, see below
 enum Platform { SERVICENOW, CONFLUENCE, SUMO, GITLAB, TRIAGEMATE }
 enum State    { PENDING, ACTIVE, DONE, FAILED, DENIED }
 ```
+
+⚠️ **State tokens must be mapped, not serialized directly** (doc-test 2026-07-30): LT5's
+verified CSS keys off `data-state` values `queued` / `active` / `done` / `warn` / `fail`,
+which do **not** match this enum (`PENDING`, `FAILED`, `DENIED`). Naming the attribute from
+`State.name()` would silently select no style. Specify the mapping explicitly —
+`PENDING→queued`, `ACTIVE→active`, `DONE→done`, `FAILED→fail`, `DENIED→warn` — and cover all
+five in a test, or rename one side to match the other.
 
 - `label` (in-progress verb) and `result` are **separate fields** so the resolve animation
   has both simultaneously.
@@ -62,10 +85,38 @@ enum State    { PENDING, ACTIVE, DONE, FAILED, DENIED }
 - Emission: `DiagnosisEngine` gains `diagnose(String, TraceSink)` as the **implemented**
   method; existing `diagnose(String)` becomes a `default` passing `TraceSink.NOOP`. That
   direction is deliberate — engines implement the 2-arg form, so no engine can silently
-  drop steps. All 34/50 tests keep compiling with zero assertion changes.
+  drop steps.
+- ⚠️ **Cost corrected (doc-test 2026-07-30): this IS a source-breaking SPI change.** The
+  earlier claim "all 34/50 tests keep compiling with zero assertion changes" was wrong.
+  `DiagnosisEngine` is a genuine **SAM** (one abstract method), and moving the abstract
+  method to the 2-arg form breaks **every 1-arg lambda** — verified: **16 of them**, 14 in
+  `DiagnosisOrchestratorTest` and 2 in `PromptInjectionGuardrailTest`. Test *assertions*
+  need no change, but all 16 lambdas must be rewritten (`incident -> …` becomes
+  `(incident, sink) -> …`). Either accept that as an intentional mechanical migration, or
+  keep the 1-arg form abstract and add the 2-arg as the `default` — which reverses the
+  safety property above (an engine could then silently drop steps). **Recommend accepting
+  the migration**; 16 mechanical lambda edits is a fair price for making step emission
+  un-droppable.
 - **`TraceSink` must be thread-safe** (Codex, P-10c): on the ADK path it is invoked from
   ADK/RxJava callback threads, *not* the single virtual thread the orchestrator submits to.
-  Neither exploration D nor the original callback verification caught this.
+- ⚠️ **One sink per engine call, never one per run** (doc-test 2026-07-30, found twice
+  independently). `DiagnosisOrchestrator` **discards the primary engine's whole
+  `DiagnosisResult` and trace** on an FND-7 degrade and returns only the fallback's. A
+  single run-scoped sink would therefore accumulate the *abandoned* ADK steps plus the
+  deterministic run's, with `seq` restarting at 0 — and because a timed-out virtual thread
+  is **not killed** (FND-15's javadoc says cancellation is best-effort), the orphaned run
+  can keep emitting *after* the fallback has started. Mirror the existing semantics: fresh
+  sink per engine call, discard the primary's steps exactly as its trace is discarded, and
+  prepend one synthetic `FAILED`/`FALLBACK_STARTED` boundary step.
+- ⚠️ **`TraceStep` needs engine/attempt identity.** Without it a live view can show ADK
+  steps next to a deterministic final report with no visible boundary — the FND-16 problem
+  again. Add the engine (or an attempt ordinal) to the step, and keep the terminal
+  disclosure reading `DiagnosisResult.engine`.
+- ⚠️ **All three `DiagnosisResult` reconstruction sites must carry `steps` forward.**
+  `DiagnosisOrchestrator` rebuilds the record three times (to set `engine`, then
+  `writebackPosted`); using a back-compat constructor at any of them would silently default
+  or drop the captured steps. Test the ADK-success, degraded-fallback, and
+  writeback-disabled paths explicitly.
 - **Rejected**: `ApplicationEventPublisher` (needs correlation ids + subscriber registry);
   a `ThreadLocal` — the FND-33 precedent does *not* transfer (that exists only because
   ADK's tool methods are `static`; here the orchestrator runs engines on **virtual
@@ -75,7 +126,7 @@ enum State    { PENDING, ACTIVE, DONE, FAILED, DENIED }
   recommitted. Worth a test asserting the two views agree.
 - Blast radius (D's count): **7 files changed, 5 new, 0 existing test assertions changed.**
 
-### T2 — `StepCatalog`: platform + in-progress label mapping
+### LT2 — `StepCatalog`: platform + in-progress label mapping
 
 The in-progress verb strings (*"Searching Confluence for a runbook…"*) **exist nowhere
 today** — only result strings do. A shared catalog keyed by *both* ADK snake_case tool
@@ -84,7 +135,15 @@ names (`search_confluence`) and deterministic dotted keys (`confluence.search`),
 map to the `TRIAGEMATE` pseudo-platform. Add a **build-failing test that
 `ALLOWED_TOOLS ⊆ catalog`** so a new tool can't ship unlabelled.
 
-### T3 — Replay renderer with an honest frame ⭐ (v1; works on both engines)
+⚠️ **That gate cannot fire as described** (doc-test 2026-07-30): `ALLOWED_TOOLS` is
+`private static final` **inside `src/main/adk/`**, and both `src/main/adk` and `src/adk-test`
+compile *only* under `-Padk` — so a plain `mvn test` would never run the check, and the
+"build-failing" guarantee is illusory on the default build. Fix: move the canonical tool-name
+set into `StepCatalog` in `src/main/java/`, have `AdkDiagnosisEngine.ALLOWED_TOOLS` reference
+*that* as its single source of truth, and assert the subset relation in a `src/test/` test so
+bare `mvn test` enforces it.
+
+### LT3 — Replay renderer with an honest frame ⭐ (v1; works on both engines)
 
 Reveal completed steps at a perceptible cadence (~250–400 ms floor; Nielsen ~100 ms
 threshold + Gemini's 250 ms minimum + B's 0.4 s converge here), each row showing its **real**
@@ -95,45 +154,84 @@ duration. Header must carry the four load-bearing words — *replaying*, *comple
 > revealed at 0.4 s each so they're readable. The order and the timings below are real.`
 
 Plus log-scale duration bars (makes 2 ms vs 40 s legible in one visual language).
-**Per P-9, pre-render only the unconditional step prefix**; append conditional steps
+**Per P-9, pre-render only the unconditional step prefix — and only when `engine != ADK`**
+(doc-test correction: the flat `LlmAgent` has no knowable fixed prefix, since the model picks
+order; see the premise correction under the Decision above); append conditional steps
 (`gitlab.searchCode`) as they actually fire.
 
 **Ruled out** (B): unlabelled synthetic dwell + spinners + present tense (that is FND-8 in
 a costume); fabricated reasoning copy for an engine that doesn't reason; ETA bars;
 `Step N of 8` on the bounded ADK loop; any hardcoded "instant" copy.
 
-### T4 — Live step streaming, ADK-only (v2; **needed if D1 is the primary demo path**)
+### LT4 — Live step streaming, ADK-only (v2; **MANDATORY — D1 is the locked primary path**)
 
-Not optional polish if the demo runs D1: v1 alone leaves a genuine **10–60 s blank** on the
-agent path. Wire ADK's three verified callback edges (P-5) — **all three, since
-`onToolError` is required for the failure edge and `afterToolCallback` is NOT a `finally`
-hook**: `beforeToolCallbackSync` → `ACTIVE`, `afterToolCallbackSync(…, Object result)` →
-`DONE`, `onToolErrorCallbackSync` → `FAILED`. Join the edges with
+**MANDATORY, not conditional** (corrected 2026-07-30, doc-test): `DEMO-RUNBOOK.md` already
+locks **D1 as the primary demo path**, so v1's replay-only renderer would leave the screen
+blank for the entire live model run (up to the 90 s `timeout-ms`). LT4 is therefore in scope
+for the ADK path, or the runbook must state that the presenter narrates the wait. The
+earlier "only if D1 is primary" framing posed a question the runbook had already answered.
+
+Wire ADK's three verified callback edges (P-5) — **all three, since `onToolError` is
+required for the failure edge and `afterToolCallback` is NOT a `finally` hook**:
+`beforeToolCallbackSync` → `ACTIVE`, `afterToolCallbackSync(…, Object result)` → `DONE`,
+`onToolErrorCallbackSync` → `FAILED`. Join the edges with
 **`ToolContext.functionCallId()`** (not a counter — ADK may execute several calls from one
-`Event` in parallel). All three **must** return `Optional.empty()` — a non-empty return
-overrides/short-circuits the tool.
+`Event` in parallel).
+
+> ⛔ **CRITICAL CORRECTION (doc-test 2026-07-30).** An earlier version of this section said
+> *"All three **must** return `Optional.empty()`"*. **Implementing that would silently
+> disable J8's entire guardrail leash.** `beforeToolCallback` is not only an observation
+> point — it is the **policy owner**: `BoundsCallback` denies an out-of-allowlist or
+> over-budget call precisely **by returning a non-empty `Optional`**
+> (`AdkDiagnosisEngine.java:160-170`). Forcing it to return empty would make the allowlist
+> and the call budget stop denying anything at all.
+>
+> The correct rule: **observation must not alter the result, but policy must stay
+> unaltered.** So *compose*, don't conflate — keep `BoundsCallback`'s non-empty denial
+> exactly as-is and emit the `DENIED` step from that same decision; a trace-only observer
+> added on the `after`/`onError` edges returns `Optional.empty()` so it cannot rewrite a
+> tool result. This also **closes spike Q1**: the `DENIED` terminal state is set on the
+> `before` edge, because a denial short-circuits execution and the tool never runs.
 
 **Transport is an OPEN fork (P-10d), deliberately not pre-resolved:**
 
-| | A — poll a per-incident buffer | Codex — SSE + `Last-Event-ID` replay |
+| | A — poll a buffer | Codex — SSE + `Last-Event-ID` replay |
 |---|---|---|
-| Shape | client re-reads full buffer each tick | `POST → 202 + runId`, `GET /{runId}/events` |
+| Shape | client re-reads full buffer each tick | `GET /{runId}/events` |
 | Race/reload/joiners | inherently correct | solved via monotonic `id` + retained short-TTL log |
-| New surface | 1 endpoint | 2 endpoints + emitter lifecycle |
+| New surface | 1 endpoint | 1–2 endpoints + emitter lifecycle |
 | Risks | polling latency, chattier | 30 s async-timeout trap, proxy buffering, concurrent `send()` |
 
 Lean: **polling if v2 is built under time pressure; SSE if it gets proper time** (better end
 state, and Codex's replay design answers A's main structural objection). Gemini's WebFlux
 advice does not apply — this is the servlet stack.
 
+**Two corrections from doc-test, both binding on either option:**
+
+1. ⛔ **Keep the existing HTTP contract; streaming must be purely ADDITIVE.** The "`POST →
+   202 + runId`" shape would change `POST /api/diagnose/{incidentNumber}` from its
+   documented `200 DiagnosisResult`, which `index.html` consumes directly for
+   `data.report`, `data.engine` (FND-16) and `data.writebackPosted` (FND-25). Breaking it
+   would re-open two findings this repo already paid to close. So: leave the synchronous
+   route and all four fields untouched, add the streaming paths alongside, and **end every
+   stream with the complete `DiagnosisResult`** (or a typed terminal payload carrying
+   `engine` + `writebackPosted`) so the disclosure fields survive the streaming path.
+2. ⚠️ **Key the run/stream by `runId`, NOT by incident number.** (This resolves a direct
+   *disagreement* between the two conflict perspectives; Codex is correct and there is a
+   test proving it.) Sequential diagnoses of the same incident are **deliberately separate
+   runs** — `DiagnosisOrchestratorTest#sequentialRunsOfTheSameIncidentAreNotCoalesced`
+   asserts exactly that — so an incident-keyed buffer would leak or overwrite a prior run's
+   events. Map incident → *current* `runId` only for the FND-31 concurrent-coalescing case,
+   where two callers genuinely share one engine call and should therefore share one stream.
+
 **Two traps that must be handled either way:**
 - `spring.mvc.async.request-timeout` has **no Boot default** → embedded Tomcat's **30 s**,
   which silently conflicts with the 90 s engine deadline. Set `request-timeout: 3m` (or a
   per-emitter `new SseEmitter(180_000L)`).
 - **The `TraceSink` must be thread-safe** — ADK callbacks may run on ADK/RxJava threads,
-  not the orchestrator's virtual thread. Feeds back into T1.
+  not the orchestrator's virtual thread. Feeds back into LT1.
 
-### T5 — Visual vocabulary (already prototyped and verified)
+### LT5 — Visual vocabulary (already prototyped and verified)
 
 C's `2-diverge/explorations/C-visual-design/sketch.html` is a working, headless-Chromium-verified
 artifact (zero console errors; `queued → active → done` progresses; disclosure toggles work).
@@ -148,7 +246,7 @@ CSS-only, driven by a `data-state` attribute flip:
   conveyed by motion alone.
 - Reuses the existing `.ev` left-rail idiom so it looks native.
 
-### T6 — Real vendor logos: operator/legal call (safe default already chosen)
+### LT6 — Real vendor logos: operator/legal call (safe default already chosen)
 
 **Default shipped: house glyphs + 2-letter lettermarks tinted with real brand hex**
 (ServiceNow `#62D84E` `SN`, Confluence `#2684FF` `CF`, Sumo `#4C7CFF` `SL`, GitLab
@@ -165,13 +263,28 @@ The swap seam is deliberate: **one `PLAT` table, a 4-line diff.** If adopted, ad
 11 px footer — *"Platform names and logos are trademarks of their respective owners; used
 here to identify the systems consulted."*
 
-### T7 — `connectors` provenance chip (independent; arguably fixes a *current* gap)
+### LT7 — `connectors` provenance chip (independent; arguably fixes a *current* gap)
 
-Derived from real `triage.connectors.*` config: `connectors: mock (fixtures, no network)`.
 Putting `4 ms` next to `servicenow.getIncident(INC0012345)` makes today's latent ambiguity
 acute — that call hit a fixture and nothing on screen says so. Ships independently of
 everything above and is a **better** stage line than the unqualified one. Candidate FND in
 its own right.
+
+⛔ **But NOT as a single global chip** (doc-test 2026-07-30 — flagged independently by two
+perspectives, and it is the sharpest finding against this concept). A chip reading
+`connectors: mock (fixtures, no network)` would itself be **untruthful in two separate
+ways** — i.e. it would commit the exact defect LT7 exists to prevent:
+
+1. **Connector selection is per-connector and explicitly mixable** (FND-10): ServiceNow can
+   be `real` while evidence stays `mock`. One global label misreports every mixed run.
+2. **"no network" is false on the ADK path even with all connectors mock** — the engine
+   still calls the Copilot proxy. Connector mode and engine/backend mode are *independent*
+   settings.
+
+Correct shape: **two derived chips, never one** — a connector chip
+(`connectors: servicenow=real, others=fixtures`, or `all fixtures`) and a separate
+engine/backend chip (`deterministic · offline` vs `ADK · via Copilot proxy`). Scope the
+"no network" claim to what it actually covers: *no connector network*.
 
 ---
 
@@ -181,7 +294,7 @@ its own right.
    whether a `DENIED` step's terminal state is set from the `before` edge. One assertion
    against `AdkLiveRoundTripTest`'s existing zero-budget "deny every tool" case settles it.
 2. **Real per-step ADK latency** — `timeout-ms: 90000` is self-documented as a guess. Also
-   decides how much T4 actually matters. Needs the corp laptop + proxy.
+   decides how much LT4 actually matters. Needs the corp laptop + proxy.
 3. **Reveal cadence: fixed floor vs proportional-with-floor** (P-2 tension 4). Cheap to
    tune live; pick during CDS.
 4. **Projector check** on the glow-pulse-vs-spinner reasoning (C flags this as reasoned,
@@ -191,7 +304,7 @@ its own right.
    `ParallelAgent` being a separate agent type was wrong. Moot for the design because
    **`ToolContext.functionCallId()`** is the proper correlation key — but the monotonic
    counter idea is retired.
-6. **v2 transport fork** — polling vs SSE+`Last-Event-ID` (T4). Only bites if v2 is built.
+6. **v2 transport fork** — polling vs SSE+`Last-Event-ID` (LT4). Only bites if v2 is built.
 
 ## Explicitly out of scope
 

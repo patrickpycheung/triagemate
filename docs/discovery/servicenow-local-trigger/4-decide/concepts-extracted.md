@@ -44,6 +44,14 @@ MID Server (C) is the future sanctioned-production path, not the hackathon path.
 Connectivity does NOT cap that DDS at interactive-only: **headless/automated is
 achievable via K1 polling.** The remaining *connectivity* question is closed.
 
+> **Status update (2026-07-30, `/doc-test dds` gap CDX-11)**: of the three gates below,
+> **C1 is now RESOLVED** — `copilot-api` was verified on the real corp laptop and
+> `bin/e2-proxy-spike.sh` passed 4/4 (see `copilot-cli-runtime/4-decide/concepts-extracted.md`).
+> **C2 is NOT resolved**: the application run in `bin/spike-output.log` degraded before
+> reaching the agent loop (missing `LLM_API_KEY`), so only the *proxy* half is proven.
+> Remaining gates for headless: **C6** (ToS, operator/legal) and **C2** (a real end-to-end
+> application run).
+
 What is still open in that DDS is **not** connectivity but: **C6** (licensing/ToS for
 programmatic + unattended use — the hard gate for headless), **C1** (does a proxy
 authenticate with the corp Copilot seat, and is the proxy binary permitted by endpoint

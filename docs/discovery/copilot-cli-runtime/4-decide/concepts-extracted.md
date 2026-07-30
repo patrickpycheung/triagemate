@@ -90,7 +90,9 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
    line in the trace**, and that the trace shows real `adk:` tool calls.
 
    Still unanswered until then: does a **real** frontier model converge inside the 14-call
-   budget (`maxToolCalls + 4`), and does it return **valid J4 JSON**? Safe to retry — a
+   budget (`maxToolCalls + 5` — was `+ 4`; FND-42's repair retry raised it 2026-07-30, so
+   the real ceiling at the default `max-tool-calls: 10` is **15 LLM calls**), and does it
+   return **valid J4 JSON**? Safe to retry — a
    genuine non-convergence degrades gracefully rather than 500ing.
 
 ## Note on the operator's premise

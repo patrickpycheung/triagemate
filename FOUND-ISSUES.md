@@ -1,6 +1,7 @@
 # Found issues
 
-**Backlog: 2 open, deferred design decisions** (not bugs — see each entry). FND-1…FND-42
+**Backlog: 4 open** — 2 deferred design decisions (FND-43/44) + 2 raised by `/doc-test dds`
+on 2026-07-30 (FND-45/46). None are bugs in shipped behaviour; see each entry. FND-1…FND-42
 resolved; full detail in `docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
@@ -21,6 +22,40 @@ Format: `## FND-<n> — <one-line title> · **HIGH|MEDIUM|LOW**`, then **Where**
   trivia.
 
 ---
+
+## FND-45 — The C6 unattended-use gate is documented but not enforced in code · **MEDIUM**
+
+**Where**: `application.yml` (`triage.trigger.poll.enabled`, `triage.engine`),
+`J10-incident-poller/README.md:116`.
+**What**: J10 states "Unattended running is gated on C6 (the Copilot ToS ruling)". Both
+relevant flags default safe (`poll.enabled: false`, `engine: deterministic`) — but there is
+**no coupling in code**. Setting `triage.trigger.poll.enabled=true` together with
+`triage.engine=adk` produces exactly the unattended, programmatic LLM use that C6 gates,
+and nothing warns or refuses. Found by `/doc-test dds` (Gemini flagged it as a CRITICAL
+conflict; verification showed the *docs* are coherent, so the conflict was a false positive
+— but the gate being advisory-only is real).
+**Why it matters**: this is this repo's most-repeated defect class — *documented but not
+enforced* (FND-8, FND-16, FND-25, FND-38 were all instances). The cheap fix is a startup
+check that refuses (or loudly warns) when `poll.enabled && engine==adk` unless an explicit
+`triage.trigger.poll.unattended-llm-ack=true` is set, which turns a prose gate into a
+decision someone has to actually make. Deferred rather than built because "refuse vs warn"
+touches gate policy, and the operator owns C6.
+
+## FND-46 — D2's "offline, cannot fail" safety claim is broader than the code supports · **LOW**
+
+**Where**: `orchestrator-vs-copilot-cli/4-decide/concepts-extracted.md` (D2),
+`J7-demo-ui-and-dataset/README.md`, `DeterministicDiagnosisEngine`.
+**What**: D2 is described as the demo's guaranteed floor — "offline… cannot fail the way a
+model can". Three things narrow that: (a) connector mode is **independent** of engine, so
+the deterministic engine makes real HTTP calls under `triage.connectors.*=real`;
+(b) gateway exceptions in that engine are **not** caught per-tool, and J7's "any tool
+failure becomes omitted evidence" promise is only true for the gateways that
+degrade internally; (c) when deterministic is the *active* engine its failures propagate by
+design (FND-7). Found by `/doc-test dds` (Codex).
+**Why it matters**: the claim is true of the *launcher configuration* the runbook actually
+uses (`run-deterministic.sh`, all-mock), not of the engine in general. Fix is wording plus
+possibly pinning the connectors in that launcher — small, but it touches the D2 stage
+guarantee, so it is worth doing deliberately rather than in passing.
 
 ## FND-43 — Poller cursor can skip a batch-limit's worth of same-timestamp incidents · **LOW**
 

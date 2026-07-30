@@ -33,11 +33,19 @@ import java.util.List;
  * {@code triage.engine=adk} AND the app is built with {@code -Padk}.
  *
  * <p>Wiring is pinned against the confirmed ADK 1.7.0 surface
- * (LlmAgent.builder().model().tools()) — spike JS-1b is done; {@link
- * AdkLiveRoundTripTest} proves a live round trip against a fake OpenAI-compatible
- * server, and real spike C2 (see {@code docs/discovery/copilot-cli-runtime}) proved
- * one against a real Copilot-served model. Corrected 2026-07-30: this javadoc
- * previously still described the wiring as unproven/spike-only.
+ * (LlmAgent.builder().model().tools()), and {@code AdkLiveRoundTripTest} proves a live
+ * round trip against a <b>fake</b> OpenAI-compatible server.
+ *
+ * <p><b>Not yet proven against a real model.</b> Corrected 2026-07-30 (second pass): an
+ * earlier version of this javadoc claimed spike C2 "proved one against a real
+ * Copilot-served model". It did not. C2 proved the <i>proxy</i> serves tool calls
+ * ({@code bin/spike-output.log}: "proxy returned tool_calls"), which is a
+ * <i>prerequisite</i>; the application run in that same log <b>degraded before invoking
+ * the agent loop</b> — "primary engine did not converge (IllegalStateException: Missing
+ * required config: LLM_API_KEY) — degraded to the deterministic engine". So this path has
+ * never completed end-to-end against a real Copilot-served model. Overstating it here was
+ * the same class of defect as FND-8/16/25 (asserting something that did not happen), which
+ * is why it is spelled out rather than quietly reworded.
  */
 @Component
 @ConditionalOnProperty(name = "triage.engine", havingValue = "adk")
