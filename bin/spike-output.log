@@ -82,3 +82,28 @@ gpt-3.5-turbo
 gpt-4o-mini
 gpt-4o
 text-embedding-ada-002
+
+$ curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
+{
+  "group": "Payments Platform Support",
+  "confidence": "MEDIUM",
+  "evidenceRefs": [
+    "e-cmdb",
+    "e-sim-INC0011902",
+    "e-kb-KB001234"
+  ]
+}
+[
+  "⚠ primary engine did not converge (IllegalStateException: Missing required config: LLM_API_KEY — set it in secrets.properties as triage.integrations.llm.api-key, or as an env var / -DLLM_API_KEY before running with -Padk / triage.engine=adk) — degraded to the deterministic engine",
+  "servicenow.getIncident(INC0012345) → CI=Order Portal, env=Production",
+  "understand: symptom clarified; orderId=INC-ORD-4471",
+  "servicenow.findSimilarIncidents → 2 hits",
+  "servicenow.findOwnership(Order Portal) → Payments Platform Support",
+  "confluence.search → 1 page(s)",
+  "sumo.search(scope=prod/payment, window=±10m, max=20) → 4 line(s); errorToken=PAYMENT_RECONCILE_MISMATCH",
+  "gitlab.searchCode('PAYMENT_RECONCILE_MISMATCH') → 1 hit(s) (log↔code citation)",
+  "contacts: 3 suggested (from 1 doc(s) + 1 code file(s), merged across sources)",
+  "report assembled: 2 candidates, 6 evidence items, assignment=Payments Platform Support",
+  "servicenow.addWorkNote → posted 'Sources consulted' comment",
+  "servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)"
+]
