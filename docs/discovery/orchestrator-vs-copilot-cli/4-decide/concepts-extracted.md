@@ -51,8 +51,11 @@
   evidence-trail story and demo reliability.
 
 ## Open items
-- Pick the exact high model to demo once the E2 proxy is up on the corp laptop (spike
-  from the [[triagemate-copilot-backend-decision]] DDS).
+- ✅ **CLOSED 2026-07-30 — demo on `claude-opus-4.6`.** The C1 proxy spike ran on the real
+  corp laptop (`copilot-api`, 4/4 pass incl. tool-calling) and the seat exposes 31 models
+  including `claude-opus-4.6`, `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`. So D1's
+  "high Copilot-served model" and D3's "same frontier model" both hold as written.
+  Evidence: `bin/spike-output.log`; details in [[copilot-cli-runtime]] spike C1.
 - **ToS gate (C6 in [[copilot-cli-runtime]]; explored there as E3) governs BOTH D1 and
   D3** — D1 because driving the seat through a proxy is programmatic use, D3 because it
   invokes Copilot CLI directly. It is not a D3-only concern. Use the id **C6** for the

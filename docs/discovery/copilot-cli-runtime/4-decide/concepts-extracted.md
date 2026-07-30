@@ -38,14 +38,48 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
 ## Spikes to run (operator-gated; can't be done from the dev box)
 1. **[C6] ToS/licensing** — ask IT/legal: may we drive the corporate Copilot seat from an
    app/proxy? unattended? This decides headless-vs-interactive. *(ADM-4 — the operator's.)*
-2. **[C1] Proxy-on-laptop spike** — on the corp laptop: `npx copilot-api@latest` (or
+2. **[C1] Proxy-on-laptop spike** — ✅ **RESOLVED 2026-07-30 on the real corp laptop.**
+   `copilot-api` (not LiteLLM) serves `http://localhost:4000/v1` off the corporate Copilot
+   seat, and **`bin/e2-proxy-spike.sh` passed 4/4** — including check 4, tool-calling:
+   the proxy returns `tool_calls`, so **D1's ADK agent loop works and the evidence trail
+   survives**. This was the single highest-risk unknown in the demo; it is now closed.
+   Raw evidence: `bin/spike-output.log`. Setup encoded in `bin/setup-copilot-api.sh`.
+
+   **The seat exposes 31 models, including frontier tiers** — `claude-opus-4.6`,
+   `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`, `gemini-3.5-flash`. So D1's "high
+   Copilot-served model" premise and D3's "same frontier model" contrast both hold as
+   written; no amendment needed. **Demo on `claude-opus-4.6`** (the id D1 named).
+   ⚠️ `gpt-4o-mini` was the untouched placeholder in `secrets.properties.example`, not a
+   ceiling — that default has since been changed to `claude-opus-4.6`, because leaving it
+   on a mini model would silently falsify both D1's and D3's on-stage claims.
+
+   **Corp-laptop friction worth knowing** (all encoded into the spike's failure message):
+   plain `npx copilot-api@latest` fails **E401** because npm defaults to the internal Nexus
+   registry — needs `--registry=https://registry.npmjs.org/`
+   `--cafile=/etc/ssl/certs/ca-certificates.crt`; `--proxy-env` must come **after** `start`
+   (citty parses it as a subcommand option, not a global flag); and a 403 *"No access to
+   GitHub Copilot found"* means the **seat isn't assigned**, not a proxy problem.
+
+   <details><summary>Original spike (superseded)</summary>
+
+   on the corp laptop: `npx copilot-api@latest` (or
    LiteLLM), complete the Copilot OAuth device-flow, then
    `curl http://localhost:4000/v1/chat/completions` with a trivial prompt → expect a
    completion. Confirms the seat serves an OpenAI-compatible endpoint there **and** that
    the proxy binary is permitted by endpoint policy.
-3. **[C2] End-to-end** — point `triage.integrations.llm.base-url` at the proxy and run
-   `mvn -Padk spring-boot:run --triage.engine=adk` against one incident → advisory
-   comments posted, trace shows bounded tool calls.
+
+   </details>
+
+3. **[C2] End-to-end** — ⏳ **NEXT, and now unblocked** (C1 proved the proxy; this proves
+   the *app* through it). Set `triage.integrations.llm.{base-url,model}` in
+   `secrets.properties` (`http://localhost:4000/v1`, `claude-opus-4.6`) and run
+   **`./run-adk.sh`** against one incident → expect advisory comments posted and a trace
+   showing bounded, real tool calls.
+
+   Two things only C2 can answer: does a **real** frontier model converge inside the
+   14-call budget (`maxToolCalls + 4`), and does it return **valid J4 JSON**? Safe to
+   attempt now — FND-7 is fixed, so a non-convergence **degrades to the deterministic
+   engine** with a disclosed trace line instead of returning a 500.
 
 ## Note on the operator's premise
 "Copilot CLI already has the planning, so we don't build it" is true — but we **already

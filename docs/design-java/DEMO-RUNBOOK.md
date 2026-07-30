@@ -60,8 +60,17 @@ litellm --config config.yaml   # serves http://localhost:4000
 ### b) Discover the exact high-model id your seat exposes
 ```bash
 curl -s http://localhost:4000/v1/models | jq -r '.data[].id'
-# pick a HIGH tier, e.g. claude-opus-4.6 or gpt-5.3-codex (names change — use what's listed)
+# pick a HIGH tier (names change — use what's listed)
 ```
+> **Verified 2026-07-30 on the corp laptop**: the seat exposes **31 models**, including
+> `claude-opus-4.6`, `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`, `gemini-3.5-flash`.
+> **Demo on `claude-opus-4.6`.** Raw list: `bin/spike-output.log`.
+>
+> ⚠️ **Do not leave this on `gpt-4o-mini`.** It's served, so the spike's check 2 passes —
+> but it is a *mini* model, and both the step-2 narration ("a high Copilot model
+> reasoning, on rails") and D3's contrast ("the frontier model is the same one we just
+> used") become false on stage. The `secrets.properties.example` default is now
+> `claude-opus-4.6` for exactly this reason.
 
 ### c) Wire the app to the proxy (config-only — no code change)
 `secrets.properties` at the repo root:
