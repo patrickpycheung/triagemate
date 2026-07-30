@@ -255,38 +255,39 @@ Implemented: real marks staged in `src/main/resources/static/logos/` (+ a proven
 `README.md`), swapped into C's `sketch.html` through the single `PLAT` table, and
 **verified by headless-Chromium render** — not just asserted:
 
-| Platform | Treatment | Render verdict at badge size |
-|---|---|---|
-| **GitLab** | real simple-icons glyph (CC0 drawing) | ✅ strongest — tanuki unmistakable |
-| **Confluence** | real simple-icons glyph (CC0 drawing) | ✅ good |
-| **Sumo Logic** | real simple-icons **wordmark** (CC0 drawing) | ⚠️ weakest — legible but small; needs the wide slot (76 px), illegible in a 32 px square |
-| **ServiceNow** | brand-green **nominative wordmark text** | ✅ surprisingly the most legible of the four |
+**All four are real vendor logos** (ruling extended 2026-07-31: *"use any logo you want, no
+restrictions"* — internal throwaway demo). Uniform **32 px square** badges, each normalised
+to one `<path fill="currentColor">` so the existing `--sn`/`--cf`/`--sl`/`--gl` vars tint it.
 
-**Why ServiceNow is text and not a logo — a hard blocker, not a preference.** Verified
-2026-07-30: it is **absent from simple-icons entirely** (all 3,450 titles searched); its
-logo-usage policy **requires written permission** for third-party use
-(`legalbrandprotection@servicenow.com`) and states they cannot accommodate all requests;
-its official download page offers **JPG/EPS only, no SVG**; and they periodically review
-third-party collateral for compliance. So no asset is obtainable on a hackathon timescale.
-Their guidelines **do** permit nominative use of the *name*, and ServiceNow's own brand is a
-lowercase wordmark, so brand-coloured text is both lawful and visually faithful.
-**To upgrade**: obtain approved artwork from your organisation's ServiceNow Partner/brand
-portal (a customer likely already has access), drop it in as
-`static/logos/servicenow.svg`, and change **one line** of the `PLAT` table.
+| Platform | Asset | Source | Render verdict at badge size |
+|---|---|---|---|
+| **GitLab** | square glyph | simple-icons | ✅ clearest — tanuki unmistakable |
+| **ServiceNow** | square icon (loop mark) | **vectorlogo.zone** | ✅ clear green loop |
+| **Confluence** | square glyph | simple-icons | ✅ clear |
+| **Sumo Logic** | square **icon** | **vectorlogo.zone** | ✅ clear — see below |
 
-**Layout consequence of going real**: the badge slot had to become **76 px wide × 32 px
-high** rather than a 32 px square, because two of the four brands (ServiceNow, Sumo Logic)
-*are* wordmarks. Glyph brands centre in the slot; wordmark brands fill it. Rows stay aligned
-because the slot width is fixed.
+**The sourcing problem was real and outlived the permission question.** "No restrictions"
+did not by itself produce assets: `simple-icons` has **no ServiceNow entry at all** (3,450
+titles searched) and ships **Sumo Logic only as a wordmark** (2,026 path chars of
+letterforms, which render as an illegible smudge in a badge). Both were solved by sourcing
+proper square *icons* from `vectorlogo.zone` instead.
 
-**Attribution added** (required once real marks are used): a footer note —
-*"Platform names and logos are trademarks of their respective owners, used here to identify
-the systems consulted."*
+**That also removed a layout compromise.** The interim treatment needed a **76 px wordmark
+slot** because two brands were wordmark-only. With real square icons for all four, the badge
+is back to a **uniform 32 px square** — better than both the house-glyph plan and the
+wordmark attempt.
 
-**Risk boundary to respect**: this is defensible for an **internal, offline, projector-only**
-demo (nominative identification of systems consulted). It gets riskier if the repo goes
-public, the deck is posted externally, or a recorded run circulates — in which case revisit,
-since CC0 covers the *drawing*, never the *trademark*.
+⚠️ **Implementation note**: `sumologic.svg` has a **non-zero viewBox origin**
+(`22.84 23.58 64 64`). Do not "tidy" it to `0 0 64 64` — that crops the mark. (An earlier
+viewBox error of mine cropped the wordmark to a dash, which looked plausible until rendered;
+hence the render-verify step is not optional here.)
+
+**Attribution footer retained**: *"Platform names and logos are trademarks of their
+respective owners, used here to identify the systems consulted."*
+
+**Scope of the ruling**: internal, offline, projector-only, throwaway. The marks are used
+nominatively to identify which system each step consulted. Reassess only if that scope
+changes — repo made public, deck published, or a recording distributed externally.
 
 ---
 

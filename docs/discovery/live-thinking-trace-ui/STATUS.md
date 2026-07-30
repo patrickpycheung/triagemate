@@ -111,15 +111,15 @@ What survives both: **capture real per-step durations as data, then render hones
 ## Residual for the operator
 
 1. **Lock the decision** (DDS Phase 4 checkpoint, per this repo's convention).
-2. ~~**Real vendor logos — yes or no?**~~ — ✅ **RULED 2026-07-30: use real vendor logos.**
-   Implemented and render-verified: GitLab + Confluence + Sumo Logic real marks staged in
-   `src/main/resources/static/logos/` (simple-icons, CC0 *drawings*; trademarks remain their
-   owners') and swapped in via the `PLAT` table, plus the required attribution footer.
-   **ServiceNow is brand-coloured text, not a logo — a hard asset blocker, not a choice**:
-   absent from simple-icons, written permission required, JPG/EPS only (no SVG). Upgrade path
-   is one `PLAT` line once approved artwork is pulled from your ServiceNow brand portal.
-   Side effect: the badge slot is now 76×32 px, because two of the four brands *are*
-   wordmarks. Detail + risk boundary in LT6.
+2. ~~**Real vendor logos — yes or no?**~~ — ✅ **RULED 2026-07-30/31: use real vendor logos,
+   all four, no restrictions** (internal throwaway demo). **Done and render-verified.**
+   All four marks staged in `src/main/resources/static/logos/` and swapped in via the single
+   `PLAT` table, with the attribution footer. GitLab + Confluence from simple-icons;
+   **ServiceNow + Sumo Logic from vectorlogo.zone**, because simple-icons has no ServiceNow
+   entry at all and ships Sumo Logic only as a wordmark that renders as a smudge at badge
+   size — the sourcing problem outlived the permission question. Because vectorlogo.zone
+   supplies proper square *icons*, the badge stayed a **uniform 32 px square** rather than
+   needing a 76 px wordmark slot. Detail in LT6.
 3. ~~**Is v2 (live ADK streaming) in scope?**~~ — **WITHDRAWN, this was a false question**
    (doc-test 2026-07-30). `DEMO-RUNBOOK.md` already **locks D1 as the primary path**, which
    answers it: LT4 is mandatory, not conditional. Asking cost a round-trip on a decision the
