@@ -16,6 +16,13 @@ convincingly. Scope to **one** demonstration application — do not cover the en
 - Plain HTML + fetch to `/api/diagnose/{n}`; no framework needed.
 - Also renders the **two comments posted automatically to ServiceNow** (sources, then
   advisory diagnosis) so viewers see the real write-back, not just the internal report.
+- **Degraded-run banner (FND-16, fixed 2026-07-30)**: when the ADK engine failed and the
+  orchestrator fell back to the deterministic one (FND-7), the UI shows a prominent
+  amber banner — "this is NOT the live agent … no LLM was involved." Reads
+  `data.engine === 'DEGRADED_TO_DETERMINISTIC'`, the actual `DiagnosisResult` field, not
+  a regex over the trace text. It previously matched the trace *string*, which FND-8's
+  own resolution already said wasn't a contract — proven by rewording that trace line and
+  confirming the old check would have gone silently blank while still degraded.
 - **Run walkthrough: [`../../DEMO.md`](../../DEMO.md)**. Screenshots deferred until the
   app is finalized (then captured via `bin/shot.mjs` / Playwright into `../screenshots/`).
 

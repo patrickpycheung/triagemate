@@ -14,6 +14,27 @@ Drained 2026-07-30 by `/found-issues-resolve`.
 
 ---
 
+## FND-16 — The UI detects degradation by regex over the trace, not the `engine` field · **MEDIUM**
+
+**Where**: `src/main/resources/static/index.html:83` vs
+`src/main/java/com/company/triage/orchestration/DiagnosisResult.java`.
+
+**What**: the degraded-run banner matches `/degraded to the deterministic engine/` against
+trace strings. `DiagnosisResult.engine` + `degraded()` exist for exactly this and are ignored
+by the UI.
+
+**Why it matters**: mine, from the FND-8 fix — I added the field *and* the banner in the same
+session and wired the banner to the string. FND-8's own resolution says string-matching a
+trace "is not a contract"; the UI is currently the counter-example. Rewording the trace line
+would silently break the banner.
+
+**Found by**: Claude conflict.
+
+- **Resolution**: fixed:this-commit (index.html reads data.engine === 'DEGRADED_TO_DETERMINISTIC' directly; verified against a real degraded ADK response, and confirmed the old string-match would have gone silently blank after rewording the trace line)
+- **Escape**: self-inflicted, caught the same session — the field and the banner were added together, and nothing forced them to agree with each other. A field that exists specifically to replace a string-match should be used by the FIRST thing that needs the distinction, not retrofitted after.
+
+---
+
 ## FND-14 — J5 claims `addWorkNote` is idempotent; only the mock actually dedupes · **MEDIUM**
 
 **Where**: `J5/README.md:34,50` vs

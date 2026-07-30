@@ -1,6 +1,6 @@
 # Found issues
 
-**Backlog: 21 open (FND-9…FND-32, minus FND-14/15/31 — resolved)** — raised by
+**Backlog: 20 open (FND-9…FND-32, minus FND-14/15/16/31 — resolved)** — raised by
 `/doc-test cds` on 2026-07-30.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
@@ -39,13 +39,13 @@ time (J1–J8 "Drafted") and the implementation moved past them without the card
 That is a *process* observation, not 24 independent mistakes — worth one fix to how cards
 are updated, not 24 patches.
 
-Three entries were flagged as more than drift and action-first; **two are now resolved**
-(see the archive): **FND-14** (real-connector idempotency) and **FND-15** (no timeout, no
-tool bound) — plus **FND-31**, found alongside them during the fix (the manual endpoint
-bypassing the poller's dedupe state), all three fixed together since they shared the same
-rendezvous point, `DiagnosisOrchestrator`. **FND-16** remains open below — it's mine, from
-the same FND-8 session, and directly related: the degraded-run UI banner matches a trace
-*string* instead of the `engine` field that exists for exactly this.
+Three entries were flagged as more than drift and action-first, and **all three are now
+resolved** (see the archive): **FND-14** (real-connector idempotency), **FND-15** (no
+timeout, no tool bound), and **FND-31**, found alongside them during the fix (the manual
+endpoint bypassing the poller's dedupe state) — all fixed together since they shared the
+same rendezvous point, `DiagnosisOrchestrator`. **FND-16** (mine, from the same FND-8
+session — the degraded-run UI banner matching a trace string instead of the `engine`
+field that exists for exactly this) is resolved too.
 
 ---
 
@@ -129,24 +129,6 @@ The allowlist fixed in `b8b2dd0` is **global** (all eight tools, all the time); 
 the doc or implement staged agents — but the doc should not claim the stronger one.
 
 **Found by**: Phase 2 (agent B), Claude conflict (HIGH).
-
----
-
-## FND-16 — The UI detects degradation by regex over the trace, not the `engine` field · **MEDIUM**
-
-**Where**: `src/main/resources/static/index.html:83` vs
-`src/main/java/com/company/triage/orchestration/DiagnosisResult.java`.
-
-**What**: the degraded-run banner matches `/degraded to the deterministic engine/` against
-trace strings. `DiagnosisResult.engine` + `degraded()` exist for exactly this and are ignored
-by the UI.
-
-**Why it matters**: mine, from the FND-8 fix — I added the field *and* the banner in the same
-session and wired the banner to the string. FND-8's own resolution says string-matching a
-trace "is not a contract"; the UI is currently the counter-example. Rewording the trace line
-would silently break the banner.
-
-**Found by**: Claude conflict.
 
 ---
 

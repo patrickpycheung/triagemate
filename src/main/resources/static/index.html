@@ -76,18 +76,21 @@ function render(data) {
   const cmt = 'border-left:3px solid var(--acc);background:#0e1626;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
   const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc);display:block;margin-bottom:8px';
   // Which engine actually produced this report? The orchestrator degrades from the live
-  // ADK agent to the deterministic engine on failure (FND-7) and discloses it in the
-  // trace — but a line buried in a 12-line monospace block at the bottom of the page is
-  // easy to miss, and mistaking a degraded run for a live one means narrating "frontier
-  // model reasoning" over deterministic output. So say it loudly, at the top.
-  const degraded = t.find(s => /degraded to the deterministic engine/i.test(s || ''));
+  // ADK agent to the deterministic engine on failure (FND-7) and discloses it via
+  // data.engine — a real field on DiagnosisResult, not prose. Read that field directly
+  // (FND-16): matching the trace line's wording was never a contract (FND-8's own
+  // resolution says so), and it would have silently broken the moment that line's text
+  // changed. Mistaking a degraded run for a live one means narrating "frontier model
+  // reasoning" over deterministic output, so say it loudly, at the top, off a real signal.
+  const degraded = data.engine === 'DEGRADED_TO_DETERMINISTIC';
+  const degradedLine = t.find(s => /degraded to the deterministic engine/i.test(s || ''));
   const banner = degraded ? `
     <div class="card" style="border:1px solid #f2b25c;background:#2a1e0c">
       <h2 style="color:#f2b25c;margin-top:0">⚠ Degraded run — this is NOT the live agent</h2>
       <p style="margin:0 0 8px">The live ADK agent failed, so this report was produced by the
       <b>offline deterministic engine</b>. The output below is real and complete, but
       <b>no LLM was involved</b> — do not describe it as model reasoning.</p>
-      <div class="trace" style="color:#f2b25c">${esc(degraded)}</div>
+      ${degradedLine ? `<div class="trace" style="color:#f2b25c">${esc(degradedLine)}</div>` : ''}
     </div>` : '';
   document.getElementById('out').innerHTML = `
     ${banner}
