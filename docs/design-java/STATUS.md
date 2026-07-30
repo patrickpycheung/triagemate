@@ -1,6 +1,6 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: All ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
+**Phase**: J1–J10 Built; **J11 (live-thinking-trace) in CDS Round 2** — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
 Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
 **Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
 plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
@@ -41,6 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
+| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R2 — animated per-step trace; LT6 logos DONE, LT1 SPI spiked; transport decided) | J1, J2, J4, J7, J8 |
 
 ## Spikes
 
@@ -51,10 +52,22 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 - **JS-1b (live round-trip)** — build day 1: `LlmAgent` + one `FunctionTool` +
   `google-adk-langchain4j` → **live** enterprise endpoint → parsed JSON. Fallback:
   swap model backend to `google-adk-spring-ai`. Pin 1.7.0 signatures.
+- **LT1-SPI (J11 SPI feasibility)** ✅ DONE (2026-07-31): flipping `DiagnosisEngine` to
+  `diagnose(String, TraceSink)` as the abstract method **compiles and keeps 34/34 + 50/50
+  green**, zero assertion changes. Blast radius measured **by the compiler** at **18 sites /
+  3 files** — the DDS's grep-derived "16 / 2 files" missed `IncidentPollerTest` entirely.
+  Source reverted (sink was stubbed). Lesson: enumerate a SAM change with the compiler, and
+  always `clean` — a warm `test-compile` reported 0 errors from stale classes.
+  (`concepts/J11-live-thinking-trace/verification-lt1-spi/findings.md`.)
 - **JS-2 (connectivity)** — build day 1: one read-only call per system + one
   controlled ServiceNow work-note write to a **test** incident. Mocks until real
   access lands.
 
 ## Next round triggers
-Round 2 when JS-1/JS-2 return (confirm engine + connectivity), or when a real
-connector replaces a mock and its interface shifts.
+- **J1–J10**: when JS-2 returns (connectivity), or when a real connector replaces a mock
+  and its interface shifts.
+- **J11**: Round 3 = the mandatory end-of-CDS `/doc-test cds` pass (conflicts + architecture
+  + coverage), then converge. Two of its spikes are **not runnable here** and gate
+  🟢 Converged on physical access: real ADK per-step latency (needs the corp laptop + Copilot
+  proxy — also decides how much LT4 matters) and projector legibility of the glow-pulse
+  badge. Everything else in J11 is decided or spiked.

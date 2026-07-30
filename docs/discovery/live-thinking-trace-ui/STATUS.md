@@ -4,9 +4,10 @@
 **Rigor**: Hackathon / RAPID. 4 Claude explorations + Gemini web research + Codex
 engineering pass + 2 direct `javap` verifications against the real ADK jar.
 **Started / completed**: 2026-07-30.
-**Graduation**: pending operator lock → then CDS concept `J11 — Live thinking trace`
-(owning LT1–LT3, LT5), with amendments to J7/J8/J1/J2. LT6 (logos) and LT7 (provenance chip)
-are separable.
+**Graduation**: ✅ **carded 2026-07-31** → CDS concept
+[`J11 — Live thinking trace`](../../design-java/concepts/J11-live-thinking-trace/README.md),
+owning LT1–LT5 + LT7; **LT6 (logos) is DONE and shipped**. Operator locked the decision by
+invoking CDS. This DDS is now closed — J11's card is the live artifact; edit that, not this.
 
 ## One-line problem
 Show the copilot's *process* — a live, per-step trace with platform identity, an

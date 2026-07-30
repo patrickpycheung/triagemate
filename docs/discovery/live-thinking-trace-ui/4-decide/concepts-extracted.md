@@ -86,17 +86,21 @@ five in a test, or rename one side to match the other.
   method; existing `diagnose(String)` becomes a `default` passing `TraceSink.NOOP`. That
   direction is deliberate — engines implement the 2-arg form, so no engine can silently
   drop steps.
-- ⚠️ **Cost corrected (doc-test 2026-07-30): this IS a source-breaking SPI change.** The
-  earlier claim "all 34/50 tests keep compiling with zero assertion changes" was wrong.
-  `DiagnosisEngine` is a genuine **SAM** (one abstract method), and moving the abstract
-  method to the 2-arg form breaks **every 1-arg lambda** — verified: **16 of them**, 14 in
-  `DiagnosisOrchestratorTest` and 2 in `PromptInjectionGuardrailTest`. Test *assertions*
-  need no change, but all 16 lambdas must be rewritten (`incident -> …` becomes
-  `(incident, sink) -> …`). Either accept that as an intentional mechanical migration, or
-  keep the 1-arg form abstract and add the 2-arg as the `default` — which reverses the
-  safety property above (an engine could then silently drop steps). **Recommend accepting
-  the migration**; 16 mechanical lambda edits is a fair price for making step emission
-  un-droppable.
+- ⚠️ **Cost corrected twice: this IS a source-breaking SPI change, and it is bigger than
+  grep said.** The original claim ("all 34/50 tests keep compiling with zero assertion
+  changes") was wrong — `DiagnosisEngine` is a genuine **SAM**, so moving the abstract method
+  to the 2-arg form breaks **every 1-arg lambda**. doc-test put that at "16, in 2 files" from
+  a grep. 🔬 **Spike LT1-SPI (2026-07-31) measured it with the compiler: 18 sites across 3
+  files** — 14 `DiagnosisOrchestratorTest`, **2 `IncidentPollerTest`** (missed by grep), 2
+  `PromptInjectionGuardrailTest`.
+  The missed pair are positional constructor args named `i`, not `incident`, and they are the
+  **primary + FND-7 fallback pair** — i.e. the file most relevant to the "one sink per engine
+  call" invariant. *Enumerate a SAM change with the compiler, never a regex.*
+  The spike also confirmed the migration **compiles and keeps 34/34 + 50/50 green** with zero
+  assertion changes. **Accept the migration**; 18 mechanical edits is a fair price for
+  un-droppable step emission. Alternative (keep 1-arg abstract, add 2-arg as `default`)
+  reverses the safety property — an engine could then silently drop steps.
+  Full record: `docs/design-java/concepts/J11-live-thinking-trace/verification-lt1-spi/`.
 - **`TraceSink` must be thread-safe** (Codex, P-10c): on the ADK path it is invoked from
   ADK/RxJava callback threads, *not* the single virtual thread the orchestrator submits to.
 - ⚠️ **One sink per engine call, never one per run** (doc-test 2026-07-30, found twice
