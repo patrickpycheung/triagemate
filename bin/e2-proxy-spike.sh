@@ -43,7 +43,19 @@ if [ -z "$MODELS_JSON" ] || ! echo "$MODELS_JSON" | grep -q '"data"'; then
   bad "no usable /models response — is the proxy running?"
   echo "     raw: ${MODELS_JSON:0:300}"
   echo
-  echo "     start one:  npx copilot-api@latest        # OAuth device-flow, port 4000"
+  echo "     start one:  npx --registry=https://registry.npmjs.org/ --cafile=/etc/ssl/certs/ca-certificates.crt copilot-api@latest start --proxy-env"
+  echo "                 # (--proxy-env must come AFTER 'start', not before — citty parses it as a"
+  echo "                 #  start-subcommand option, not a global flag)"
+  echo "                 # OAuth device-flow, port 4000. Two flags are needed on this laptop:"
+  echo "                 #  - --registry/--cafile: 'npx copilot-api@latest' alone fails with E401"
+  echo "                 #    because npm's default registry is the internal Nexus repo, which"
+  echo "                 #    needs creds copilot-api doesn't have; these flags route just this"
+  echo "                 #    package through the public npm registry via the system CA bundle."
+  echo "                 #  - --proxy-env: makes copilot-api honour http(s)_proxy so it can reach"
+  echo "                 #    api.github.com/api.githubcopilot.com through the corporate proxy."
+  echo "                 # NOTE: also requires the GitHub account to actually hold a Copilot seat —"
+  echo "                 # a 403 'No access to GitHub Copilot found' means the seat isn't assigned,"
+  echo "                 # not a proxy/registry problem."
   echo "             or: litellm --config config.yaml  # github_copilot provider"
   exit 1
 fi
