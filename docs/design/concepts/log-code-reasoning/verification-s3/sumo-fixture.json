@@ -1,0 +1,12 @@
+{
+  "_comment": "Mock Sumo Logic failure-window response for the seeded INC0012345 / order INC-ORD-4471. get-logs Action returns this. Window pre-scoped so R3 timing is fixed for the demo.",
+  "query": "_sourceCategory=prod/payment error order=INC-ORD-4471",
+  "from": "2026-07-23T09:14:00Z",
+  "to": "2026-07-23T09:15:00Z",
+  "messages": [
+    {"time": "2026-07-23T09:14:21Z", "level": "INFO",  "logger": "payment_service", "msg": "charge start order=INC-ORD-4471 subtotal=10.00 tax_rate=0.25 discount_pct=0.10"},
+    {"time": "2026-07-23T09:14:22Z", "level": "ERROR", "logger": "payment_service", "msg": "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471 expected=11.50 charged=11.25"},
+    {"time": "2026-07-23T09:14:22Z", "level": "ERROR", "logger": "order_api", "msg": "unhandled ValueError: reconcile mismatch order=INC-ORD-4471 trace=payment_service.charge"},
+    {"time": "2026-07-23T09:14:23Z", "level": "WARN",  "logger": "order_api", "msg": "returning 500 to client req=/v1/orders/INC-ORD-4471/charge"}
+  ]
+}

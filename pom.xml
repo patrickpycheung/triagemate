@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.3</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.company</groupId>
+    <artifactId>triage-copilot</artifactId>
+    <version>0.1.0</version>
+    <name>TriageMate</name>
+    <description>TriageMate — local Spring Boot AI incident-triage copilot (hackathon POC)</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Versions verified on Maven Central by DDS Spike JS-1 (2026-07-23) -->
+        <adk.version>1.7.0</adk.version>
+        <langchain4j.version>1.0.0</langchain4j.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+          The ADK engine (J2) lives in src/main/adk so the default build always
+          compiles and runs the offline deterministic demo. Activate the live
+          agentic path (Spike JS-1b) with:  mvn -Padk spring-boot:run
+        -->
+        <profile>
+            <id>adk</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.google.adk</groupId>
+                    <artifactId>google-adk</artifactId>
+                    <version>${adk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.google.adk</groupId>
+                    <artifactId>google-adk-langchain4j</artifactId>
+                    <version>${adk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>dev.langchain4j</groupId>
+                    <artifactId>langchain4j-open-ai</artifactId>
+                    <version>${langchain4j.version}</version>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-adk-source</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>add-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/main/adk</source></sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>add-adk-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals><goal>add-test-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/adk-test</source></sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

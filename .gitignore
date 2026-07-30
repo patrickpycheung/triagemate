@@ -1,3 +1,30 @@
+node_modules/
+.agent.work/
+.agent.work.archive/
+# Secrets live in a gitignored Java properties file (see secrets.properties.example)
+secrets.properties
+*.env
+.env*
+manifest-secrets*
+__pycache__/
+*.pyc
+
+# Per-worktree in-flight status (see docs/design/worktree-inflight-status)
+STATUS-INFLIGHT.md
+
+*.iml
+.idea/
+
+# Java build output
+target/
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Rovo/Forge (paused)
+.wrangler/
+
+# --- from GitHub's standard Java .gitignore template ---
+
 # Compiled class file
 *.class
 
