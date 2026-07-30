@@ -52,7 +52,16 @@ triage:
     # previously hung the request forever, including on the K1 poller's single scheduler
     # thread. A timeout on the ADK engine degrades via the normal FND-7 fallback; on the
     # deterministic engine it propagates (nothing left to fall back to).
-    timeout-ms: 45000
+    #
+    # 90s, not 45s (re-verification correction, 2026-07-30): this wraps the WHOLE
+    # engine.diagnose() call, and the ADK path can make up to triage.agent.max-tool-calls
+    # (10) LLM round trips against a real frontier model before it's done. A too-tight
+    # timeout doesn't just fail slow runs — it makes FND-15's own fallback fire on every
+    # normal-but-unhurried real run, which looks identical on stage to the model actually
+    # failing and defeats D1's whole point. Not yet measured against a real Copilot-served
+    # model (that needs spike C2, see copilot-cli-runtime DDS) — revisit this number once
+    # real latency is known; 90s is a safer guess, not a measurement.
+    timeout-ms: 90000
 
   servicenow:
     # Which incident journal the two comments append to:

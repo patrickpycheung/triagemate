@@ -37,7 +37,8 @@ convincingly. Scope to **one** demonstration application — do not cover the en
 - **Run walkthrough: [`../../DEMO.md`](../../DEMO.md)**. Screenshots deferred until the
   app is finalized (then captured via `bin/shot.mjs` / Playwright into `../screenshots/`).
 
-## Ground-truth dataset (the `mock` profile serves this)
+## Ground-truth dataset (the default `mock` connector config serves this — J3;
+## corrected 2026-07-30, there is no Spring `mock` profile)
 For the one demo app, capture per incident: actual affected application, actual root
 cause, correct assignment team, relevant Confluence page, relevant log evidence,
 final resolution. Requirements (from the analysis):
@@ -55,7 +56,8 @@ likely team — medium confidence — and posts an advisory work note. No reassi
 performed."
 
 ## Demo safety (RC6)
-- Everything runs in `mock` profile with **no network** as the safe default.
+- Everything runs on the default (`mock`) connector config with **no network** as
+  the safe default (`triage.connectors.*=mock`, not a Spring profile — J3/FND-10).
 - Fallbacks: any single tool failure degrades to "evidence omitted," never a crash.
 - Pre-demo checklist; a recorded backup run.
 

@@ -1,6 +1,6 @@
 # J2 — ADK Agent Loop
 
-**State**: 🟢 Built · **Complexity**: Critical · **Depends on**: J1, J3 ·
+**State**: 🟢 Built · **Complexity**: Critical · **Depends on**: J1, J3, J4 ·
 **Gates on Spike JS-1**
 
 ## Essence
@@ -71,13 +71,17 @@ hard-fail on stage. Two consequences worth stating here:
   back **J9**'s "who to talk to" suggestion (FND-21: not previously cross-referenced
   here). Names are ADK `@Schema` names (snake_case), **not** the Java method names —
   the allowlist must match what ADK actually reports as `tool.name()`.
-- **Bounds (`RunConfig` + callbacks)**: max tool calls — `triage.agent.max-tool-calls`
-  (default 10, declared in `application.yml`; FND-27, previously an inline default only,
-  absent from config and every card) — an allowlist of exactly those eight names,
-  per-tool result caps, timeouts (orchestrator-level, J1, FND-15).
-  Enforced by `beforeToolCallback` (J8) — reject out-of-allowlist calls (real as of
-  the J8 fix; previously documented but not implemented), clamp result sizes, count
-  calls.
+- **Bounds, split across the layer that actually owns each one** (corrected
+  2026-07-30 — this bullet previously attributed all of them to
+  `beforeToolCallback`, which is only true for the first two):
+  - `beforeToolCallback` (`BoundsCallback`) — the allowlist (exactly those eight
+    names) and `triage.agent.max-tool-calls` (default 10, declared in
+    `application.yml`; FND-27). Reject out-of-allowlist calls (real as of the J8
+    fix; previously documented but not implemented) and count calls.
+  - `TriageMateTools` — per-tool result caps and the Sumo window clamp (FND-20).
+    `beforeToolCallback` does **not** clamp result sizes; it only gates
+    allowlist + budget.
+  - `DiagnosisOrchestrator` — the wall-clock timeout (J1, FND-15), on either engine.
 - **Runner**: `runner.runAsync(userId, sessionId, msg, runConfig)` → `Flowable<Event>`;
   orchestrator (J1) subscribes, surfaces the final structured report and the event
   stream (→ J8 trace + J7 UI "it really consulted the sources").
@@ -100,7 +104,8 @@ enterprise endpoint → one successful tool round-trip returning parsed JSON. Ti
 
 ## Verification
 - With a stub `echoTool`, the agent calls it and returns the tool's payload.
-- A `beforeToolCallback` denial (tool not in step allowlist) is observable and the
+- A `beforeToolCallback` denial (tool not in the **global** allowlist — see the
+  FND-13 correction above, there is no per-step allowlist) is observable and the
   run continues/aborts per policy.
 - Malformed final JSON triggers exactly one repair retry, then a degraded report.
 

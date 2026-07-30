@@ -3,8 +3,9 @@
 What the running Spring Boot app does, end to end, and how to run it.
 
 > Screenshots/video removed for now — deferred until the app is finalized (captured from
-> the real app via Playwright against the offline `mock` profile: no network, no LLM, no
-> external systems). This walkthrough describes verified, real behavior in the meantime.
+> the real app via Playwright against the offline default (`mock`) connector config: no
+> network, no LLM, no external systems). This walkthrough describes verified, real
+> behavior in the meantime.
 
 ## Run it
 
@@ -53,9 +54,10 @@ gateway while the expected total discounts *before* tax — surfaced as
 
 ## Optional: post the comments to a REAL ServiceNow ticket
 
-The walkthrough above runs against the offline `mock` profile. To make the two comments
-land on a real **dev** ServiceNow incident (and show it updating live in ServiceNow),
-switch just the ServiceNow connector to real:
+The walkthrough above runs against the offline default (`mock`) connector config. To
+make the two comments land on a real **dev** ServiceNow incident (and show it updating
+live in ServiceNow), switch just the ServiceNow connector to real
+(`triage.connectors.servicenow=real` — a per-connector property, not a Spring profile):
 
 ```bash
 cp secrets.properties.example secrets.properties   # fill in triage.integrations.servicenow.*

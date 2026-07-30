@@ -80,7 +80,7 @@ public class DiagnosisOrchestrator {
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  @Value("${triage.writeback.enabled:true}") boolean writebackEnabled,
-                                 @Value("${triage.orchestrator.timeout-ms:45000}") long timeoutMs) {
+                                 @Value("${triage.orchestrator.timeout-ms:90000}") long timeoutMs) {
         this.engine = engine;
         this.fallbackEngine = fallbackEngine;
         this.serviceNow = serviceNow;

@@ -15,7 +15,9 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 
 ## Design
 - **`DiagnosisController`** — `POST /api/diagnose/{incidentNumber}` → 200 with
-  `DiagnosisResult` JSON (`report` + `trace` + `engine` — see FND-23 below). This is
+  `DiagnosisResult` JSON (`report` + `trace` + `engine` + `writebackPosted` — FND-23,
+  FND-25; corrected here 2026-07-30, this line previously omitted `writebackPosted`).
+  This is
   the **K3 manual trigger** (DDS `servicenow-local-trigger`); K1 is J10's poller,
   calling the same orchestrator without going through this HTTP route at all. There
   is no inbound webhook here and none is planned — see the FND-24 note under J10:
@@ -28,10 +30,16 @@ is the one place their calls meet, which is also why concurrent-call coalescing
   **Wall-clock timeout (FND-15, fixed 2026-07-30)**: every engine call — on **either**
   engine, since deterministic also makes real HTTP calls once `triage.connectors.*=real`
   — runs on a virtual thread bounded by `triage.orchestrator.timeout-ms` (default
-  45000). Previously enforced nowhere: a hung gateway hung the request forever,
-  including on the K1 poller's single scheduler thread, where nobody would notice. A
-  timeout on the ADK engine feeds the ordinary FND-7 fallback below; a timeout when
-  deterministic is already the active engine propagates (nothing left to fall back to).
+  90000 — raised from an initial 45000 during re-verification: 10 tool calls
+  [`triage.agent.max-tool-calls`] against a real frontier model can plausibly take
+  longer than 45s, and a timeout that's too tight makes the FND-15 fallback fire on
+  every normal-but-unhurried real run, indistinguishable on stage from the model
+  actually failing — not yet measured against a real Copilot-served model, revisit
+  once spike C2 runs). Previously enforced nowhere: a hung gateway hung the request
+  forever, including on the K1 poller's single scheduler thread, where nobody would
+  notice. A timeout on the ADK engine feeds the ordinary FND-7 fallback below; a
+  timeout when deterministic is already the active engine propagates (nothing left
+  to fall back to).
   Tool-call budget is a **J8/J2 concern on the ADK engine specifically**
   (`BoundsCallback`) — the deterministic engine runs a fixed script, not a
   model-selected loop, so a call-count budget doesn't apply to it the same way; this
@@ -67,15 +75,17 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 class DiagnosisController {
   @PostMapping("/{incident}")
   DiagnosisResult diagnose(@PathVariable String incident) {
-    return orchestrator.run(incident);   // report + trace + engine (FND-23)
+    return orchestrator.run(incident);   // report + trace + engine + writebackPosted
   }
 }
 ```
 
 ## Verification
 - Boots with `mvn spring-boot:run`; `POST /api/diagnose/INC0012345` returns a
-  well-formed `DiagnosisReport` end-to-end in `mock` profile with **no external
-  network**.
+  well-formed `DiagnosisResult` end-to-end with the default (`mock`) connector
+  config and **no external network** (corrected 2026-07-30: "mock profile" was
+  stale wording left over after FND-10 — there is no Spring profile involved, see
+  the Design section above and J3).
 - Wall-clock timeout: `DiagnosisOrchestratorTest#engineTimeoutPropagatesWhenNoFallback`,
   `#engineTimeoutOnPrimaryDegradesToFallback` (both inject a slow engine lambda).
 - Concurrency coalescing:

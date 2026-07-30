@@ -31,8 +31,8 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 
 | ID | Concept | Complexity | State | Depends on |
 |----|---------|-----------|-------|------------|
-| J1 | spring-boot-orchestrator | Moderate | 🟢 Built | J3, J4 |
-| J2 | adk-agent-loop | Critical | 🟢 Built + live loop proven vs ADK 1.7.0 (fake endpoint); bounds enforced | J1, J3 |
+| J1 | spring-boot-orchestrator | Moderate | 🟢 Built | J3, J4, J5, J8 |
+| J2 | adk-agent-loop | Critical | 🟢 Built + live loop proven vs ADK 1.7.0 (fake endpoint); bounds enforced | J1, J3, J4 |
 | J3 | connector-tools | Moderate | 🟢 Built (interfaces + mocks + Real* stubs) | J4 |
 | J4 | diagnosis-report | Simple | 🟢 Built | — |
 | J5 | servicenow-gateway | Moderate | 🟢 Built (mock + Real REST incl. work-note write) | J3, J4 |

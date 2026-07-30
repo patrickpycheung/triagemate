@@ -7,23 +7,37 @@ a **local Spring Boot** hackathon demo. Supersedes the suspended Rovo-native CDS
 
 ## One-paragraph architecture
 
-One Spring Boot process. `DiagnosisController` accepts an incident number and calls
-`DiagnosisOrchestrator`, which runs a **bounded** ADK `SequentialAgent`:
-_fetch incident → clarify symptom → find similar incidents & ownership → search
-knowledge → (optionally) query bounded logs → (optionally) targeted code search →
-produce structured JSON report → post advisory work note_. Each connector
-(ServiceNow, Confluence, Sumo, GitLab) is a Spring `@Service` behind an interface,
-mock-or-real, exposed to the LLM as an ADK `FunctionTool`. The app — not the model —
-controls which tools are allowed, their order, and their limits. The LLM (an
-enterprise OpenAI-compatible endpoint via LangChain4j) picks search terms and
-interprets results.
+One Spring Boot process. `DiagnosisController` (K3, manual) and `IncidentPoller`
+(K1, J10, off by default) both call `DiagnosisOrchestrator.run(...)`, which
+delegates to whichever `DiagnosisEngine` is active (corrected 2026-07-30 — this
+paragraph previously described only the ADK path as if it were the whole system):
+
+- **`deterministic`** (the **default** — `matchIfMissing = true`, no `-Padk` build
+  required): a fixed Java script, no LLM, no network, cannot fail the way a model
+  can. This is D2, the demo's guaranteed floor.
+- **`adk`** (opt-in, `-Padk` build + `triage.engine=adk`): one **flat** ADK
+  `LlmAgent` (not `SequentialAgent` — corrected 2026-07-30, see J2/FND-13) holding
+  all eight tools under a single **global** allowlist. `DiagnosisOrchestrator`
+  auto-degrades to `deterministic` if this one fails or times out (FND-7/FND-15),
+  disclosed via `DiagnosisResult.engine`.
+
+Either way: fetch incident → clarify symptom → find similar incidents & ownership →
+search knowledge → (optionally) query bounded logs → (optionally) targeted code
+search → produce the structured J4 report → post two advisory work notes (unless
+`triage.writeback.enabled=false`, disclosed via `DiagnosisResult.writebackPosted`,
+FND-25). Each connector (ServiceNow, Confluence, Sumo, GitLab) is a Spring `@Service`
+behind an interface, mock-or-real per connector (`triage.connectors.<system>`, **not**
+a Spring profile — FND-10), exposed to the ADK engine as a `FunctionTool`. The app —
+not the model — controls which tools are allowed and how many times (J8); on the
+deterministic engine there is no model choosing anything, the script IS the bound.
 
 ```
 ServiceNow incident ──(K1 poll, J10 — default OFF)──────────▶ IncidentPoller
                     └─(K3 manual: POST /api/diagnose/{number})──▶ DiagnosisController
                                                                     │
                                                         DiagnosisOrchestrator
-                                                     (ADK SequentialAgent, bounded)
+                                            (deterministic engine, DEFAULT — no LLM)
+                                              or (ADK LlmAgent, opt-in, -Padk build)
         ┌───────────────┬───────────────┬───────────────┬───────────────┐
    ServiceNowTool   ConfluenceTool     SumoTool       GitLabTool   (ADK FunctionTools)
         │  incident      │ CQL search    │ bounded job    │ targeted code search
