@@ -142,7 +142,9 @@ public class DiagnosisOrchestrator {
 
         log.info("diagnosis for {} completed in {} ms ({} steps, writeback={})",
                 incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackEnabled);
-        return result;
+        // FND-25: writebackPosted reflects what actually happened in THIS method, not a
+        // client-side guess — this is the only place that knows for certain.
+        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackEnabled);
     }
 
     private DiagnosisResult diagnoseWithFallback(String incidentNumber) {

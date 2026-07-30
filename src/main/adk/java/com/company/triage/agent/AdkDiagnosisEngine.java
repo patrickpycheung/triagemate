@@ -92,10 +92,13 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     public AdkDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
                               SumoGateway sumo, GitLabGateway gitLab,
                               @Value("${triage.sumo.allowed-scopes:prod/payment,prod/order-api}") List<String> sumoScopes,
+                              @Value("${triage.sumo.max-results:20}") int sumoMaxResults,
+                              @Value("${triage.sumo.max-window-minutes:30}") int sumoMaxWindowMinutes,
                               @Value("${triage.agent.max-tool-calls:10}") int maxToolCalls) {
         // Comma-separated @Value binds cleanly to List<String>; the YAML list is a
         // human-readable mirror. JS-1b: switch to @ConfigurationProperties if preferred.
-        TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes);
+        TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes,
+                sumoMaxResults, sumoMaxWindowMinutes);
         this.maxToolCalls = maxToolCalls;
     }
 
@@ -154,6 +157,10 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         String finalJson = runAgent(agent, incidentNumber, trace);
 
         DiagnosisReport report = parse(finalJson, incidentNumber);
+        // Schema-shaped JSON can still violate the J4 contract's semantic rules (FND-17):
+        // an empty candidate list, or an evidenceRef pointing at no Evidence in this
+        // report. Deserialization alone would let the UI render that without complaint.
+        com.company.triage.model.DiagnosisReportValidator.validate(report);
         trace.add("adk agent finished: %d tool call(s) observed".formatted(bounds.used()));
         return new DiagnosisResult(report, trace);
     }

@@ -58,6 +58,7 @@ class DiagnosisOrchestratorTest {
         assertThat(snow.notes.get(1)).contains("First-pass diagnosis")
                 .contains("advisory").contains("No reassignment");                                // diagnosis, advisory
         assertThat(r.trace()).anyMatch(s -> s.contains("Sources consulted"));
+        assertThat(r.writebackPosted()).as("FND-25: real writes actually happened").isTrue();
     }
 
     @Test
@@ -65,8 +66,11 @@ class DiagnosisOrchestratorTest {
         var snow = new RecordingServiceNow();
         DiagnosisEngine engine = incident -> new DiagnosisResult(sampleReport(), new ArrayList<>());
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
-        new DiagnosisOrchestrator(engine, unusedFallback, snow, false, 5000).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, false, 5000).run("INC0012345");
         assertThat(snow.notes).isEmpty();
+        // FND-25: the UI reads this field, not report content, to decide whether to
+        // claim comments were posted — must be false when writeback is off.
+        assertThat(r.writebackPosted()).isFalse();
     }
 
     /** FND-7: a primary engine that fails to converge degrades to the fallback engine

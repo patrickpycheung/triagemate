@@ -1,6 +1,6 @@
 # J7 — Demo UI & Ground-Truth Dataset
 
-**State**: 🟡 Drafted · **Complexity**: Moderate · **Depends on**: J4 ·
+**State**: 🟢 Built · **Complexity**: Moderate · **Depends on**: J4 ·
 **Carries**: RC6 (demo safety), S3′ fixture + seed-repo
 
 ## Essence
@@ -14,8 +14,19 @@ convincingly. Scope to **one** demonstration application — do not cover the en
   evidence, missing info, next action, and the tool-call trace (J8) so viewers see
   it "really consulted all four sources."
 - Plain HTML + fetch to `/api/diagnose/{n}`; no framework needed.
-- Also renders the **two comments posted automatically to ServiceNow** (sources, then
-  advisory diagnosis) so viewers see the real write-back, not just the internal report.
+- **"Who to talk to" card (FND-21: not previously cross-referenced here)** — J9's
+  suggested contacts, sourced from wiki authors of consulted runbooks and recent
+  committers to the implicated file. Advisory, UI-only — see the FND-2 privacy carve-out
+  on J4: this never renders into the ServiceNow comments.
+- Renders the **two comments posted automatically to ServiceNow** (sources, then
+  advisory diagnosis) so viewers see the real write-back — **but only when
+  `data.writebackPosted` is true** (FND-25, fixed 2026-07-30). This card previously
+  rendered unconditionally, reconstructed client-side from the report regardless of
+  whether writeback actually ran, so with `triage.writeback.enabled=false` the audience
+  was told comments were posted when none were. `writebackPosted` is set by
+  `DiagnosisOrchestrator` *after* the write decision — the only place that actually
+  knows — never inferred from report content. When false, a plain "NOT posted" card
+  shows instead.
 - **Degraded-run banner (FND-16, fixed 2026-07-30)**: when the ADK engine failed and the
   orchestrator fell back to the deterministic one (FND-7), the UI shows a prominent
   amber banner — "this is NOT the live agent … no LLM was involved." Reads

@@ -97,7 +97,8 @@ final class FakeOpenAiServer implements AutoCloseable {
           "suggestedAssignment": {"group": "Payments Platform Support", "confidence": "MEDIUM", "evidenceRefs": ["e-cmdb"]},
           "evidence": [
             {"id": "e-log", "source": "sumo", "summary": "PAYMENT_RECONCILE_MISMATCH ...", "link": "prod/payment"},
-            {"id": "e-code", "source": "gitlab", "summary": "emitted at payment_service.py:44", "link": "#L44"}
+            {"id": "e-code", "source": "gitlab", "summary": "emitted at payment_service.py:44", "link": "#L44"},
+            {"id": "e-cmdb", "source": "servicenow-cmdb", "summary": "CI owner = Payments Platform Support", "link": "#cmdb"}
           ],
           "contradictingEvidence": [],
           "missingInformation": ["Affected user id"],

@@ -66,5 +66,8 @@ UI (J7) mere renderings of it. This is the demo's spine.
   edited away.
 
 ## Verification
-- Round-trips through Jackson; validator rejects a report with an empty
-  `candidateSystems` or a dangling `evidenceRef`.
+- Round-trips through Jackson; `DiagnosisReportValidator` (FND-17, wired into
+  `AdkDiagnosisEngine.parse()`) rejects a report with an empty `candidateSystems`,
+  empty `evidence`, or a `evidenceRefs` entry with no matching `Evidence.id` — 7
+  cases in `DiagnosisReportValidatorTest`. Deliberately narrow: only the two
+  properties this contract already promised, not every conceivable invariant.

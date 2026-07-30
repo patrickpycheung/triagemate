@@ -1,26 +1,33 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: CDS Round 1 — concepts J1–J8 drafted from DDS handoff.
-**Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`.
+**Phase**: All ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
+Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
+**Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
+plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
+copilot-cli-runtime/` (the E2 LLM-backend decision).
 **Rigor**: Hackathon/RAPID — optimize demo-wow + build ease.
 **Supersedes**: `docs/design/` (Rovo-native, ⏸️ suspended).
 
 ## Concept table
 
-Implementation in **`app/`** (Maven, Java 21, Spring Boot 3.4.3). Verified in-session
-with a downloaded Maven 3.9.9 + Temurin JDK 21:
-- `mvn test` → **BUILD SUCCESS**, demo test passes; `spring-boot:run` boots in ~1s and
-  `POST /api/diagnose/INC0012345` returns the full report end-to-end (offline).
-- `mvn -Padk test` → **3/3 pass**: the real ADK 1.7.0 `LlmAgent` loop runs end-to-end
-  against a local fake OpenAI endpoint (tool-call → tool exec → J4 parse), and the
-  `beforeToolCallbackSync` bounds are proven (deny-on-budget-0). **JS-1b done** except
-  swapping the fake URL for the real enterprise endpoint.
-- Real\*Gateway stubs (`@Profile("real")`, JS-2) compile in both profiles.
+Implementation is at the **repo root** (`pom.xml`, `src/`; FND-11 — an earlier `app/`
+subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3.
+- `mvn test` → **33/33 pass** (default profile); `./run-deterministic.sh` boots in
+  ~1s and `POST /api/diagnose/INC0012345` returns the full result end-to-end (offline).
+- `mvn -Padk test` → **46/46 pass**: the real ADK 1.7.0 `LlmAgent` loop runs
+  end-to-end against a local fake OpenAI endpoint (tool-call → tool exec → J4 parse),
+  the J8 tool allowlist + call bound are proven, and the orchestrator's timeout +
+  concurrency-coalescing (FND-15/31) are covered. (FND-30: hand-maintained test
+  counts drift by construction — treat these as "as of the last full run", not a
+  promise; `mvn test` / `mvn -Padk test` are the source of truth.)
+- Real\*Gateway connectors (JS-2) compile in both profiles and are selected per
+  connector via `@ConditionalOnProperty(triage.connectors.<system>)`, **not**
+  `@Profile` (FND-10).
 - **2026-07-23 simplification**: human-confirm gate removed → **automatic two-comment
   write-back** (sources, then advisory diagnosis); multi-agent/loops explored & deferred
-  (`../discovery/servicenow-triage-java/3-synthesize/dead-ends.md`). Tests now **3/3**
-  (default) and **5/5** (`-Padk`). Walkthrough → **[DEMO.md](DEMO.md)** (screenshots
-  deferred until the app is finalized). Pitch deck + workflow diagram published as artifacts.
+  (`../discovery/servicenow-triage-java/3-synthesize/dead-ends.md`). Walkthrough →
+  **[DEMO.md](DEMO.md)** (screenshots deferred until the app is finalized). Pitch
+  deck + workflow diagram published as artifacts.
 
 | ID | Concept | Complexity | State | Depends on |
 |----|---------|-----------|-------|------------|

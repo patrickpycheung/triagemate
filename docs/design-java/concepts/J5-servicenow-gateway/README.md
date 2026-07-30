@@ -1,7 +1,8 @@
 # J5 — ServiceNow Gateway (the primary source)
 
-**State**: 🟡 Drafted · **Complexity**: Moderate · **Depends on**: J3, J4 ·
-**Carries**: RC5 (confirmed work-note write)
+**State**: 🟢 Built · **Complexity**: Moderate · **Depends on**: J3, J4 ·
+**Carries**: RC5 (automatic work-note write — the original "confirmed" human-gate
+wording was superseded 2026-07-23, see below)
 
 ## Essence
 ServiceNow is the **primary** evidence source, not just the trigger. The biggest
@@ -47,8 +48,10 @@ The earlier human-confirm gate is **removed** (see `PIVOT.md` / J8).
 **real dev ServiceNow ticket** while evidence stays mock (`snow-live` profile). The
 target journal is configurable — `triage.servicenow.write-field=work_notes` (default,
 internal) or `comments` (customer-facing). Reads use `sysparm_display_value=true` for
-readable names. Runbook: `app/README.md` → "Live demo". (Auto-trigger on ticket
-creation is deferred — `docs/discovery/servicenow-auto-trigger/`.)
+readable names. Runbook: `docs/design-java/DEMO-RUNBOOK.md` → "Live demo" (FND-11:
+there is no `app/` directory — `pom.xml`/`src/` are at the repo root). Automatic
+triggering is **no longer deferred** — see **J10** (K1 outbound polling); this
+gateway's `findIncidentsCreatedSince` is what J10 polls through (FND-21).
 
 ## Verification
 - `MockServiceNowGateway` serves the J7 dataset incident + 2–3 similar resolved

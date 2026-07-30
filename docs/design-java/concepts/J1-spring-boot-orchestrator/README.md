@@ -1,18 +1,26 @@
 # J1 — Spring Boot Orchestrator
 
-**State**: 🟡 Drafted · **Complexity**: Moderate · **Depends on**: J3, J4
+**State**: 🟢 Built · **Complexity**: Moderate · **Depends on**: J3, J4, J5, J8
 
 ## Essence
-The Spring Boot skeleton and the single entry point. A manual HTTP trigger accepts
-an incident number and runs the bounded diagnosis flow to completion, returning the
-structured report (J4). "One careful investigator holding several tools" — not four
-agents shouting at each other.
+The Spring Boot skeleton and the shared entry point both triggers call through.
+`DiagnosisOrchestrator.run(incidentNumber)` runs the bounded diagnosis flow to
+completion and returns the structured result (J4). "One careful investigator
+holding several tools" — not four agents shouting at each other.
+
+**Two triggers, one orchestrator (FND-21)**: the manual `DiagnosisController` below
+(K3) and the automatic `IncidentPoller` (J10, K1) both call `run()` directly — that
+is the one place their calls meet, which is also why concurrent-call coalescing
+(FND-31, below) lives here rather than in either trigger.
 
 ## Design
-- **`DiagnosisController`** — `POST /api/diagnose/{incidentNumber}` → 202/200 with
-  `DiagnosisReport` JSON. (Manual trigger is the demo path; a ServiceNow
-  Business-Rule webhook to this same endpoint is the "if we have time" upgrade —
-  no code change to the core.)
+- **`DiagnosisController`** — `POST /api/diagnose/{incidentNumber}` → 200 with
+  `DiagnosisResult` JSON (`report` + `trace` + `engine` — see FND-23 below). This is
+  the **K3 manual trigger** (DDS `servicenow-local-trigger`); K1 is J10's poller,
+  calling the same orchestrator without going through this HTTP route at all. There
+  is no inbound webhook here and none is planned — see the FND-24 note under J10:
+  ServiceNow cannot reach this app on a corp-network laptop, which is the reason K1
+  polling exists in the first place.
 - **`DiagnosisOrchestrator`** — owns the run: builds `IncidentContext` (J5), invokes
   the active `DiagnosisEngine` (J2 — either the ADK agent or the offline deterministic
   engine, selected by `triage.engine`), collects the report (J4), triggers the
@@ -43,11 +51,13 @@ agents shouting at each other.
   instead of returning a 500 — disclosed as the first trace line, never silent. When the
   deterministic engine is already the active one, its failures propagate normally (there
   is nothing to fall back to, and a bug there should surface as a bug).
-- **`IncidentUnderstandingService`** — Step-2 "clarify symptom": LLM turns the raw
-  ticket into the structured interpretation (symptom, function, env, identifiers,
-  missing info). Cheap, high-value, runs even if every other tool is mocked.
-- **Profiles**: `mock` (default, self-contained demo) and `real` select
-  `Mock*Gateway` vs `Real*Gateway` (J3) via `@Profile` / `@ConditionalOnProperty`.
+- Symptom clarification lives **inside each engine** (`DeterministicDiagnosisEngine` /
+  `AdkDiagnosisEngine`, J2) — there is no separate understanding-service class (FND-12
+  corrected this; earlier drafts named a component that was never built this way).
+- **Connector selection**: per-connector `@ConditionalOnProperty(name=
+  "triage.connectors.<system>", havingValue="mock"|"real")` (J3) — **not** Spring
+  `@Profile`, and there is no `mock` Spring profile at all. Mix freely: e.g.
+  ServiceNow real while evidence stays mock (FND-10 corrected this).
 - **Maven**: single Spring Boot app module for the hackathon (multi-module later);
   Java 21, Spring Boot 3.4.x, mirrors `auspost-mcp` conventions.
 
@@ -56,8 +66,8 @@ agents shouting at each other.
 @RestController @RequestMapping("/api/diagnose")
 class DiagnosisController {
   @PostMapping("/{incident}")
-  DiagnosisReport diagnose(@PathVariable String incident) {
-    return orchestrator.run(incident);
+  DiagnosisResult diagnose(@PathVariable String incident) {
+    return orchestrator.run(incident);   // report + trace + engine (FND-23)
   }
 }
 ```

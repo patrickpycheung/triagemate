@@ -23,6 +23,13 @@ triage:
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 
+  agent:
+    # FND-27: was previously an inline @Value default only, absent from both this file
+    # and every card — every other triage.* key is declared here. J8's tool-call
+    # budget (J2's BoundsCallback); the allowlist itself is not configurable, it's the
+    # fixed set of 8 registered tools (see AdkDiagnosisEngine.ALLOWED_TOOLS).
+    max-tool-calls: 10
+
   trigger:
     # K1 — outbound polling (DDS servicenow-local-trigger). ServiceNow can't reach a
     # corp-network laptop, so the app polls out instead of being pushed to.
@@ -53,12 +60,16 @@ triage:
     #   comments   — "Additional comments", customer-facing
     write-field: work_notes
 
-  # Bounded Sumo scopes the agent may search (J8 allowlist).
+  # Bounded Sumo scopes the agent may search (J8 allowlist). FND-20: max-results and
+  # max-window-minutes are now actually read and enforced in TriageMateTools.searchLogs
+  # (server-side) — previously max-results was declared here but the code hardcoded 20,
+  # and the time window came straight from the model with no span check at all.
   sumo:
     allowed-scopes:
       - prod/payment
       - prod/order-api
     max-results: 20
+    max-window-minutes: 30
 
   # Credentials for real connectors. Set these in secrets.properties (preferred, see
   # above) as triage.integrations.*, or via the env vars below. Blank in the offline demo.

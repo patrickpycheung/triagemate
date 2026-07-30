@@ -1,6 +1,6 @@
 # J2 — ADK Agent Loop
 
-**State**: 🟡 Drafted · **Complexity**: Critical · **Depends on**: J1, J3 ·
+**State**: 🟢 Built · **Complexity**: Critical · **Depends on**: J1, J3 ·
 **Gates on Spike JS-1**
 
 ## Essence
@@ -55,14 +55,29 @@ hard-fail on stage. Two consequences worth stating here:
   > present — and a blank one throws, which the FND-7 fallback then turns into a silent
   > degraded run (this is exactly how spike C2 appeared to pass while never calling the
   > model). `secrets.properties.example` ships a placeholder for this reason.
-- **Macro-flow = `SequentialAgent`** with sub-steps (deterministic order per the
-  analysis): `understand → identifyCandidates → knowledge → (logs?) → (code?) →
-  report`. Each step is an `LlmAgent` limited to the tools relevant to that step.
-- **Tools** = `FunctionTool.create(XxxTool.class, "method")` (J3). The tool
-  allowlist per step is set by the app, not the model.
-- **Bounds (`RunConfig` + callbacks)**: max iterations / max tool calls, per-tool
-  result caps, timeouts. Enforced by `beforeToolCallback` (J8) — reject
-  out-of-allowlist calls, clamp result sizes, count calls.
+- **Macro-flow = one `LlmAgent` holding all eight tools (FND-13, corrected 2026-07-30).**
+  Earlier drafts of this card specified a `SequentialAgent` with per-step tool
+  allowlists (`understand → identifyCandidates → knowledge → logs? → code? →
+  report`, each step limited to its own tools). The built agent is a single
+  `LlmAgent`; the model chooses its own step order within one flat tool set. The J8
+  allowlist (`BoundsCallback`, fixed for FND-8/J8 on 2026-07-30) is **global** — every
+  registered tool, for the whole run — not per-step. If staged sub-agents are wanted
+  later, that is new work, not a doc fix; until then this card should not claim the
+  stronger per-step property.
+- **Tools** = `FunctionTool.create(TriageMateTools.class, "method")` (J3/J6), the
+  eight registered in `AdkDiagnosisEngine.ALLOWED_TOOLS`: `get_incident`,
+  `find_similar_incidents`, `find_ownership`, `search_confluence`, `search_logs`,
+  `search_code`, `find_page_contributors`, `find_recent_committers` — the last two
+  back **J9**'s "who to talk to" suggestion (FND-21: not previously cross-referenced
+  here). Names are ADK `@Schema` names (snake_case), **not** the Java method names —
+  the allowlist must match what ADK actually reports as `tool.name()`.
+- **Bounds (`RunConfig` + callbacks)**: max tool calls — `triage.agent.max-tool-calls`
+  (default 10, declared in `application.yml`; FND-27, previously an inline default only,
+  absent from config and every card) — an allowlist of exactly those eight names,
+  per-tool result caps, timeouts (orchestrator-level, J1, FND-15).
+  Enforced by `beforeToolCallback` (J8) — reject out-of-allowlist calls (real as of
+  the J8 fix; previously documented but not implemented), clamp result sizes, count
+  calls.
 - **Runner**: `runner.runAsync(userId, sessionId, msg, runConfig)` → `Flowable<Event>`;
   orchestrator (J1) subscribes, surfaces the final structured report and the event
   stream (→ J8 trace + J7 UI "it really consulted the sources").
@@ -90,6 +105,8 @@ enterprise endpoint → one successful tool round-trip returning parsed JSON. Ti
 - Malformed final JSON triggers exactly one repair retry, then a degraded report.
 
 ## Open / risks
-- RxJava (`Flowable`/`Single`) ergonomics for a Java-team new to it → keep the
-  reactive surface inside `AdkAgentConfig`; expose a blocking `run()` to J1.
-- ADK v0.8.0 API drift → pin the version; Spring AI fallback de-risks it.
+- RxJava (`Flowable`/`Single`) ergonomics for a Java-team new to it → the reactive
+  surface stays inside `AdkDiagnosisEngine`; `diagnose()` is a blocking call to J1.
+- ~~ADK v0.8.0 API drift~~ — resolved at Spike JS-1 (FND-28): the project is pinned to
+  GA **1.7.0**, not 0.8.0; this line contradicted the Versions section above it and
+  was stale from before that spike ran.

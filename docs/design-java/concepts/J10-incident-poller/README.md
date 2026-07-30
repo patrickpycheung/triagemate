@@ -93,8 +93,10 @@ currently the only place it surfaces on an unattended run.
 
 ## Verification
 
-- 10 unit tests in `IncidentPollerTest`, including the two properties above stated as
-  executable claims: `ownWorkNoteWritesNeverRetriggerDiagnosis`,
+- `IncidentPollerTest` (FND-30: a hand-maintained count here drifts by construction
+  — see what's covered, not how many; `mvn test` is the source of truth), including
+  the two properties above stated as executable claims:
+  `ownWorkNoteWritesNeverRetriggerDiagnosis`,
   `incidentCreatedDuringProcessingIsNotSkipped`,
   `failedIncidentIsRetriedAndDoesNotStopTheBatch`, `overlappingTickIsSkipped`.
 - Offline end-to-end: `./run-deterministic.sh -Dspring-boot.run.arguments="--triage.trigger.poll.enabled=true --triage.trigger.poll.interval-ms=3000"`

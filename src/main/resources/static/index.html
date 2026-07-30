@@ -63,7 +63,9 @@ function render(data) {
   const cands = r.candidateSystems.map(c => `
     <div class="cand"><div>${esc(c.name)} <span class="src">${Math.round(c.confidence*100)}%</span></div>
     <div class="bar"><i style="width:${Math.round(c.confidence*100)}%"></i></div></div>`).join('');
-  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}</div>`).join('');
+  // FND-25: J7 always claimed "source badges + links" here; the link half was never
+  // rendered (only the reconstructed sources-comment preview below had it).
+  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</li>`).join('');
@@ -92,6 +94,26 @@ function render(data) {
       <b>no LLM was involved</b> — do not describe it as model reasoning.</p>
       ${degradedLine ? `<div class="trace" style="color:#f2b25c">${esc(degradedLine)}</div>` : ''}
     </div>` : '';
+
+  // FND-25: this card previously rendered unconditionally, reconstructed client-side
+  // from the report, regardless of whether writeback actually ran — with
+  // triage.writeback.enabled=false the audience was told comments were posted when
+  // none were. data.writebackPosted is set by DiagnosisOrchestrator AFTER the write
+  // decision, the only place that actually knows.
+  const writebackCard = data.writebackPosted ? `
+    <div class="card"><h2>Posted to ServiceNow — automatically</h2>
+      <p style="color:var(--muted);margin:-4px 0 14px;font-size:13px">Two advisory comments, sources first. It only comments — never reassigns, closes, or changes the ticket.</p>
+      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; SOURCES CONSULTED</span><ul style="margin:0;padding-left:18px">${sources||'<li>—</li>'}</ul></div>
+      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; FIRST-PASS DIAGNOSIS</span>
+        <p style="margin:0 0 5px"><b>What happened:</b> ${esc(r.reportedSymptom)}</p>
+        <p style="margin:0 0 5px"><b>Likely system:</b> ${esc((r.candidateSystems[0]||{}).name||'—')} &nbsp; <b>Likely team:</b> ${esc(r.suggestedAssignment.group)} (${esc(r.suggestedAssignment.confidence)})</p>
+        <p style="margin:0 0 5px"><b>Next check:</b> ${esc(r.recommendedNextAction)}</p>
+        <p class="advisory" style="margin:0">Advisory only — no reassignment or changes made. The assigned engineer decides.</p></div>
+    </div>` : `
+    <div class="card"><h2>ServiceNow write-back — NOT posted</h2>
+      <p style="color:var(--muted);margin:-4px 0 0;font-size:13px"><code>triage.writeback.enabled=false</code> — the diagnosis below is real, but nothing was written to the ticket. This is a config toggle, not a failure.</p>
+    </div>`;
+
   document.getElementById('out').innerHTML = `
     ${banner}
     <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
@@ -108,15 +130,7 @@ function render(data) {
     <div class="card"><h2>Contradicting evidence</h2><ul>${contra||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
-    <div class="card"><h2>Posted to ServiceNow — automatically</h2>
-      <p style="color:var(--muted);margin:-4px 0 14px;font-size:13px">Two advisory comments, sources first. It only comments — never reassigns, closes, or changes the ticket.</p>
-      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; SOURCES CONSULTED</span><ul style="margin:0;padding-left:18px">${sources||'<li>—</li>'}</ul></div>
-      <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; FIRST-PASS DIAGNOSIS</span>
-        <p style="margin:0 0 5px"><b>What happened:</b> ${esc(r.reportedSymptom)}</p>
-        <p style="margin:0 0 5px"><b>Likely system:</b> ${esc((r.candidateSystems[0]||{}).name||'—')} &nbsp; <b>Likely team:</b> ${esc(r.suggestedAssignment.group)} (${esc(r.suggestedAssignment.confidence)})</p>
-        <p style="margin:0 0 5px"><b>Next check:</b> ${esc(r.recommendedNextAction)}</p>
-        <p class="advisory" style="margin:0">Advisory only — no reassignment or changes made. The assigned engineer decides.</p></div>
-    </div>
+    ${writebackCard}
     <div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
 }
 </script>

@@ -25,12 +25,19 @@ public final class TriageMateTools {
     private static SumoGateway sumo;
     private static GitLabGateway gitLab;
     private static List<String> sumoAllowlist = List.of("prod/payment", "prod/order-api");
+    // FND-20: these two were previously not real bounds — max-results was a hardcoded
+    // 20 (triage.sumo.max-results was declared in application.yml and never read), and
+    // the time window was taken verbatim from the model with no span check at all. A
+    // bound the model can set is not a bound.
+    private static int sumoMaxResults = 20;
+    private static int sumoMaxWindowMinutes = 30;
 
     private TriageMateTools() {}
 
     static void wire(ServiceNowGateway sn, ConfluenceGateway cf, SumoGateway su,
-                     GitLabGateway gl, List<String> allowlist) {
+                     GitLabGateway gl, List<String> allowlist, int maxResults, int maxWindowMinutes) {
         serviceNow = sn; confluence = cf; sumo = su; gitLab = gl; sumoAllowlist = allowlist;
+        sumoMaxResults = maxResults; sumoMaxWindowMinutes = maxWindowMinutes;
     }
 
     @Schema(name = "get_incident",
@@ -66,7 +73,8 @@ public final class TriageMateTools {
 
     @Schema(name = "search_logs",
             description = "Run ONE bounded Sumo Logic search. scope must be an allowlisted _sourceCategory; "
-                    + "window is fixed by the caller; results are capped. Do not attempt broad queries.")
+                    + "the time window and result count are capped by the app regardless of what is asked "
+                    + "for. Do not attempt broad queries.")
     public static List<LogEvidence> searchLogs(
             @Schema(name = "scope") String scope,
             @Schema(name = "query") String query,
@@ -75,8 +83,20 @@ public final class TriageMateTools {
         if (!sumoAllowlist.contains(scope)) {
             throw new IllegalArgumentException("scope not allowlisted: " + scope);   // J8 guardrail
         }
-        return sumo.search(new LogSearchRequest(scope, query,
-                OffsetDateTime.parse(fromIso), OffsetDateTime.parse(toIso), 20));
+        OffsetDateTime from = OffsetDateTime.parse(fromIso);
+        OffsetDateTime to = OffsetDateTime.parse(toIso);
+        if (from.isAfter(to)) {
+            OffsetDateTime tmp = from; from = to; to = tmp;   // defensive; a model-supplied pair could be reversed
+        }
+        // FND-20: bound the window server-side. The model may ask for anything; the app
+        // clamps to at most sumoMaxWindowMinutes, anchored on the requested END so a
+        // too-wide request still searches the most recent relevant slice rather than
+        // silently returning nothing.
+        OffsetDateTime earliestAllowed = to.minusMinutes(sumoMaxWindowMinutes);
+        if (from.isBefore(earliestAllowed)) {
+            from = earliestAllowed;
+        }
+        return sumo.search(new LogSearchRequest(scope, query, from, to, sumoMaxResults));
     }
 
     @Schema(name = "search_code",
