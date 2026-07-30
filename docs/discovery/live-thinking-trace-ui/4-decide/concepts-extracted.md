@@ -246,7 +246,51 @@ CSS-only, driven by a `data-state` attribute flip:
   conveyed by motion alone.
 - Reuses the existing `.ev` left-rail idiom so it looks native.
 
-### LT6 — Real vendor logos: operator/legal call (safe default already chosen)
+### LT6 — Real vendor logos ✅ **OPERATOR RULED 2026-07-30: use real vendor logos**
+
+**Status: RULED and IMPLEMENTED** (as far as assets allow). This supersedes the
+house-glyph default recommended below, which is retained for the record.
+
+Implemented: real marks staged in `src/main/resources/static/logos/` (+ a provenance
+`README.md`), swapped into C's `sketch.html` through the single `PLAT` table, and
+**verified by headless-Chromium render** — not just asserted:
+
+| Platform | Treatment | Render verdict at badge size |
+|---|---|---|
+| **GitLab** | real simple-icons glyph (CC0 drawing) | ✅ strongest — tanuki unmistakable |
+| **Confluence** | real simple-icons glyph (CC0 drawing) | ✅ good |
+| **Sumo Logic** | real simple-icons **wordmark** (CC0 drawing) | ⚠️ weakest — legible but small; needs the wide slot (76 px), illegible in a 32 px square |
+| **ServiceNow** | brand-green **nominative wordmark text** | ✅ surprisingly the most legible of the four |
+
+**Why ServiceNow is text and not a logo — a hard blocker, not a preference.** Verified
+2026-07-30: it is **absent from simple-icons entirely** (all 3,450 titles searched); its
+logo-usage policy **requires written permission** for third-party use
+(`legalbrandprotection@servicenow.com`) and states they cannot accommodate all requests;
+its official download page offers **JPG/EPS only, no SVG**; and they periodically review
+third-party collateral for compliance. So no asset is obtainable on a hackathon timescale.
+Their guidelines **do** permit nominative use of the *name*, and ServiceNow's own brand is a
+lowercase wordmark, so brand-coloured text is both lawful and visually faithful.
+**To upgrade**: obtain approved artwork from your organisation's ServiceNow Partner/brand
+portal (a customer likely already has access), drop it in as
+`static/logos/servicenow.svg`, and change **one line** of the `PLAT` table.
+
+**Layout consequence of going real**: the badge slot had to become **76 px wide × 32 px
+high** rather than a 32 px square, because two of the four brands (ServiceNow, Sumo Logic)
+*are* wordmarks. Glyph brands centre in the slot; wordmark brands fill it. Rows stay aligned
+because the slot width is fixed.
+
+**Attribution added** (required once real marks are used): a footer note —
+*"Platform names and logos are trademarks of their respective owners, used here to identify
+the systems consulted."*
+
+**Risk boundary to respect**: this is defensible for an **internal, offline, projector-only**
+demo (nominative identification of systems consulted). It gets riskier if the repo goes
+public, the deck is posted externally, or a recorded run circulates — in which case revisit,
+since CC0 covers the *drawing*, never the *trademark*.
+
+---
+
+#### Superseded recommendation (retained for the record): house glyphs
 
 **Default shipped: house glyphs + 2-letter lettermarks tinted with real brand hex**
 (ServiceNow `#62D84E` `SN`, Confluence `#2684FF` `CF`, Sumo `#4C7CFF` `SL`, GitLab
