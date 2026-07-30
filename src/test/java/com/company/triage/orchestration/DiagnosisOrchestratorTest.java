@@ -18,6 +18,7 @@ class DiagnosisOrchestratorTest {
     static class RecordingServiceNow implements ServiceNowGateway {
         final List<String> notes = new ArrayList<>();
         public IncidentContext getIncident(String n) { return null; }
+        public List<com.company.triage.model.NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) { return List.of(); }
         public List<ResolvedIncident> findSimilarIncidents(IncidentContext c) { return List.of(); }
         public Optional<ServiceOwnership> findOwnership(String a) { return Optional.empty(); }
         public void addWorkNote(String number, String note) { notes.add(note); }

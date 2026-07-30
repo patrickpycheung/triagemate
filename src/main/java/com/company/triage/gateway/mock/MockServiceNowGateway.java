@@ -2,6 +2,7 @@ package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import org.slf4j.Logger;
@@ -27,6 +28,10 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private static final Logger log = LoggerFactory.getLogger(MockServiceNowGateway.class);
     private final List<String> postedNotes = new ArrayList<>();
 
+    /** One-shot: lets the offline K1 poller see a single "new" incident. See below. */
+    private final java.util.concurrent.atomic.AtomicBoolean newIncidentAvailable =
+            new java.util.concurrent.atomic.AtomicBoolean(true);
+
     @Override
     public IncidentContext getIncident(String number) {
         return new IncidentContext(
@@ -46,6 +51,26 @@ public class MockServiceNowGateway implements ServiceNowGateway {
                 "Order Portal",
                 List.of("Service Desk (initial)")
         );
+    }
+
+    /**
+     * Simulates <b>exactly one newly-arrived incident</b>, then nothing.
+     *
+     * <p>The fixture incident's {@code openedAt} is a fixed date in the past, so comparing
+     * it against the poller's "started just now" cursor would return empty forever and the
+     * K1 poller could never be exercised offline. Instead the first call reports
+     * {@code INC0012345} as new and every later call reports nothing — which is precisely
+     * the behaviour that matters to verify: the poller triages a new incident <b>once</b>
+     * and then goes quiet, even though the run posts work notes (FND-1).
+     */
+    @Override
+    public List<NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) {
+        if (limit <= 0 || !newIncidentAvailable.compareAndSet(true, false)) {
+            return List.of();
+        }
+        log.info("mock: reporting INC0012345 as newly created (one-shot, offline poller demo)");
+        // createdAt just after the cursor: what a genuinely-new incident looks like.
+        return List.of(new NewIncident("INC0012345", since.plusSeconds(1)));
     }
 
     @Override

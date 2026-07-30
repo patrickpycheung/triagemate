@@ -69,14 +69,17 @@ public class DiagnosisOrchestrator {
             return engine.diagnose(incidentNumber);
         }
         try {
-            return engine.diagnose(incidentNumber);
+            DiagnosisResult live = engine.diagnose(incidentNumber);
+            // The primary engine ran; label the result with which one it actually was.
+            return new DiagnosisResult(live.report(), live.trace(), DiagnosisResult.Engine.ADK);
         } catch (Exception e) {
             log.warn("primary engine failed for {} ({}: {}) — degrading to the deterministic engine",
                     incidentNumber, e.getClass().getSimpleName(), e.getMessage());
             DiagnosisResult fallback = fallbackEngine.diagnose(incidentNumber);
             fallback.trace().add(0, "⚠ primary engine did not converge (%s: %s) — degraded to the deterministic engine"
                     .formatted(e.getClass().getSimpleName(), e.getMessage()));
-            return fallback;
+            return new DiagnosisResult(fallback.report(), fallback.trace(),
+                    DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
         }
     }
 }

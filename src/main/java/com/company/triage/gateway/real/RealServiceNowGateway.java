@@ -3,6 +3,7 @@ package com.company.triage.gateway.real;
 import com.company.triage.config.IntegrationProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -112,6 +113,64 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 .body("{\"" + writeField + "\":" + jsonString(workNote) + "}")
                 .retrieve().toBodilessEntity();
         log.info("posted advisory {} to {}", writeField, number);
+    }
+
+    /**
+     * K1 poller feed. Queries {@code sys_created_on > since}, oldest first.
+     *
+     * <p>Deliberately <b>created</b>, not <b>updated</b> (FND-1): {@code addWorkNote} bumps
+     * {@code sys_updated_on}, so an updated-since query would re-select every incident this
+     * app comments on and re-run its diagnosis forever. {@code sys_created_on} is immutable.
+     *
+     * <p>ServiceNow compares dates in the <b>instance's UTC</b> representation, so the
+     * cursor is converted to UTC and formatted {@code yyyy-MM-dd HH:mm:ss}.
+     */
+    @Override
+    public List<NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) {
+        if (limit <= 0) return List.of();
+        String utc = since.atZoneSameInstant(java.time.ZoneOffset.UTC).format(SNOW_DATETIME);
+        String query = "sys_created_on>" + utc + "^ORDERBYsys_created_on";
+
+        JsonNode resp = http.get()
+                .uri(uri -> uri.path("/api/now/table/incident")
+                        .queryParam("sysparm_query", query)
+                        .queryParam("sysparm_fields", "number,sys_created_on")
+                        // Raw values, NOT display values: sys_created_on must come back in
+                        // the parseable UTC form, not the instance's user-facing date format.
+                        .queryParam("sysparm_display_value", "false")
+                        .queryParam("sysparm_limit", limit).build())
+                .retrieve().body(JsonNode.class);
+        JsonNode result = resp == null ? null : resp.get("result");
+        if (result == null || !result.isArray()) return List.of();
+
+        List<NewIncident> found = new ArrayList<>();
+        result.forEach(row -> {
+            String n = text(row, "number");
+            if (n == null || n.isBlank()) return;
+            OffsetDateTime createdAt = parseSnowDateTime(text(row, "sys_created_on"));
+            // A row we can't date is worse than useless for a high-water-mark cursor:
+            // including it with a guessed timestamp risks skipping real incidents.
+            if (createdAt == null) {
+                log.warn("poll: skipping {} — unparseable sys_created_on {}", n, text(row, "sys_created_on"));
+                return;
+            }
+            found.add(new NewIncident(n, createdAt));
+        });
+        log.debug("poll: {} incident(s) created after {}", found.size(), utc);
+        return found;
+    }
+
+    private static final java.time.format.DateTimeFormatter SNOW_DATETIME =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** ServiceNow returns raw datetimes as {@code yyyy-MM-dd HH:mm:ss} in UTC. */
+    private static OffsetDateTime parseSnowDateTime(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return java.time.LocalDateTime.parse(raw.trim(), SNOW_DATETIME).atOffset(java.time.ZoneOffset.UTC);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // --- helpers ----------------------------------------------------------------

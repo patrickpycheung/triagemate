@@ -33,6 +33,7 @@ with a downloaded Maven 3.9.9 + Temurin JDK 21:
 | J7 | demo-ui-and-dataset | Moderate | 🟢 Built (UI + ground-truth dataset) | J4 |
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
+| J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
 
 ## Spikes
 

@@ -10,7 +10,26 @@ Format: `FND-<n>` · severity · where · what · why it matters.
 
 ---
 
-## FND-1 — Poller re-trigger loop: J5's own writes bump the K2 cursor · **HIGH**
+## FND-1 — Poller re-trigger loop: J5's own writes bump the K2 cursor · **HIGH** · ✅ **RESOLVED 2026-07-30**
+
+> **Resolution**: the poller was built (CDS `J10-incident-poller`) querying
+> **`sys_created_on`**, not `sys_updated_on`. Creation time is immutable, so J5's work-note
+> writes cannot resurface a ticket — a structural fix rather than a filter, and what
+> `C-T3: insert-only` always intended. Three further layers: an in-flight claim set, a
+> bounded completed set, and J5's existing note-level idempotency.
+>
+> Two additional bugs were found and fixed while implementing it, both of which would have
+> caused **silent incident loss** (the opposite failure to the one this finding describes):
+> advancing the cursor to `now()` after a batch drops anything created *during* processing;
+> and a "newest handled" high-water mark drops an early failure whenever a later incident in
+> the same batch succeeds. The cursor now advances only across an unbroken run of handled
+> incidents, oldest first. Both are asserted as tests
+> (`incidentCreatedDuringProcessingIsNotSkipped`, `failedIncidentIsRetriedAndDoesNotStopTheBatch`).
+>
+> **Still open, tracked on the J10 card**: cursor + completed set are in-process only, so a
+> restart skips incidents created while the app was down.
+
+Original finding (kept for record):
 
 **Where**: `docs/discovery/servicenow-local-trigger/4-decide/concepts-extracted.md`
 (K1 `sysparm_query` is *updated-since*, K2 cursor is max `sys_updated_on`) vs

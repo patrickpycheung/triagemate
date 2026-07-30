@@ -23,6 +23,17 @@ triage:
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 
+  trigger:
+    # K1 — outbound polling (DDS servicenow-local-trigger). ServiceNow can't reach a
+    # corp-network laptop, so the app polls out instead of being pushed to.
+    # OFF by default: the demo uses the manual POST /api/diagnose/{number} (K3), and a
+    # poller waking up mid-presentation to diagnose unrelated tickets is a stage hazard.
+    poll:
+      enabled: false
+      interval-ms: 30000     # 30s — poll latency is the accepted cost of no inbound path
+      batch-limit: 10        # max incidents pulled per tick
+      completed-cap: 500     # in-process completed-set bound (FND-1 layer 3)
+
   writeback:
     # Automatic advisory write-back (J5) — two comments per run (sources first, then
     # diagnosis). No human in the loop. It only comments; never reassigns/closes/re-prioritises.
