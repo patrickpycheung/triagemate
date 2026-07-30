@@ -70,16 +70,28 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
 
    </details>
 
-3. **[C2] End-to-end** — ⏳ **NEXT, and now unblocked** (C1 proved the proxy; this proves
-   the *app* through it). Set `triage.integrations.llm.{base-url,model}` in
-   `secrets.properties` (`http://localhost:4000/v1`, `claude-opus-4.6`) and run
-   **`./run-adk.sh`** against one incident → expect advisory comments posted and a trace
-   showing bounded, real tool calls.
+3. **[C2] End-to-end** — ⚠️ **ATTEMPTED 2026-07-30, DID NOT VALIDATE. Still open.**
 
-   Two things only C2 can answer: does a **real** frontier model converge inside the
-   14-call budget (`maxToolCalls + 4`), and does it return **valid J4 JSON**? Safe to
-   attempt now — FND-7 is fixed, so a non-convergence **degrades to the deterministic
-   engine** with a disclosed trace line instead of returning a 500.
+   The run returned HTTP 200 with a complete, correct report (`Payments Platform Support`,
+   real log↔code citation, two comments posted) — but **the ADK engine never executed**. It
+   threw immediately on a blank `triage.integrations.llm.api-key` and the FND-7 fallback
+   degraded to the **deterministic engine**. No LLM was called. Evidence:
+   `bin/spike-output.log`, trace line 1:
+   `⚠ primary engine did not converge (IllegalStateException: Missing required config:
+   LLM_API_KEY …) — degraded to the deterministic engine`.
+
+   Two consequences, both now handled: the blank-api-key trigger is fixed
+   (`secrets.properties.example` ships a placeholder — the proxy ignores the value, but
+   `AdkModelFactory.require()` rejects *blank*), and the "a degraded run looks like a
+   successful one" hazard this exposed is logged as **FND-8** with a UI banner mitigation.
+
+   **To actually complete C2**: ensure `llm.api-key` is **non-empty**, then
+   `./run-adk.sh` → POST one incident → **confirm no degradation banner / no `degraded`
+   line in the trace**, and that the trace shows real `adk:` tool calls.
+
+   Still unanswered until then: does a **real** frontier model converge inside the 14-call
+   budget (`maxToolCalls + 4`), and does it return **valid J4 JSON**? Safe to retry — a
+   genuine non-convergence degrades gracefully rather than 500ing.
 
 ## Note on the operator's premise
 "Copilot CLI already has the planning, so we don't build it" is true — but we **already
