@@ -14,6 +14,24 @@ Drained 2026-07-30 by `/found-issues-resolve`.
 
 ---
 
+## FND-42 — No in-engine repair retry on malformed ADK JSON · **LOW**
+
+**Where**: `AdkDiagnosisEngine`.
+**What**: originally logged as deferred (a design decision, not a bug — the existing
+fail-fast + FND-7 fallback behavior was correct). Applying the ADM-1 method (`/decide`,
+2026-07-30): reversible, local, no charter touch, and the change is a strict superset
+of existing behavior (same fallback if the retry also fails) — recognized as a safe,
+low-cost win and built rather than left logged.
+**What changed**: on a parse failure, one repair message is now sent on the SAME ADK
+session/runner, so the retry re-prompts with the parse error rather than
+re-investigating. `RunConfig`'s LLM-call headroom bumped `+4`→`+5` to cover the extra
+round trip.
+- **Resolution**: fixed:ae06eb7 — `AdkLiveRoundTripTest#malformedFinalResponseGetsOneRepairRetryThenSucceeds`
+- **Escape**: n/a — this was correctly logged rather than escaped; the decision record
+  is the point of interest, not a process gap.
+
+---
+
 ## FND-33 — get_incident/find_similar_incidents took a model-suppliable incidentNumber · **HIGH**
 
 **Where**: `TriageMateTools.getIncident`/`findSimilarIncidents`.
