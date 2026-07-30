@@ -14,6 +14,132 @@ Drained 2026-07-30 by `/found-issues-resolve`.
 
 ---
 
+## FND-33 — get_incident/find_similar_incidents took a model-suppliable incidentNumber · **HIGH**
+
+**Where**: `TriageMateTools.getIncident`/`findSimilarIncidents`.
+**What**: both tools accepted a free-form `incidentNumber` argument like any other
+tool param, unbound to the incident this run was actually asked to diagnose — nothing
+stopped the model from fetching (and effectively diagnosing) a different incident.
+Found by the third `/doc-test cds` re-verification pass (direct Codex architecture
+review).
+- **Resolution**: fixed:e50ec13
+- **Escape**: design review — the identity-binding gap wasn't caught in the original
+  J2/J3 CDS convergence because bounds review focused on WHICH systems/scopes are
+  reachable (allowlists), not WHICH incident a call operates on; needs to be an
+  explicit architecture-review checklist item for any tool-calling agent design.
+
+## FND-34 — Writeback + poller HTTP calls had no timeout at all · **HIGH**
+
+**Where**: `DiagnosisOrchestrator.runOnce()`'s two `addWorkNote` calls,
+`IncidentPoller.pollOnce()`'s `findIncidentsCreatedSince` call.
+**What**: FND-15's wall-clock timeout only wraps `engine.diagnose()`. These calls run
+directly on the caller's thread (K3's HTTP thread, K1's single scheduler thread) with
+no bound, and `RestClient.Builder` had no configured timeout — a network partition
+could hang either thread forever. Found by the third `/doc-test cds` re-verification
+pass (direct Codex architecture review).
+- **Resolution**: fixed:e50ec13
+- **Escape**: implementation review — FND-15's own fix should have prompted the
+  question "does this timeout cover every blocking call this run makes, or just one
+  of them?"; narrow-scoped fixes for a broader-sounding problem name are an easy trap.
+
+## FND-35 — J2 claimed a "repair retry" that was never implemented · **MEDIUM**
+
+**Where**: `docs/design-java/concepts/J2-adk-agent-loop/README.md`,
+`AdkDiagnosisEngine.parse()`.
+**What**: J2's Design and Verification sections both claimed "one repair retry" on
+malformed JSON; `parse()` actually throws immediately — the log line there ("one
+repair retry recommended") was a recommendation in a log message, not implemented
+behavior. Found by the third `/doc-test cds` re-verification pass (Phase 3 scenario
+simulation).
+- **Resolution**: fixed:e50ec13 (doc corrected; the retry itself logged as FND-42,
+  a design decision, not built here)
+- **Escape**: doc review — an aspirational MVP claim that was never actually built
+  survived two prior `/doc-test cds` passes; scenario simulation (Phase 3, tracing a
+  concrete malformed-JSON case end-to-end) is what finally caught it, suggesting
+  conflict/architecture review alone under-covers "does the code do what the doc
+  says for this exact case."
+
+## FND-36 — writebackPosted reported config-intent, not actual outcome · **HIGH**
+
+**Where**: `DiagnosisOrchestrator.runOnce()`.
+**What**: `writebackPosted` was set from `writebackEnabled` (the config flag), not
+whether the writeback actually succeeded. If the second `addWorkNote` call threw
+after the first succeeded, the exception propagated out of `run()` uncaught — losing
+the whole diagnosis result (already-produced report, first comment already posted)
+and reporting nothing, rather than surfacing a truthful partial-failure. Found by the
+third `/doc-test cds` re-verification pass (direct Codex architecture review).
+- **Resolution**: fixed:e50ec13 — `DiagnosisOrchestratorTest#partialWritebackFailureIsDisclosedNotLost`
+- **Escape**: implementation review — this is the second time a `writebackPosted`-class
+  field diverged from ground truth (see FND-25); "does this field reflect an actual
+  outcome or an intended one" deserves a standing checklist item for any disclosed
+  status field, not just a one-time fix.
+
+## FND-37 — Incident number wasn't normalized before FND-31's coalescing map · **LOW**
+
+**Where**: `DiagnosisController.diagnose()`.
+**What**: `"INC0012345"`, `"inc0012345"`, and `" INC0012345 "` coalesced as three
+different keys, defeating FND-31's whole purpose for a caller that didn't type the
+number identically. Found by the third `/doc-test cds` re-verification pass (direct
+Codex architecture review).
+- **Resolution**: fixed:e50ec13
+- **Escape**: implementation review — a normalization step at an untrusted input
+  boundary is an easy checklist item that was simply missed when FND-31 was built.
+
+## FND-38 — GitLab project allowlist was documented, not enforced · **MEDIUM**
+
+**Where**: `TriageMateTools.searchCode`, J6/J8 docs.
+**What**: J6 and J8 both claimed an "allowlisted GitLab project" bound, matching the
+Sumo-scope pattern (FND-20) — but `search_code` accepted any model-supplied project
+string unchecked. Found independently three times in the third `/doc-test cds`
+re-verification pass: Phase 2 (Codex/Gemini-style CDS validation agent), the direct
+Codex architecture review, and J8's own internal self-contradiction (its "three
+layers" section didn't list this as one of them).
+- **Resolution**: fixed:e50ec13 — `TriageMateToolsSearchLogsTest#outOfAllowlistGitLabProjectIsRejected`
+- **Escape**: doc review — same root cause as FND-20 (a bound stated in prose without
+  a corresponding enforcement check); worth a standing rule that any claimed
+  allowlist/bound gets grepped for its enforcement site before the doc ships.
+
+## FND-39 — DiagnosisReportValidator only wired into the ADK engine · **LOW**
+
+**Where**: `DeterministicDiagnosisEngine.diagnose()`.
+**What**: FND-17's J4 semantic validator ran only on ADK-produced reports, not the
+deterministic engine's — an asymmetric-trust gap, even though the deterministic
+engine's hand-assembled report can't currently violate the contract. Found
+independently twice in the third `/doc-test cds` re-verification pass (direct Codex
+architecture review and a Claude architecture-review subagent).
+- **Resolution**: fixed:e50ec13
+- **Escape**: implementation review — when FND-17 built the validator, "wire it into
+  every path that produces a `DiagnosisReport`" should have been the default framing,
+  not "wire it into the path we're currently working on."
+
+## FND-40 — Sumo scope allowlist duplicated across two engines · **LOW**
+
+**Where**: `DeterministicDiagnosisEngine`, `TriageMateTools`.
+**What**: `DeterministicDiagnosisEngine` hardcoded its own copy of the Sumo scope
+list instead of reading `triage.sumo.allowed-scopes` like `TriageMateTools` does — the
+two lists agreed only by coincidence of identical defaults. Found by the third
+`/doc-test cds` re-verification pass (Claude architecture-review subagent).
+- **Resolution**: fixed:e50ec13
+- **Escape**: implementation review — a hardcoded literal that duplicates a value
+  already expressed as config elsewhere is a common single-source-of-truth miss;
+  worth a grep-for-duplicate-literals pass before closing out a config-driven bound.
+
+## FND-41 — IncidentPoller trusted gateway ordering without validating it · **LOW**
+
+**Where**: `IncidentPoller.pollOnce()`.
+**What**: the cursor-advance logic assumes `found` is oldest-first, relying entirely
+on `RealServiceNowGateway`'s `ORDERBYsys_created_on` query with no defensive check —
+an out-of-order batch (a different gateway implementation, a future query change)
+would silently corrupt the "unbroken handled prefix" invariant this class exists to
+guarantee. Found by the third `/doc-test cds` re-verification pass (direct Codex
+architecture review).
+- **Resolution**: fixed:e50ec13
+- **Escape**: implementation review — a correctness invariant that depends on an
+  upstream ordering guarantee should defend itself rather than trust the guarantee
+  holds forever; this is a general pattern worth a standing note in J10.
+
+---
+
 ## FND-32 — `docs/design-java/STATUS.md` is stale in its own header and counts · **LOW**
 
 **Where**: `STATUS.md:3` ("Phase: CDS Round 1 — concepts J1–J8 drafted") vs its table
