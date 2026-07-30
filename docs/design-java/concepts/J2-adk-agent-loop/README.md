@@ -8,16 +8,53 @@ The agentic core: Google ADK-for-Java runs a **bounded** loop where an enterpris
 LLM chooses search terms and interprets results, but the **application** controls
 which tools are permitted, their order, and their limits.
 
+## One of TWO engines, and not the default (FND-3)
+
+`DiagnosisEngine` has two implementations and `triage.engine` selects which is active:
+
+| `triage.engine` | Implementation | Needs |
+|---|---|---|
+| `deterministic` (**default**, `matchIfMissing = true`) | `DeterministicDiagnosisEngine` | nothing — no LLM, no network |
+| `adk` | `AdkDiagnosisEngine` (this card) | the `-Padk` build + a reachable OpenAI-compatible endpoint |
+
+This split is load-bearing for the demo, not an implementation detail: it is **D2** in DDS
+`orchestrator-vs-copilot-cli` — the guaranteed offline fallback that means the demo cannot
+hard-fail on stage. Two consequences worth stating here:
+
+- **The ADK engine is opt-in.** A plain `mvn spring-boot:run` never exercises this card;
+  `src/main/adk` is not even compiled without `-Padk`. Use `./run-adk.sh`.
+- **`DiagnosisOrchestrator` auto-degrades to the deterministic engine** if this one fails
+  (its `LlmCallsLimitExceededException` backstop, or any model/proxy/network failure),
+  disclosing it via `DiagnosisResult.engine = DEGRADED_TO_DETERMINISTIC` and a trace line
+  (FND-7 / FND-8). So a failure here is a *quality* regression, not an outage — which also
+  means a broken config can look like success. See J1.
+
 ## Design
-- **Model wiring (provider-neutral)** — wrap an OpenAI-compatible enterprise
-  endpoint with LangChain4j, then hand it to ADK:
+- **Model wiring (provider-neutral)** — wrap an OpenAI-compatible endpoint with
+  LangChain4j, then hand it to ADK. `AdkModelFactory` resolves each value
+  **most-specific-first: system property → environment variable → `secrets.properties`**,
+  so all three of these work (FND-4):
+
+  | Purpose | `secrets.properties` key (**documented route**) | env / `-D` fallback |
+  |---|---|---|
+  | endpoint | `triage.integrations.llm.base-url` | `LLM_BASE_URL` |
+  | key | `triage.integrations.llm.api-key` | `LLM_API_KEY` |
+  | model | `triage.integrations.llm.model` | `LLM_MODEL` |
+
   ```java
   OpenAiChatModel llm = OpenAiChatModel.builder()
-      .baseUrl(env("LLM_BASE_URL")).apiKey(env("LLM_API_KEY"))
-      .modelName(env("LLM_MODEL")).build();
-  LangChain4j adkModel = LangChain4j.builder().chatModel(llm)
-      .modelName(env("LLM_MODEL")).build();
+      .baseUrl(cfg("LLM_BASE_URL", "triage.integrations.llm.base-url"))
+      .apiKey(cfg("LLM_API_KEY",  "triage.integrations.llm.api-key"))
+      .modelName(cfg("LLM_MODEL", "triage.integrations.llm.model"))
+      .temperature(0.0)          // deterministic-ish triage
+      .build();
+  LangChain4j adkModel = LangChain4j.builder().chatModel(llm).modelName(model).build();
   ```
+  > **`api-key` must be non-blank even when the endpoint ignores it.** An OAuth-backed
+  > Copilot proxy does not check the value, but the factory *requires* the key to be
+  > present — and a blank one throws, which the FND-7 fallback then turns into a silent
+  > degraded run (this is exactly how spike C2 appeared to pass while never calling the
+  > model). `secrets.properties.example` ships a placeholder for this reason.
 - **Macro-flow = `SequentialAgent`** with sub-steps (deterministic order per the
   analysis): `understand → identifyCandidates → knowledge → (logs?) → (code?) →
   report`. Each step is an `LlmAgent` limited to the tools relevant to that step.

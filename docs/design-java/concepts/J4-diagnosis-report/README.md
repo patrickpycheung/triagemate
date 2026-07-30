@@ -31,6 +31,12 @@ UI (J7) mere renderings of it. This is the demo's spine.
     { "id": "e4", "source": "sumo", "summary": "matching ORD-4031 logs ...", "link": "..." },
     { "id": "e5", "source": "gitlab", "summary": "order-api Foo.java:118 emits ORD-4031", "link": "..." }
   ],
+  "suggestedContacts": [
+    { "name": "Priya Nair", "contact": "priya.nair@example.com",
+      "source": "confluence+gitlab",
+      "why": "edited the runbook and committed reconcile()",
+      "link": "...", "recency": "recent" }
+  ],
   "contradictingEvidence": ["Order API also emits ORD-4031 on a different path"],
   "missingInformation": ["Affected user ID", "Whether all users affected"],
   "recommendedNextAction": "Confirm the user has the ORDER_SUBMITTER entitlement",
@@ -48,6 +54,16 @@ UI (J7) mere renderings of it. This is the demo's spine.
 - Renders to the two ServiceNow comments (J5): `toSourcesNote()` (the cited
   evidence, posted first) and `toDiagnosisNote()` (the advisory view), and to the
   demo UI (J7). Report is the single source; both comments and the UI derive from it.
+- **`suggestedContacts` is UI-only and must never reach ServiceNow (J9).** It is the one
+  field that is *not* rendered into either comment. "Who to talk to" is a suggestion for
+  the engineer looking at our screen — naming individuals in an incident journal is a
+  customer-visible, permanently-retained accusation-by-proximity, and the people named
+  were inferred from wiki edits and commit history, not from any statement about fault.
+  So it renders in the UI (J7) only.
+  Enforced by `DiagnosisReportNoteTest#suggestedContactsNeverAppearInServiceNowNotes`
+  (FND-2) — before that test the exclusion held only because neither note-builder happened
+  to reference the field, which is not an invariant, just a coincidence waiting to be
+  edited away.
 
 ## Verification
 - Round-trips through Jackson; validator rejects a report with an empty

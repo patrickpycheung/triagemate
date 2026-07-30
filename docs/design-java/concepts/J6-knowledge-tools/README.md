@@ -36,9 +36,20 @@ payment_service.py) which emits the seeded distinctive log line.
 
 ## RC3 — Log↔Code reasoning (the wow moment)
 The LLM matches a runtime **log line** from Sumo to its **emitting statement** in the
-fetched source, citing **file:line** and the execution path — no deterministic
-engine, done by the model over the retrieved snippets. This visibly proves the copilot
-"consulted all the sources." Trust rule: it must **quote the exact** line it matched.
+fetched source, citing **file:line** and the execution path — **on the agentic path this
+needs no hand-written correlation engine**, the model does it over the retrieved snippets.
+This visibly proves the copilot "consulted all the sources." Trust rule: it must **quote
+the exact** line it matched.
+
+> **Scope note (FND-5).** "No deterministic engine" describes *how the agent does it*, not
+> a capability only the agent has. `DeterministicDiagnosisEngine` produces the same
+> `file:line` citation with **no LLM at all** (see its `Evidence` construction), and it is
+> both the app default and **D2**, the on-stage fallback. That matters: if the fallback
+> could not do log↔code citation, degrading to it would silently drop the evidence trail
+> that is the whole demo. It can. The difference is *how* the match is made — scripted
+> pattern-matching over the fixture universe vs. the model reasoning over retrieved
+> snippets — and how well it generalises beyond the seeded bug, not whether a citation
+> appears.
 
 ## Verification
 - Mock Sumo returns the seeded line; mock GitLab returns the emitting file; the agent
