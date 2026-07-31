@@ -28,6 +28,28 @@ hard-fail on stage. Two consequences worth stating here:
   disclosing it via `DiagnosisResult.engine = DEGRADED_TO_DETERMINISTIC` and a trace line
   (FND-7 / FND-8). So a failure here is a *quality* regression, not an outage — which also
   means a broken config can look like success. See J1.
+  **This only held for the seeded incident until 2026-07-31 (FND-63).** The deterministic
+  engine's report hardcoded two evidence ids from the demo fixture, so for any other incident
+  the J4 validator's dangling-ref rule threw — the orchestrator degraded to the fallback and
+  got a 500 out of it. The fallback is only a fallback if it works on input the happy path
+  never sees; it now derives its whole report from the run, and has a test that runs an
+  unrelated incident through it.
+
+**"Deterministic" means predictable, not hardcoded (FND-59/62/63, fixed 2026-07-31).** Both
+engines answer the same question — *what should we ask each platform?* — and the difference is
+only *who decides*. The ADK agent decides per run from the ticket in its context; the
+deterministic engine decides by fixed rules over the same ticket (`IncidentSignals`: identifier
+extraction, keyword extraction, allowlist ranking). What it must NOT do is decide by literal,
+which is what it was doing: a fixed Confluence query string, `allowedScopes.get(0)`, a
+hardcoded GitLab project, and demo-fixture evidence ids. Those all passed because the one
+seeded incident is what they were written against.
+
+One deliberate asymmetry, worth understanding: where targeting is ambiguous, **the agent picks
+and the deterministic engine sweeps**. The agent pays an LLM call per attempt against a hard J8
+budget, so it must choose (and FND-60 makes the allowlists visible so it can choose well). The
+deterministic engine has no such budget and a small config-bounded allowlist, so it ranks and
+then tries all of them — strictly more robust, and available to it precisely *because* it isn't
+the agent.
 
 ## Design
 - **Model wiring (provider-neutral)** — wrap an OpenAI-compatible endpoint with

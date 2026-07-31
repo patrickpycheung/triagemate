@@ -18,7 +18,8 @@ Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
 (TriageProperties refactor). FND-59 raised and fixed the same day, found by a
 code-review walkthrough of the ServiceNow→Confluence data flow, not by
 `/doc-test`. FND-60/61 likewise, from validating the ADK agent's tool-context
-design (does the agent get what it needs to construct good queries?). `/found-issues-resolve` run the same day tested the "deferred
+design (does the agent get what it needs to construct good queries?), and
+FND-62/63 from asking the same question of the DETERMINISTIC path. `/found-issues-resolve` run the same day tested the "deferred
 pending design decision" premise on FND-55/56 and found both decidable now
 (see their Resolution notes) — backlog empty again.
 
@@ -64,6 +65,59 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
   question ("is ADK actually the active engine?") from two different signals (config vs bean
   identity) will eventually disagree; the fix should share one source of truth, not duplicate
   the check.
+
+## FND-62 — The deterministic engine's platform queries were targeted at the demo fixture, not the incident · **HIGH**
+
+**Where**: `DeterministicDiagnosisEngine` steps 2, 5 and 6.
+**What**: "deterministic" had been read as "hardcoded". Three of the four platform calls were
+aimed at the one seeded incident: identifier extraction was a single regex for the demo's exact
+`INC-ORD-\d+` shape (everything else fell through to the literal `"error"` as the Sumo query);
+the Sumo scope was always `allowedScopes.get(0)` regardless of the incident; and the GitLab
+project was the literal `"order-payments/payment-service"`, bypassing
+`triage.gitlab.allowed-projects` entirely — FND-40's exact two-sources-of-truth class, fixed
+there for Sumo scopes and missed here. This engine is also the FND-7 fallback, so "an incident
+other than the demo one" is precisely when it runs for real. Found by reviewing the
+deterministic path's query construction after the same review of the ADK path (FND-60).
+- **Resolution**: fixed:c30ce3e — new `IncidentSignals` derives identifiers (dashed ids, UUIDs,
+  hex trace ids, most-specific first, excluding the incident's own number), keywords (function
+  words removed, domain words kept — `error`/`order`/`payment` are what a runbook search needs),
+  and platform targeting. Targeting **ranks the configured allowlist by name overlap with the
+  affected app, then sweeps it in that order**: ranking alone is a guess, and the demo is
+  exactly where the guess is wrong (CI says "Order Portal", the failure is downstream in Payment
+  Service — unguessable from the ticket, which is the point of the diagnosis). Sweeping is
+  affordable here in a way it is not for the ADK path: the allowlist is small and config-bounded
+  and there is no per-call LLM budget. `IncidentSignalsTest` (7 cases).
+- **Escape**: design review — "deterministic" is not a licence to hardcode. Any value passed to
+  an external system should trace to an input or to config; a literal in a call argument is the
+  smell. The demo fixture passing is not evidence the logic generalises, because the fixture is
+  what the literal was written against.
+
+## FND-63 — The fallback engine could not actually serve as the fallback · **HIGH**
+
+**Where**: `DeterministicDiagnosisEngine` step 8 (report assembly).
+**What**: `candidateSystems` and their `evidenceRefs` were hardcoded, and two of the refs
+(`e-kb-KB001234`, `e-sim-INC0011902`) were **literal ids from the seeded demo fixture**. For any
+other incident those `Evidence` entries don't exist, so `DiagnosisReportValidator`'s
+dangling-evidenceRef rule threw — meaning `DiagnosisOrchestrator` would degrade to this engine
+under FND-7 and then get a **500** out of it, defeating the fallback precisely when it was
+needed. The narrative fields were hardcoded prose about checkout/payment reconciliation too:
+correct for the demo, outright fabrication for anything else (the FND-8 class). Invisible to
+every existing test because they all used the seeded incident, for which the literal ids
+resolve.
+- **Resolution**: fixed:c30ce3e — candidates derive from the signals that actually name a system
+  (log emitters, prettified, plus the CMDB owner), ranked by whether a log↔code citation
+  resolved; refs are filtered against evidence gathered in this run, so dangling is impossible
+  by construction. `reportedSymptom`, `affectedFunction`, `contradictingEvidence`,
+  `missingInformation` and `recommendedNextAction` all derive from the ticket and the run.
+  Additionally the **ticket itself is now cited as evidence** (`e-incident`) — it never was,
+  which left an incident whose other four sources all return empty with zero evidence and hence
+  no valid J4 report at all (the contract requires ≥1); "here is what the ticket says and
+  nothing corroborated it" is an honest triage outcome, failing to produce a report is not.
+  Regression test `DeterministicDiagnosisEngineTest#producesAValidReportForAnIncidentUnrelatedToTheSeededScenario`.
+- **Escape**: test design — a fallback path needs at least one test that exercises it with input
+  the happy path never sees. Every test here used the one seeded incident, so a report hardcoded
+  to that incident's evidence ids looked correct indefinitely. Same root as FND-47/FND-61
+  (mock-shaped testing hiding a real-input failure), one layer up.
 
 ## FND-60 — The J8 allowlisted scopes/projects were invisible to the agent that must supply them · **HIGH**
 
