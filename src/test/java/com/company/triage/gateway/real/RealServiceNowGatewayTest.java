@@ -96,6 +96,15 @@ class RealServiceNowGatewayTest {
         f.server().verify();
     }
 
+    /** FND-61: getIncident now also reads the two journal fields; stub them as empty. */
+    private void expectEmptyJournals(MockRestServiceServer server) {
+        for (int i = 0; i < 2; i++) {
+            server.expect(requestTo(containsString("/api/now/table/sys_journal_field")))
+                    .andExpect(method(HttpMethod.GET))
+                    .andRespond(withSuccess("{\"result\":[]}", MediaType.APPLICATION_JSON));
+        }
+    }
+
     /**
      * FND-47: {@code getIncident} read {@code u_environment} from the response but never
      * requested it in {@code sysparm_fields} — ServiceNow returns only requested fields, so
@@ -111,10 +120,47 @@ class RealServiceNowGatewayTest {
                         "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0012345\","
                                 + "\"u_environment\":\"Production\"}]}",
                         MediaType.APPLICATION_JSON));
+        expectEmptyJournals(f.server());
 
         var incident = f.gateway().getIncident("INC0012345");
 
         org.assertj.core.api.Assertions.assertThat(incident.environment()).isEqualTo("Production");
+        f.server().verify();
+    }
+
+    /**
+     * FND-61: {@code comments} and {@code workNotes} were hardcoded to {@code List.of()} here
+     * while {@code MockServiceNowGateway} populated them — so the demo showed the agent
+     * reasoning over the caller's follow-ups and a real instance silently dropped exactly
+     * that signal (the same mock-only blind spot as FND-47's {@code u_environment}). Journal
+     * entries live in {@code sys_journal_field}, not on the incident row, so they need their
+     * own query; this pins that they're actually requested and parsed.
+     */
+    @Test
+    void getIncidentReadsTheTicketConversationFromTheJournal() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0012345\"}]}",
+                        MediaType.APPLICATION_JSON));
+        f.server().expect(requestTo(containsString("element%3Dcomments")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        "{\"result\":[{\"value\":\"it worked yesterday\",\"sys_created_by\":\"jane\"}]}",
+                        MediaType.APPLICATION_JSON));
+        f.server().expect(requestTo(containsString("element%3Dwork_notes")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        "{\"result\":[{\"value\":\"escalated to payments\",\"sys_created_by\":\"ops\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        var incident = f.gateway().getIncident("INC0012345");
+
+        org.assertj.core.api.Assertions.assertThat(incident.comments())
+                .containsExactly("jane: it worked yesterday");
+        org.assertj.core.api.Assertions.assertThat(incident.workNotes())
+                .containsExactly("ops: escalated to payments");
         f.server().verify();
     }
 

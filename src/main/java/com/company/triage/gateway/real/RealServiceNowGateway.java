@@ -76,6 +76,14 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         // FND-53: a dedicated type, not a bare IllegalStateException — see
         // IncidentNotFoundException's javadoc for why the old mapping was unsafe.
         if (row == null) throw new com.company.triage.gateway.IncidentNotFoundException(number);
+        // FND-61: comments and workNotes were hardcoded empty here while
+        // MockServiceNowGateway populated them — so the demo showed the agent reasoning over
+        // the caller's follow-ups ("it worked yesterday, now some checkouts error out": the
+        // timing/scope detail the description omits) and a real instance silently dropped
+        // exactly that signal. Same mock-only-testing blind spot as FND-47's u_environment.
+        // Journal entries live in sys_journal_field, not on the incident row, so they need
+        // their own query — the same table alreadyPosted() already reads for idempotency.
+        String sysId = text(row, "sys_id");
         return new IncidentContext(
                 text(row, "number"),
                 text(row, "short_description"),
@@ -86,10 +94,36 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 parseTime(text(row, "opened_at")),
                 text(row, "u_environment"),
                 text(row, "assignment_group"),
-                List.of(),
-                List.of(),
+                journal(sysId, "comments"),
+                journal(sysId, "work_notes"),
                 text(row, "cmdb_ci"),
-                List.of());
+                List.of());   // reassignmentHistory: needs sys_audit; not wired (see J5)
+    }
+
+    /**
+     * FND-61: one incident's journal entries for a field, oldest first (reading order).
+     * Best-effort — the triage is still useful without the conversation, so a journal
+     * failure degrades to "no comments" rather than failing the whole diagnosis.
+     */
+    private List<String> journal(String sysId, String element) {
+        if (sysId == null || sysId.isBlank()) return List.of();
+        try {
+            JsonNode entries = rows("/api/now/table/sys_journal_field",
+                    "element_id=" + sysId + "^element=" + element + "^ORDERBYsys_created_on",
+                    "value,sys_created_by,sys_created_on");
+            if (entries == null) return List.of();
+            List<String> out = new ArrayList<>();
+            entries.forEach(e -> {
+                String value = text(e, "value");
+                if (value == null || value.isBlank()) return;
+                String who = text(e, "sys_created_by");
+                out.add(who == null ? value : who + ": " + value);
+            });
+            return out;
+        } catch (Exception e) {
+            log.warn("could not read {} journal for {} — continuing without it", element, sysId, e);
+            return List.of();
+        }
     }
 
     @Override

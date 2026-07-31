@@ -111,7 +111,11 @@ public final class TriageMateTools {
             @Schema(name = "fromIso") String fromIso,
             @Schema(name = "toIso") String toIso) {
         if (!sumoAllowlist.contains(scope)) {
-            throw new IllegalArgumentException("scope not allowlisted: " + scope);   // J8 guardrail
+            // FND-60: name the valid values in the error too. The instruction already lists
+            // them, but if the model still gets it wrong this lets it self-correct within its
+            // remaining budget instead of re-guessing blind.
+            throw new IllegalArgumentException("scope not allowlisted: " + scope   // J8 guardrail
+                    + " — must be exactly one of: " + String.join(", ", sumoAllowlist));
         }
         OffsetDateTime from = OffsetDateTime.parse(fromIso);
         OffsetDateTime to = OffsetDateTime.parse(toIso);
@@ -136,7 +140,8 @@ public final class TriageMateTools {
             @Schema(name = "project") String project,
             @Schema(name = "searchTerm") String searchTerm) {
         if (!gitLabAllowlist.contains(project)) {
-            throw new IllegalArgumentException("project not allowlisted: " + project);   // J8 guardrail
+            throw new IllegalArgumentException("project not allowlisted: " + project   // J8 guardrail
+                    + " — must be exactly one of: " + String.join(", ", gitLabAllowlist));   // FND-60
         }
         return gitLab.searchCode(project, searchTerm);
     }
