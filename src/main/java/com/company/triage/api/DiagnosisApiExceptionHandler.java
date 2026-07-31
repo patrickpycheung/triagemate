@@ -1,48 +1,62 @@
 package com.company.triage.api;
 
+import com.company.triage.gateway.IncidentNotFoundException;
 import com.company.triage.model.DiagnosisReportInvalidException;
 import com.company.triage.orchestration.DiagnosisTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * FND-48: there was no error-handling layer at all in {@code api/} — a wrong incident
- * number, a J4-validation failure, or an FND-15 timeout all fell through to Spring's
- * default JSON error body ({@code {"timestamp":...,"status":500,...}}), which has no
- * {@code report} field. {@code index.html}'s {@code render()} immediately dereferences
- * {@code data.report.candidateSystems}, so the failure mode on stage was a raw
- * {@code TypeError: Cannot read properties of undefined} rather than a readable message.
+ * FND-48: there was no error-handling layer at all in {@code api/} — an unknown incident, a
+ * J4-validation failure, or an FND-15 timeout all fell through to Spring's default error
+ * body, which has no {@code report} field. {@code index.html}'s {@code render()}
+ * dereferences {@code data.report.candidateSystems}, so the failure mode on stage was a raw
+ * {@code TypeError} rather than a readable message.
  *
- * <p>Deliberately narrow: maps only the three exception types this app actually throws at
- * the API boundary, each to the status that best describes it. Anything else still falls
- * through to Spring's default handling — this is a demo-quality error contract, not a
- * general-purpose one.
+ * <p>Scoped to {@code com.company.triage.api} deliberately (FND-53). An unscoped
+ * {@code @RestControllerAdvice} is application-wide, so any Spring-internal exception of a
+ * mapped type would also be translated — and with the original bare-{@code
+ * IllegalStateException}→404 mapping that meant an unrelated internal error could be served
+ * to the client as "incident not found", with its internal message echoed out.
+ *
+ * <p>Deliberately narrow: three types, three statuses. Anything else still falls through to
+ * Spring's default handling — a demo-quality error contract, not a general-purpose one.
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.company.triage.api")
 class DiagnosisApiExceptionHandler {
 
-    @ExceptionHandler(IllegalStateException.class)
-    ResponseEntity<Map<String, String>> incidentNotFound(IllegalStateException e) {
-        // RealServiceNowGateway.getIncident throws exactly this shape for "not found".
-        // A different IllegalStateException would also land here, which is an accepted
-        // over-match for a hackathon-scope handler — see class javadoc.
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", e.getMessage()));
+    /** FND-53: {@code Map.of} throws NPE on a null value, and a bare exception message can be null. */
+    private static ResponseEntity<Map<String, String>> error(HttpStatusCode status, Exception e) {
+        return ResponseEntity.status(status)
+                .body(Map.of("error", Objects.toString(e.getMessage(), e.getClass().getSimpleName())));
+    }
+
+    @ExceptionHandler(IncidentNotFoundException.class)
+    ResponseEntity<Map<String, String>> incidentNotFound(IncidentNotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, e);
     }
 
     @ExceptionHandler(DiagnosisTimeoutException.class)
     ResponseEntity<Map<String, String>> timedOut(DiagnosisTimeoutException e) {
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
-                .body(Map.of("error", e.getMessage()));
+        return error(HttpStatus.GATEWAY_TIMEOUT, e);
     }
 
+    /**
+     * FND-53: 500, not 502. The exception names an upstream ("bad gateway") failure, but by
+     * the time it reaches this layer it cannot be one: an ADK-produced invalid report is
+     * caught by {@code DiagnosisOrchestrator}'s FND-7 fallback and degrades to the
+     * deterministic engine (HTTP 200 + degraded banner), so it never surfaces here. The only
+     * way this reaches the API is the *deterministic* engine's own validator failing — pure
+     * offline code with no upstream involved, i.e. our own bug. 500 is the honest status.
+     */
     @ExceptionHandler(DiagnosisReportInvalidException.class)
     ResponseEntity<Map<String, String>> invalidReport(DiagnosisReportInvalidException e) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(Map.of("error", e.getMessage()));
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, e);
     }
 }

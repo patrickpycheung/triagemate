@@ -44,7 +44,7 @@ cause, correct assignment team, relevant Confluence page, relevant log evidence,
 final resolution. Requirements (from the analysis):
 - 3–10 historical incidents (≥2 "similar resolved" for the routing signal),
 - 1–2 Confluence pages (a runbook / known-error doc),
-- a known support team, one repository (**reuse `seed-repo/`**),
+- a known support team, one repository (**reuse the seed repo** at `docs/design/concepts/log-code-reasoning/verification-s3/seed-repo/` — FND-26: not repo-root),
 - a small set of Sumo logs (**reuse S3′ `sumo-fixture.json`**),
 - at least one **known error + resolution** with a seeded distinctive log line.
 
@@ -75,6 +75,17 @@ the copilot reconstructs them (correct app + team in top-3).
 Previously `render(await res.json())` ran unconditionally, and a non-2xx body has no
 `report` field — `render()`'s first line dereferences `r.candidateSystems`, so the failure
 mode on stage was a raw `TypeError`, not a message.
+
+**FND-52 (same day)**: the first cut called `res.json()` *above* the `res.ok` check, which
+only works while every error is one the advice maps. Anything unmapped still reaches
+Spring's whitelabel page, and a browser `fetch` gets **HTML** — so `res.json()` threw and the
+user saw `SyntaxError: Unexpected token '<'`. That swapped one opaque parse error for
+another. Now: read as text, parse defensively, guard on `res.ok` first.
+
+**FND-54**: `MockServiceNowGateway` used to fabricate a context for *any* number, so a stage
+typo returned a confident diagnosis of a nonexistent incident — worse than the TypeError it
+replaced, and it made the 404 unreachable in the demo config (only the *real* gateway threw).
+The mock now rejects anything but its one modelled incident, `INC0012345`.
 
 ## Verification
 - Fresh checkout + `mvn spring-boot:run` → open page → diagnose the demo incident →

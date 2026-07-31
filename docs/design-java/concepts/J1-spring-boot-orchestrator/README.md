@@ -87,15 +87,38 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 > `GET /api/runs/{runId}/steps`; `POST /api/diagnose/{incidentNumber}` is unchanged.
 > See `../J11-live-thinking-trace/README.md`.
 
-**Error contract (FND-48, fixed 2026-07-31)**: `DiagnosisApiExceptionHandler`
-(`@RestControllerAdvice`) maps the three exceptions this API actually throws —
-`IllegalStateException` ("incident not found") → 404, `DiagnosisTimeoutException` → 504,
-`DiagnosisReportInvalidException` → 502 — each to a `{"error": "..."}` JSON body. Previously
-none of these were handled and all three fell through to Spring's default error body, which
-has no `report` field; `index.html`'s `render()` immediately dereferences
-`data.report.candidateSystems`, so the failure mode on stage was a raw
-`TypeError: Cannot read properties of undefined` rather than a readable message. Deliberately
-narrow — this is a demo-quality contract for the three known throw sites, not a general one.
+**Error contract (FND-48, fixed 2026-07-31; hardened by FND-53 the same day)**:
+`DiagnosisApiExceptionHandler` maps `IncidentNotFoundException` → **404**,
+`DiagnosisTimeoutException` → **504**, `DiagnosisReportInvalidException` → **500**, each to a
+`{"error": "..."}` JSON body. Previously none were handled and all fell through to Spring's
+default error body, which has no `report` field; `index.html`'s `render()` dereferences
+`data.report.candidateSystems`, so the stage failure mode was a raw `TypeError`.
+
+Three FND-53 corrections to the first cut, all found by review before anyone ran it:
+- The 404 was keyed on a **bare `IllegalStateException`**, which was safe only by accident —
+  that same type is thrown for a missing LLM credential and for a JSON-serialisation failure,
+  each shielded from the advice by an *unrelated* broad catch. A dedicated
+  `IncidentNotFoundException` now carries the meaning.
+- The advice was **unscoped**, therefore application-wide; it is now
+  `basePackages = "com.company.triage.api"`, so a Spring-internal exception can't be
+  translated into a client-facing "incident not found" with an internal message attached.
+- `DiagnosisReportInvalidException` mapped to **502**, which claims an upstream failure. By
+  the time it reaches this layer it cannot be one: an ADK-produced invalid report is caught
+  by the FND-7 fallback and degrades (200 + banner). Only the *deterministic* engine's own
+  validator can surface here — offline code, our own bug. **500** is the honest status.
+
+Deliberately narrow: three types, three statuses. Everything else still falls through to
+Spring, which is why the UI must not assume a JSON body (see J7's FND-52 note).
+
+**Which timeout fires first (FND-34 vs FND-15) — added 2026-07-31, previously undocumented.**
+These two bounds overlap and the HTTP one usually wins. `spring.http.client.read-timeout`
+(20s) applies to `RealServiceNowGateway`'s *injected* builder — including `getIncident`
+**inside** `engine.diagnose()`. So a hung real ServiceNow fails at ~20s with a
+`ResourceAccessException`, **not** at 90s with `DiagnosisTimeoutException`, and that type is
+not mapped by the error contract above — it currently surfaces as a bare 500. The documented
+504 is reachable only via Confluence/Sumo/GitLab (which build their own unconfigured
+`RestClient` and so have no HTTP timeout) or an ADK run genuinely exceeding 90s. Logged as
+FND-55.
 
 ## Interface sketch
 ```java
@@ -116,6 +139,10 @@ class DiagnosisController {
   the Design section above and J3).
 - Wall-clock timeout: `DiagnosisOrchestratorTest#engineTimeoutPropagatesWhenNoFallback`,
   `#engineTimeoutOnPrimaryDegradesToFallback` (both inject a slow engine lambda).
+- Error contract (FND-48/FND-53): `DiagnosisApiExceptionHandlerTest` — 404/504/500 mapping,
+  a bare `IllegalStateException` deliberately NOT translated, and a null exception message
+  not breaking the handler.
+- Normalization (FND-50): `DiagnosisOrchestratorTest#differentlyCasedIncidentNumbersStillCoalesce`.
 - Concurrency coalescing:
   `#concurrentRunsForSameIncidentCoalesceIntoOneEngineCallAndOneWriteback` (latch-forced
   overlap — one engine call, one writeback), `#sequentialRunsOfTheSameIncidentAreNotCoalesced`

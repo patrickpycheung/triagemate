@@ -50,16 +50,24 @@ async function run() {
   btn.disabled = true; out.innerHTML = '<div class="card">Investigating…</div>';
   try {
     const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, { method:'POST' });
-    const body = await res.json();
-    // FND-48: previously this always called render(body), which immediately dereferences
-    // data.report.candidateSystems — on a non-2xx response (bad incident number, J4
-    // validation failure, FND-15 timeout) that field doesn't exist, and the failure showed
-    // as a raw "TypeError: Cannot read properties of undefined" instead of the server's
-    // actual message (now available via DiagnosisApiExceptionHandler's {error: "..."} body).
+    // FND-48: render() dereferences data.report.candidateSystems immediately, so a non-2xx
+    // body (which has no `report`) used to surface as "TypeError: Cannot read properties of
+    // undefined". Guard on res.ok first.
+    // FND-52: and guard BEFORE parsing. The first cut of this fix called res.json() above
+    // the res.ok check, which only works while every error is one the advice maps. Anything
+    // it doesn't map still falls through to Spring's whitelabel page, and a browser fetch
+    // (Accept: */*) gets HTML — so res.json() threw and the user saw
+    // "SyntaxError: Unexpected token '<'". That just swapped one opaque parse error for
+    // another. Read as text, then parse defensively.
+    const raw = await res.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_) { /* non-JSON error page */ }
     if (!res.ok) {
-      out.innerHTML = `<div class="card">Error (${res.status}): ${esc(body.error || res.statusText)}</div>`;
+      const msg = (body && body.error) || res.statusText || 'request failed';
+      out.innerHTML = `<div class="card">Error (${res.status}): ${esc(msg)}</div>`;
       return;
     }
+    if (!body) { out.innerHTML = '<div class="card">Error: server returned a non-JSON body</div>'; return; }
     render(body);
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${e}</div>`;

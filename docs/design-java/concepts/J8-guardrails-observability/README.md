@@ -22,7 +22,7 @@ tools, within these limits").
   Confluence / Sumo / GitLab, but ServiceNow needs **read + write on `incident`**.
   *(Corrected 2026-07-31: this line read "read-only service accounts" flatly, which was
   false and always had been — posting the two advisory work notes is the app's entire
-  payoff, and both `application.yml:112` and `RealServiceNowGateway.java:29` specify
+  payoff, and both `application.yml:117` and `RealServiceNowGateway.java:30` specify
   read+write.)* That write is narrow by design: append to one journal field; never
   reassign, close, or re-prioritise. Allowlisted
   GitLab projects (`triage.gitlab.allowed-projects`) and Sumo `_sourceCategory`
@@ -47,6 +47,11 @@ tools, within these limits").
     call, on either engine.
   A tool *existing* ≠ the model may call it anywhere — but "anywhere" is bounded at
   the layer that actually owns each limit, not uniformly by one callback.
+  **Scope note (2026-07-31):** these three are the *model-facing* bounds — what the agent
+  can do at runtime. `RealServiceNowGateway`'s constructor check on
+  `triage.servicenow.write-field` (FND-51) is a fourth enforcement point but a different
+  kind: it constrains an **operator** config value, not model behaviour, and fails fast at
+  startup rather than mid-run. Listed here so the count isn't read as exhaustive.
 
 ## Observability (per-run trace)
 Record for every run: which tools were called and, for J9, who was suggested and

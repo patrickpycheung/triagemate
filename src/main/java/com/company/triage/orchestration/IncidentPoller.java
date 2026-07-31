@@ -168,7 +168,13 @@ public class IncidentPoller {
         boolean unhandledSeen = false;
 
         for (NewIncident incident : found) {
-            String number = incident.number();
+            // FND-50 (completed 2026-07-31, third pass): normalize here too. FND-37 first
+            // put this in DiagnosisController; FND-50 moved it into DiagnosisOrchestrator.run()
+            // so K1 got it — but FND-1's three dedupe layers below still keyed on the RAW
+            // gateway string, so `inc0000001` and `INC0000001` counted as different incidents
+            // for the in-flight/completed sets even though run() coalesced them as one.
+            // Normalize once, here, before any of the three layers see it.
+            String number = incident.number().trim().toUpperCase();
             boolean handled = false;
 
             if (completed.contains(number)) {

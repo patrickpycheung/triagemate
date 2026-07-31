@@ -40,6 +40,7 @@ diagnosing unrelated tickets is a stage hazard, not a feature.
 | `triage.trigger.poll.interval-ms` | `30000` | Delay measured from previous run's **completion** |
 | `triage.trigger.poll.batch-limit` | `10` | Max incidents per tick |
 | `triage.trigger.poll.completed-cap` | `500` | Bound on the in-process completed set |
+| `triage.trigger.poll.unattended-llm-ack` | `false` | C6 ToS acknowledgement; suppresses the K1+`adk` startup WARN (FND-45) |
 
 ## The two correctness properties
 
@@ -65,6 +66,12 @@ eligibility-on-update is ever wanted, it must come with an explicit "don't re-se
 wrote" filter — **not** a switch back to `sys_updated_on`.
 
 ### 2. Never skip an incident
+
+> **Two accepted exceptions** (added 2026-07-31 — this section read as an unqualified
+> guarantee while Open/risks below accepts two ways it can be broken): **FND-43**, a
+> same-second creation burst larger than `batch-limit`; and **restart re-seeding**, which
+> skips anything created while the app was down. Both are documented and accepted under
+> Open/risks — the guarantee below holds for everything else.
 
 - The cursor advances to a **handled incident's `createdAt`**, never to `now()`. Advancing
   to now drops anything created *while the batch was processing* — a real window, since a
@@ -111,7 +118,15 @@ currently the only place it surfaces on an unattended run.
   below — nothing warned or refused. The constructor now logs a WARN at startup unless
   `triage.trigger.poll.unattended-llm-ack=true` is explicitly set (deliberately a warning,
   not a hard failure — matches FND-49's precedent that a hackathon build shouldn't refuse to
-  boot). `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
+  boot).
+  ⚠️ **Config-triggered, not capability-triggered** (2026-07-31, found by two reviews): this
+  reads the `triage.engine` string and does **not** check that an ADK bean exists. On a
+  default (non-`-Padk`) build with `engine=adk`, J1's FND-49 warning fires first —
+  "no ADK engine bean is active, running DETERMINISTIC only" — and then this one claims
+  "unattended, programmatic LLM use" for a run that will never contact a model. **Both
+  firing together is expected**; FND-49's is authoritative about what actually runs. Setting
+  the ack in that state records a ToS acceptance for a run that makes no LLM call. FND-56.
+  `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
   `#noWarningWhenAckIsSetOrEngineIsDeterministic`.
 - **Accepted limitation (FND-43, closed 2026-07-31, not fixed): same-second timestamp
   collision beyond `batch-limit`.** If more than `triage.trigger.poll.batch-limit` (default

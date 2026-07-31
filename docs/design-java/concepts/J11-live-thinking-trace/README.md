@@ -1,6 +1,6 @@
 # J11 — Live Thinking Trace (animated per-step agent trace)
 
-**State**: 🟠 Evolving (CDS Round 3, 2026-07-31) · **Complexity**: Complex ·
+**State**: 🟠 Evolving — STUCK (CDS Round 4, 2026-07-31; blocked on 2 external spikes) · **Complexity**: Complex ·
 **Depends on**: J1, J2, J4, J7, J8 · **Amends**: J1 (response shape), J7 (UI), J8 (observability)
 **Source**: DDS `docs/discovery/live-thinking-trace-ui/` (Phase 4, concepts LT1–LT7)
 

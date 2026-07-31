@@ -1,6 +1,6 @@
 # J4 — Diagnosis Report (JSON contract)
 
-**State**: 🟢 Stable · **Complexity**: Simple · **Depends on**: —
+**State**: 🟢 Built · **Complexity**: Simple · **Depends on**: —
 
 ## Essence
 The strict JSON contract every run produces. Building the report **before** the

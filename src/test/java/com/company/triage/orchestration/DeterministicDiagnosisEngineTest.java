@@ -20,6 +20,19 @@ class DeterministicDiagnosisEngineTest {
             new MockSumoGateway(), new MockGitLabGateway(),
             List.of("prod/payment", "prod/order-api"));
 
+    /**
+     * FND-54: the mock used to echo ANY number into the seeded context, so a stage typo
+     * produced a confident, complete diagnosis of an incident that does not exist — and it
+     * made FND-48's 404 unreachable in the demo config. The dataset models exactly one
+     * incident; anything else must be a clean not-found.
+     */
+    @Test
+    void unknownIncidentNumberIsRejectedNotFabricated() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> engine.diagnose("INC9999999"))
+                .isInstanceOf(com.company.triage.gateway.IncidentNotFoundException.class)
+                .hasMessageContaining("INC9999999");
+    }
+
     @Test
     void diagnosesTheSeededIncidentEndToEnd() {
         DiagnosisResult result = engine.diagnose("INC0012345");

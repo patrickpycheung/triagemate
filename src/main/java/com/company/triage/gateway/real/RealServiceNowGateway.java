@@ -79,7 +79,9 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         JsonNode row = firstRow("/api/now/table/incident",
                 "number=" + number, "sys_id,number,short_description,description,caller_id,"
                         + "category,subcategory,opened_at,cmdb_ci,assignment_group,u_environment");
-        if (row == null) throw new IllegalStateException("incident not found: " + number);
+        // FND-53: a dedicated type, not a bare IllegalStateException — see
+        // IncidentNotFoundException's javadoc for why the old mapping was unsafe.
+        if (row == null) throw new com.company.triage.gateway.IncidentNotFoundException(number);
         return new IncidentContext(
                 text(row, "number"),
                 text(row, "short_description"),

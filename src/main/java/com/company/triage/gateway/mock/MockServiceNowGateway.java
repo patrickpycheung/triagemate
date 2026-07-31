@@ -32,8 +32,21 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private final java.util.concurrent.atomic.AtomicBoolean newIncidentAvailable =
             new java.util.concurrent.atomic.AtomicBoolean(true);
 
+    /** The one incident this ground-truth dataset actually models (J7). */
+    static final String KNOWN_INCIDENT = "INC0012345";
+
     @Override
     public IncidentContext getIncident(String number) {
+        // FND-54: previously this echoed ANY number into the seeded context, so a typo on
+        // stage returned HTTP 200 with a complete, confident diagnosis of the payment-reconcile
+        // bug headed with an incident that does not exist — writeback logged, trace full, no
+        // warning. That is strictly worse than the TypeError FND-48 replaced, and it is the
+        // FND-8 failure class (asserting something untrue) in its purest form. It also made
+        // FND-48's 404 path unreachable in the demo config, since only the REAL gateway threw.
+        // The dataset models exactly one incident (J7); say so rather than fabricate.
+        if (!KNOWN_INCIDENT.equalsIgnoreCase(number == null ? "" : number.trim())) {
+            throw new com.company.triage.gateway.IncidentNotFoundException(number);
+        }
         return new IncidentContext(
                 number,
                 "Orders sometimes don't go through at checkout",

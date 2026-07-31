@@ -19,8 +19,12 @@ than Confluence or GitLab. Plus the one **write**: an advisory work note.
 - `findOwnership(app)` → CMDB support group / business service ownership.
 
 Real impl: ServiceNow **REST Table API** (`/api/now/table/incident`, `cmdb_ci`,
-`kb_knowledge`), OAuth or service account, least-privilege read role, allowlisted
-fields.
+`kb_knowledge`), OAuth or service account, **least-privilege read + write on `incident`**
+(write scoped to one journal field — `work_notes` or `comments`; never reassign, close, or
+re-prioritise), allowlisted fields. *(Corrected 2026-07-31: this said "least-privilege read
+role", which J8:21 had already corrected as false — the two advisory work notes are the
+app's entire payoff. Found by 3 independent reviews; the J8 fix simply wasn't propagated
+here.)*
 
 ## Write (automatic, two comments — RC5, revised 2026-07-23)
 No human in the loop. On every run the orchestrator posts **two** advisory comments
