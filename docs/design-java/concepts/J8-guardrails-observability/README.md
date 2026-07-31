@@ -80,6 +80,19 @@ found? sensible next action? — not "did it nail root cause."
 
 ## Open / risks
 
+- **Allowlists must be DISCLOSED, not just enforced (FND-60, fixed 2026-07-31).** The Sumo
+  scope and GitLab project allowlists above reject any model-supplied value outside them — but
+  those values appeared nowhere the model could see: not in `INSTRUCTION`, not in any
+  `@Schema` description, and there is no discovery tool. The model had to guess the exact
+  strings, and the incident's own fields don't contain them (demo incident `cmdb_ci` =
+  "Order Portal"; allowlisted project = `order-payments/payment-service`). Each wrong guess
+  burned one of the 10 J8 tool calls on a guaranteed exception, so the live-agent path could
+  lose steps 5–6 (the log↔code citation) entirely. `INSTRUCTION` now names the accepted values
+  verbatim, built from the same `TriageProperties` the tools enforce so the two cannot drift,
+  and the rejection messages name them too for in-budget self-correction. **The general rule:
+  a guardrail that rejects a model-supplied value needs a matching answer to "how does the
+  model learn the valid ones?", settled in the same pass that adds the guardrail.**
+  `AdkAllowlistVisibilityTest`.
 - **Accepted limitation (FND-44, closed 2026-07-31, not fixed): some guardrails are
   prompt-only.** The `INSTRUCTION` asks the model for "ONE bounded Sumo Logic search" and to
   cite only pages/files already gathered, but nothing structurally enforces either — unlike

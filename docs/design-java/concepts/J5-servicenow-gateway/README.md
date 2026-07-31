@@ -67,6 +67,20 @@ gateway's `findIncidentsCreatedSince` is what J10 polls through (FND-21).
   always null against a real instance — invisible to mock-only tests, since the mock has no
   field-selection to get wrong. `RealServiceNowGatewayTest#getIncidentRequestsAndParsesEnvironment`
   asserts the field is both requested and parsed.
+- **FND-61, fixed 2026-07-31**: `comments` and `workNotes` were hardcoded to `List.of()` in
+  real `getIncident` while `MockServiceNowGateway` populated them — so the demo showed the
+  agent reasoning over the caller's follow-ups (often the timing/scope detail `description`
+  omits) and a real instance silently dropped that signal. FND-47's shape a second time: a
+  field consumed downstream but never fetched. Journal entries live in `sys_journal_field`,
+  not on the incident row, so each field needs its own query (the same table `addWorkNote`'s
+  FND-14 idempotency check already reads); added, oldest-first, author-prefixed, best-effort
+  (a journal failure degrades to "no comments", not a failed diagnosis).
+  **`reassignmentHistory` is still empty** — it needs `sys_audit`, a different table; not
+  wired, stated here rather than left looking populated.
+  `RealServiceNowGatewayTest#getIncidentReadsTheTicketConversationFromTheJournal`.
+  **Standing check (two instances now, FND-47 and this):** whenever a mock populates a field
+  its real counterpart doesn't, the demo proves a capability production lacks — mock/real
+  field parity is worth checking for every `Real*Gateway`, not per-bug.
 - **FND-51, fixed 2026-07-31**: `triage.servicenow.write-field` was interpolated directly
   into the PATCH body with no restriction, and the hand-rolled JSON escaping covered only
   `\`, `"`, `\n` (a `\r` or tab in evidence text produced invalid JSON). Note text is now

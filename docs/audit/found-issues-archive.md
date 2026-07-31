@@ -17,7 +17,8 @@ Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
 `/doc-test cds` pass the same day raised FND-55..58; FND-57/58 fixed
 (TriageProperties refactor). FND-59 raised and fixed the same day, found by a
 code-review walkthrough of the ServiceNow→Confluence data flow, not by
-`/doc-test`. `/found-issues-resolve` run the same day tested the "deferred
+`/doc-test`. FND-60/61 likewise, from validating the ADK agent's tool-context
+design (does the agent get what it needs to construct good queries?). `/found-issues-resolve` run the same day tested the "deferred
 pending design decision" premise on FND-55/56 and found both decidable now
 (see their Resolution notes) — backlog empty again.
 
@@ -63,6 +64,53 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
   question ("is ADK actually the active engine?") from two different signals (config vs bean
   identity) will eventually disagree; the fix should share one source of truth, not duplicate
   the check.
+
+## FND-60 — The J8 allowlisted scopes/projects were invisible to the agent that must supply them · **HIGH**
+
+**Where**: `AdkDiagnosisEngine.INSTRUCTION`, `TriageMateTools.searchLogs`/`searchCode`.
+**What**: both tools hard-throw on a value outside their allowlist (J8, FND-20/38), but the
+allowlisted values appeared **nowhere the model could see them** — not in the instruction, not
+in any `@Schema` description, and there is no discovery tool. The model had to guess the exact
+strings, and the incident's own fields don't contain them: the demo incident's `cmdb_ci` is
+"Order Portal" while the allowlisted project is `order-payments/payment-service`, underivable
+from one another. Every wrong guess burned one of the 10 J8 tool calls on a guaranteed
+exception, so on the live-agent path steps 5–6 (logs → code, i.e. the log↔code citation that
+is the demo's centrepiece) were likely to be lost entirely. Invisible to the offline suite
+because `DeterministicDiagnosisEngine` passes the allowlisted values as literals and never
+guesses. Found by validating the agent's tool-context design, not by `/doc-test`.
+- **Resolution**: fixed:7d8f9ef — `INSTRUCTION` is now built per-instance from the same
+  `TriageProperties` the tools enforce (one source, so enforcement and disclosure cannot drift
+  into "rejected for a value we never disclosed"), naming the accepted values verbatim.
+  Rejection messages name them too, so a model that still gets it wrong can self-correct within
+  its remaining budget. Tool `@Schema` descriptions are compile-time constants and cannot carry
+  runtime config, which is why the instruction rather than the tool surface is the fix site.
+  Regression test `AdkAllowlistVisibilityTest` (three cases, incl. one asserting the instruction
+  tracks *configured* allowlists rather than hardcoded defaults).
+- **Escape**: design review — a guardrail that rejects model-supplied values needs a matching
+  answer to "how does the model learn the valid ones?", checked in the same pass that adds the
+  guardrail. FND-20/38 added the enforcement and never asked the disclosure question.
+
+## FND-61 — The real gateway dropped the ticket conversation the mock supplied · **MEDIUM**
+
+**Where**: `RealServiceNowGateway.getIncident`.
+**What**: `comments` and `workNotes` were hardcoded to `List.of()` while
+`MockServiceNowGateway` populated them (`"Caller: 'it worked yesterday, now some checkouts
+error out'"`). So the demo showed the agent reasoning over the caller's follow-ups — often the
+timing and scope detail the `description` field omits — and a real instance silently dropped
+exactly that signal, with the model none the wiser. Same mock-only-testing blind spot as
+FND-47's `u_environment`, and the same shape: a field read downstream but never actually
+fetched.
+- **Resolution**: fixed:7d8f9ef — journal entries live in `sys_journal_field`, not on the
+  incident row, so they need their own query per field; added (reusing the table
+  `alreadyPosted()` already reads for idempotency), oldest-first, prefixed with the author.
+  Best-effort: a journal failure degrades to "no comments" rather than failing the diagnosis,
+  since the triage is still useful without the conversation. `reassignmentHistory` remains
+  empty — it needs `sys_audit`, a different table; noted rather than silently left looking
+  wired. Regression test
+  `RealServiceNowGatewayTest#getIncidentReadsTheTicketConversationFromTheJournal`.
+- **Escape**: integration review — whenever a mock populates a field its real counterpart
+  doesn't, the demo proves a capability production lacks; mock/real field-parity for every
+  `Real*Gateway` is the standing check (this is the second instance, after FND-47).
 
 ## FND-59 — DeterministicDiagnosisEngine's Confluence query was a hardcoded literal, not derived from the incident · **MEDIUM**
 
