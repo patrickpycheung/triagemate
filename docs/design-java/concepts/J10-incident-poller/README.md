@@ -119,22 +119,26 @@ currently the only place it surfaces on an unattended run.
   `triage.trigger.poll.unattended-llm-ack=true` is explicitly set (deliberately a warning,
   not a hard failure — matches FND-49's precedent that a hackathon build shouldn't refuse to
   boot).
-  ⚠️ **Config-triggered, not capability-triggered** (2026-07-31, found by two reviews): this
-  reads the `triage.engine` string and does **not** check that an ADK bean exists. On a
-  default (non-`-Padk`) build with `engine=adk`, J1's FND-49 warning fires first —
-  "no ADK engine bean is active, running DETERMINISTIC only" — and then this one claims
-  "unattended, programmatic LLM use" for a run that will never contact a model. **Both
-  firing together is expected**; FND-49's is authoritative about what actually runs. Setting
-  the ack in that state records a ToS acceptance for a run that makes no LLM call. FND-56.
+  **Capability-triggered, not config-triggered (FND-56, fixed 2026-07-31)**: this used to
+  read the `triage.engine` string and NOT check that an ADK bean actually exists. On a default
+  (non-`-Padk`) build with `engine=adk`, J1's FND-49 warning would fire — "no ADK engine bean
+  is active, running DETERMINISTIC only" — and this one would *simultaneously* claim
+  "unattended, programmatic LLM use" for the same run that will never contact a model. Both
+  could never actually be true at once; only one class of run exists at a time. Now asks
+  `DiagnosisOrchestrator.isAdkActuallyActive()` (`engine != fallbackEngine` — the same
+  bean-identity check FND-49 already does, exposed rather than re-derived) instead of reading
+  config directly, so this fires only when it's true.
   `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
-  `#noWarningWhenAckIsSetOrEngineIsDeterministic`.
+  `#noWarningWhenAckIsSetOrEngineIsDeterministic`,
+  `#noC6WarningWhenConfigSaysAdkButNoAdkBeanIsActuallyActive` (the case that used to be wrong:
+  config says `adk`, no ADK bean actually wired — no warning).
 - **Config centralized (FND-57, fixed 2026-07-31).** `batch-limit`, `completed-cap`,
   `triage.engine`, and `unattended-llm-ack` were four independent `@Value` constructor params;
   now a single injected `TriageProperties` (see J1), read as
-  `props.trigger().poll().batchLimit()` etc. The `engine == adk` string comparison above is now
-  `props.engine() == TriageProperties.Engine.ADK` — same behaviour, one less place a typo could
-  silently misfire. `triage.trigger.poll.interval-ms` (on `@Scheduled`) and `.enabled` (on
-  `@ConditionalOnProperty`) are unchanged — those two resolve their own property placeholders
+  `props.trigger().poll().batchLimit()` etc. The C6 check above no longer reads
+  `props.engine()` at all (see FND-56 immediately above) — it asks the orchestrator's actual
+  engine identity instead. `triage.trigger.poll.interval-ms` (on `@Scheduled`) and `.enabled`
+  (on `@ConditionalOnProperty`) are unchanged — those two resolve their own property placeholders
   independently of constructor injection, so migrating them buys nothing (see J1's FND-57 note).
 - **Accepted limitation (FND-43, closed 2026-07-31, not fixed): same-second timestamp
   collision beyond `batch-limit`.** If more than `triage.trigger.poll.batch-limit` (default

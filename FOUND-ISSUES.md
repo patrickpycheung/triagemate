@@ -1,9 +1,10 @@
 # Found issues
 
-**Backlog: 2 open** (FND-55, FND-56). FND-57/58 (also from the second `/doc-test cds`
-pass on 2026-07-31) were fixed the same day via the `TriageProperties` refactor.
-FND-52/53/54 were fixed in the pass itself; FND-1…FND-54, FND-57, FND-58 resolved.
-Full detail in `docs/audit/found-issues-archive.md`.
+**Backlog: 0 open.** FND-55/56 (deferred pending a design decision) and FND-57/58
+(deferred pending the `TriageProperties` refactor) were all fixed 2026-07-31 once
+`/found-issues-resolve` re-tested each deferral's premise and found it decidable.
+FND-59 (found by code review, not `/doc-test`) fixed the same day. Full detail in
+`docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
 Resolved entries move to [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md)
@@ -23,33 +24,6 @@ Format: `## FND-<n> — <one-line title> · **HIGH|MEDIUM|LOW**`, then **Where**
   trivia.
 
 ---
-
-## FND-55 — FND-34's HTTP timeout pre-empts FND-15's engine timeout; the 504 is mostly unreachable · **MEDIUM**
-
-**Where**: `application.yml` (`spring.http.client.read-timeout: 20s`),
-`DiagnosisOrchestrator` (`timeout-ms: 90000`), `DiagnosisApiExceptionHandler`.
-**What**: the two bounds overlap and the HTTP one wins. `read-timeout` applies to
-`RealServiceNowGateway`'s injected builder — *including* `getIncident` inside
-`engine.diagnose()` — so a hung real ServiceNow fails at ~20s with `ResourceAccessException`,
-not at 90s with `DiagnosisTimeoutException`. That type isn't mapped, so it surfaces as a bare
-500. The documented 504 is reachable only via Confluence/Sumo/GitLab (own unconfigured
-`RestClient`, no HTTP timeout) or an ADK run genuinely exceeding 90s. Found by scenario
-simulation.
-**Why deferred**: the precedence is now documented in J1, which removes the misleading part.
-Actually *fixing* it means choosing a policy — map `ResourceAccessException` to 504 too, or
-align the two budgets — and that's a design call better made with the real-latency data the
-J11 spike will produce.
-
-## FND-56 — The K1 C6 warning is config-triggered, not capability-triggered · **LOW**
-
-**Where**: `IncidentPoller` constructor (FND-45's check).
-**What**: it reads the `triage.engine` string without checking that an ADK bean exists, so on
-a non-`-Padk` build with `engine=adk` it claims "unattended, programmatic LLM use" for a run
-that will never contact a model — while J1's FND-49 warning simultaneously says the opposite
-(deterministic only). Both fire; only one is true. Found by two reviews.
-**Why deferred**: now documented in J10 as expected-and-explained. The code fix wants the same
-engine-identity check FND-49 uses, which is really an argument for FND-57's single validator
-rather than a second ad-hoc check.
 
 ## History
 

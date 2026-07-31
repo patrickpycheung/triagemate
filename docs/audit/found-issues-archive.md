@@ -15,11 +15,54 @@ Each entry keeps its original text plus two lines added at resolution time:
 Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
 7 code fixes + 2 already-archived closures); backlog empty again. A second
 `/doc-test cds` pass the same day raised FND-55..58; FND-57/58 fixed
-(TriageProperties refactor); FND-55/56 remain open (`FOUND-ISSUES.md`).
-FND-59 raised and fixed the same day, found by a code-review walkthrough of
-the ServiceNow→Confluence data flow, not by `/doc-test`.
+(TriageProperties refactor). FND-59 raised and fixed the same day, found by a
+code-review walkthrough of the ServiceNow→Confluence data flow, not by
+`/doc-test`. `/found-issues-resolve` run the same day tested the "deferred
+pending design decision" premise on FND-55/56 and found both decidable now
+(see their Resolution notes) — backlog empty again.
 
 ---
+
+## FND-55 — FND-34's HTTP timeout pre-empts FND-15's engine timeout; the 504 was mostly unreachable · **MEDIUM**
+
+**Where**: `application.yml` (`spring.http.client.read-timeout: 20s`),
+`DiagnosisOrchestrator` (`timeout-ms: 90000`), `DiagnosisApiExceptionHandler`.
+**What**: the two bounds overlap and the HTTP one wins. `read-timeout` applies to
+`RealServiceNowGateway`'s injected builder — *including* `getIncident` inside
+`engine.diagnose()` — so a hung real ServiceNow fails at ~20s with `ResourceAccessException`,
+not at 90s with `DiagnosisTimeoutException`. That type isn't mapped, so it surfaces as a bare
+500. The documented 504 is reachable only via Confluence/Sumo/GitLab (own unconfigured
+`RestClient`, no HTTP timeout) or an ADK run genuinely exceeding 90s. Found by scenario
+simulation.
+- **Resolution**: fixed:6d468f3 — originally deferred as "wants a policy choice better made
+  with the J11 spike's real-latency data." `/found-issues-resolve` tested that premise: the
+  spike informs whether 90s/20s are the *right numeric values* (a separate, still-open tuning
+  question), not what status code a timeout should return — those are independent, and the
+  latter doesn't need the spike at all. `DiagnosisApiExceptionHandler` now maps
+  `ResourceAccessException` to the same 504 as `DiagnosisTimeoutException`. Regression test:
+  `DiagnosisApiExceptionHandlerTest#serviceNowConnectionTimeoutMapsTo504NotBare500`.
+- **Escape**: design review — a "which policy to pick" deferral should distinguish the parts
+  of the decision that need new data from the parts that don't; bundling a status-code
+  correctness fix with a numeric-tuning question left a real bug parked behind an
+  unrelated blocker.
+
+## FND-56 — The K1 C6 warning was config-triggered, not capability-triggered · **LOW**
+
+**Where**: `IncidentPoller` constructor (FND-45's check).
+**What**: it reads the `triage.engine` string without checking that an ADK bean exists, so on
+a non-`-Padk` build with `engine=adk` it claims "unattended, programmatic LLM use" for a run
+that will never contact a model — while J1's FND-49 warning simultaneously says the opposite
+(deterministic only). Both fire; only one is true. Found by two reviews.
+- **Resolution**: fixed:6d468f3 — originally deferred pending FND-57's single validator, which
+  is now built (`075d893`). `DiagnosisOrchestrator.isAdkActuallyActive()` exposes the same
+  `engine != fallbackEngine` bean-identity check FND-49 already uses internally;
+  `IncidentPoller` now asks that instead of reading `props.engine()` directly. Regression test:
+  `IncidentPollerTest#noC6WarningWhenConfigSaysAdkButNoAdkBeanIsActuallyActive` (config says
+  `adk`, no ADK bean actually wired — asserts no warning, the case that was previously wrong).
+- **Escape**: implementation review — two independent checks answering the same underlying
+  question ("is ADK actually the active engine?") from two different signals (config vs bean
+  identity) will eventually disagree; the fix should share one source of truth, not duplicate
+  the check.
 
 ## FND-59 — DeterministicDiagnosisEngine's Confluence query was a hardcoded literal, not derived from the incident · **MEDIUM**
 

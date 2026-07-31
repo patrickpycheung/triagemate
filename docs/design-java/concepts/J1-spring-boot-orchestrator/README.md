@@ -87,12 +87,13 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 > `GET /api/runs/{runId}/steps`; `POST /api/diagnose/{incidentNumber}` is unchanged.
 > See `../J11-live-thinking-trace/README.md`.
 
-**Error contract (FND-48, fixed 2026-07-31; hardened by FND-53 the same day)**:
-`DiagnosisApiExceptionHandler` maps `IncidentNotFoundException` → **404**,
-`DiagnosisTimeoutException` → **504**, `DiagnosisReportInvalidException` → **500**, each to a
-`{"error": "..."}` JSON body. Previously none were handled and all fell through to Spring's
-default error body, which has no `report` field; `index.html`'s `render()` dereferences
-`data.report.candidateSystems`, so the stage failure mode was a raw `TypeError`.
+**Error contract (FND-48, fixed 2026-07-31; hardened by FND-53 the same day; extended by
+FND-58/FND-55 the same day)**: `DiagnosisApiExceptionHandler` maps `IncidentNotFoundException`
+→ **404**, `DiagnosisTimeoutException` and `ResourceAccessException` → **504**,
+`DiagnosisReportInvalidException` → **500**, `HandlerMethodValidationException` → **400**, each
+to a `{"error": "..."}` JSON body. Previously none were handled and all fell through to
+Spring's default error body, which has no `report` field; `index.html`'s `render()`
+dereferences `data.report.candidateSystems`, so the stage failure mode was a raw `TypeError`.
 
 Three FND-53 corrections to the first cut, all found by review before anyone ran it:
 - The 404 was keyed on a **bare `IllegalStateException`**, which was safe only by accident —
@@ -107,7 +108,8 @@ Three FND-53 corrections to the first cut, all found by review before anyone ran
   by the FND-7 fallback and degrades (200 + banner). Only the *deterministic* engine's own
   validator can surface here — offline code, our own bug. **500** is the honest status.
 
-Deliberately narrow: three types, three statuses (four after FND-58 below). Everything else
+Deliberately narrow: five types, four statuses (see FND-58/FND-55 below — `ResourceAccessException`
+shares 504 with `DiagnosisTimeoutException`). Everything else
 still falls through to Spring, which is why the UI must not assume a JSON body (see J7's
 FND-52 note).
 
@@ -148,18 +150,21 @@ orchestrator. Previously unconstrained: `POST /api/diagnose/banana` was accepted
 `connectors.servicenow=real`. FND-54 already makes the *mock* gateway reject any number but
 its one seeded incident, so the demo path was never actually at risk — but the real-connector
 contract gap was real. A `HandlerMethodValidationException` (Spring Boot 3.2+'s translation of
-a `@Validated` controller's constraint violations) is now the API contract's fourth mapped
-type → **400**, `{"error": "invalid incident number"}`.
+a `@Validated` controller's constraint violations) is now one of the API contract's mapped
+types → **400**, `{"error": "invalid incident number"}`.
 
-**Which timeout fires first (FND-34 vs FND-15) — added 2026-07-31, previously undocumented.**
+**Which timeout fires first (FND-34 vs FND-15) — added 2026-07-31, corrected 2026-07-31 (FND-55).**
 These two bounds overlap and the HTTP one usually wins. `spring.http.client.read-timeout`
 (20s) applies to `RealServiceNowGateway`'s *injected* builder — including `getIncident`
 **inside** `engine.diagnose()`. So a hung real ServiceNow fails at ~20s with a
-`ResourceAccessException`, **not** at 90s with `DiagnosisTimeoutException`, and that type is
-not mapped by the error contract above — it currently surfaces as a bare 500. The documented
-504 is reachable only via Confluence/Sumo/GitLab (which build their own unconfigured
-`RestClient` and so have no HTTP timeout) or an ADK run genuinely exceeding 90s. Logged as
-FND-55.
+`ResourceAccessException`, **not** at 90s with `DiagnosisTimeoutException` — a genuinely
+different exception type, now also mapped to **504** (same status as the timeout above, both
+meaning "the app waited too long for an upstream"). Previously unmapped, surfacing as a bare
+500. This is a status-code correctness fix only — it does NOT resolve the separate, still-open
+question of whether 20s/90s are the *right* timeout values; that's real-latency tuning the J11
+spike's real ADK-latency data will inform, orthogonal to which status a timeout returns today.
+`DiagnosisApiExceptionHandler` is now five exception types mapped to four distinct statuses
+(`ResourceAccessException` and `DiagnosisTimeoutException` share 504).
 
 ## Interface sketch
 ```java
