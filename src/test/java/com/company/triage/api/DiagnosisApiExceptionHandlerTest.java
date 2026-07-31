@@ -94,4 +94,39 @@ class DiagnosisApiExceptionHandlerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("empty candidateSystems")));
     }
+
+    /**
+     * FND-58 — and the regression test its first cut was missing.
+     *
+     * <p>The original fix put {@code @Validated} on {@code DiagnosisController} and mapped
+     * {@code HandlerMethodValidationException}. Those two are mutually exclusive: {@code
+     * @Validated} selects Spring's AOP-proxy validation path, which throws {@code
+     * jakarta.validation.ConstraintViolationException} — a type the advice does not map — so
+     * `POST /api/diagnose/banana` returned a bare **500**, not the documented 400. The suite
+     * stayed green because no test ever posted an invalid incident number. Caught only by
+     * curling a running app.
+     *
+     * <p>The fix is to NOT annotate the class, letting Boot 3.2+'s built-in handler-method
+     * validation produce {@code HandlerMethodValidationException}. This test pins the
+     * behaviour that actually matters (the status and body a client sees), so re-adding
+     * {@code @Validated} fails here instead of on stage.
+     */
+    @Test
+    void malformedIncidentNumberMapsTo400() throws Exception {
+        mvc.perform(post("/api/diagnose/banana"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("invalid incident number")));
+
+        // The orchestrator must never be reached — that's the point of the guard.
+        org.mockito.Mockito.verify(orchestrator, org.mockito.Mockito.never()).run(anyString());
+    }
+
+    @Test
+    void wellFormedIncidentNumberIsNotRejectedByTheGuard() throws Exception {
+        when(orchestrator.run(anyString())).thenThrow(new IncidentNotFoundException("INC0000001"));
+
+        // 404 (from the orchestrator), NOT 400 — proves the pattern accepts a real number.
+        mvc.perform(post("/api/diagnose/INC0000001"))
+                .andExpect(status().isNotFound());
+    }
 }

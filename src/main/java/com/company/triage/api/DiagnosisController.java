@@ -3,7 +3,6 @@ package com.company.triage.api;
 import com.company.triage.orchestration.DiagnosisOrchestrator;
 import com.company.triage.orchestration.DiagnosisResult;
 import jakarta.validation.constraints.Pattern;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -17,9 +16,18 @@ import org.springframework.web.bind.annotation.*;
  * outbound instead. Both triggers call {@code DiagnosisOrchestrator.run(...)}
  * directly and meet there, not here.
  */
+/*
+ * Deliberately NOT @Validated at class level. Spring Boot 3.2+ applies built-in
+ * handler-method validation to controller params carrying constraint annotations
+ * — which surfaces as HandlerMethodValidationException and is mapped to 400 by
+ * DiagnosisApiExceptionHandler. Adding @Validated switches Spring to the older
+ * AOP-proxy path instead, which throws jakarta.validation.ConstraintViolationException
+ * and is NOT mapped, so a bad incident number returns a bare 500. That was the
+ * first cut of FND-58 and it shipped broken: no test hit the endpoint with an
+ * invalid number, so the suite stayed green. See DiagnosisApiExceptionHandlerTest.
+ */
 @RestController
 @RequestMapping("/api/diagnose")
-@Validated
 public class DiagnosisController {
 
     private final DiagnosisOrchestrator orchestrator;

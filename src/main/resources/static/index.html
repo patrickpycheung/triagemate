@@ -4,32 +4,157 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>TriageMate</title>
+  <!-- Apply the saved theme before first paint. Without this the page renders in
+       the default dark theme for a frame and then repaints — very visible on a
+       projector, and the exact kind of flicker you don't want mid-demo. -->
+  <script>
+    try {
+      var t = localStorage.getItem('triagemate.theme');
+      if (t) document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* private mode — fall through to the default theme */ }
+  </script>
   <style>
-    :root { --bg:#0f1420; --card:#182030; --ink:#e8edf6; --muted:#93a1b5; --acc:#5aa9ff; --ok:#3ecf8e; --warn:#ffb454; }
+    /* ---- Theme tokens -------------------------------------------------------
+       Every colour the page paints comes from one of these. Adding a theme
+       below means overriding these 15 vars — no rule outside :root/[data-theme]
+       may hardcode a hex, or that theme silently half-applies. Theme choice is
+       cosmetic only: it never changes what the page reports (see the FND-16/25
+       notes in render() — those read real DiagnosisResult fields, not colours).
+    */
+    :root, [data-theme="midnight"] {
+      --bg:#0f1420; --card:#182030; --ink:#e8edf6; --muted:#93a1b5;
+      --acc:#5aa9ff; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#24304a; --input-bg:#0d1220; --input-border:#2a3550;
+      --chip:#243350; --inset:#0e1626; --btn-ink:#04122b; --trace:#9fb3d0;
+      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
+    }
+    /* Australia Post — the corporate read: red on white, high-key. */
+    [data-theme="auspost"] {
+      --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
+      --acc:#dc1928; --ok:#0a7d54; --warn:#b45309;
+      --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
+      --chip:#fdeaec; --inset:#fbf7f7; --btn-ink:#ffffff; --trace:#4a5a6a;
+      --banner-bg:#fff5e6; --banner-ink:#a35a00;
+    }
+    /* Australia Post, dark room — same red, survives a dim projector. */
+    [data-theme="auspost-dark"] {
+      --bg:#14100f; --card:#1f1816; --ink:#f5ece9; --muted:#b09a95;
+      --acc:#ff4b57; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#3a2b28; --input-bg:#120e0d; --input-border:#4a3733;
+      --chip:#3d1f22; --inset:#191211; --btn-ink:#1a0405; --trace:#c9b3ae;
+      --banner-bg:#2e1c0a; --banner-ink:#ffb454;
+    }
+    /* Hackathon — purple/blue, the "this is a demo day build" read. */
+    [data-theme="hackathon"] {
+      --bg:#120c26; --card:#1c1440; --ink:#ece8ff; --muted:#a396d4;
+      --acc:#8b5cf6; --ok:#34d399; --warn:#fbbf24;
+      --border:#2f2360; --input-bg:#0e0920; --input-border:#3d2f75;
+      --chip:#2c2160; --inset:#160f33; --btn-ink:#0f0824; --trace:#b3a5e0;
+      --banner-bg:#2b1e08; --banner-ink:#fbbf24;
+    }
+    /* ServiceNow — the system we're writing back into. */
+    [data-theme="servicenow"] {
+      --bg:#0c1a17; --card:#12251f; --ink:#e6f4ee; --muted:#8fb3a5;
+      --acc:#62d84e; --ok:#62d84e; --warn:#ffb454;
+      --border:#1e3d33; --input-bg:#0a1512; --input-border:#274d40;
+      --chip:#17352b; --inset:#0e1f1a; --btn-ink:#04160c; --trace:#9dc4b4;
+      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
+    }
+    /* Paper — neutral light, for screenshots and printed handouts. */
+    [data-theme="paper"] {
+      --bg:#fbfbfa; --card:#ffffff; --ink:#1f2328; --muted:#656d76;
+      --acc:#0969da; --ok:#1a7f37; --warn:#9a6700;
+      --border:#d1d9e0; --input-bg:#ffffff; --input-border:#c9d1d9;
+      --chip:#ddf4ff; --inset:#f6f8fa; --btn-ink:#ffffff; --trace:#57606a;
+      --banner-bg:#fff8c5; --banner-ink:#7d4e00;
+    }
+    /* Projector — max contrast, thick accents. Answers the J11 legibility
+       question the hard way: if it reads at the back of the room here, it reads. */
+    [data-theme="projector"] {
+      --bg:#000000; --card:#0d0d0d; --ink:#ffffff; --muted:#c9c9c9;
+      --acc:#ffd400; --ok:#00e676; --warn:#ff9100;
+      --border:#4a4a4a; --input-bg:#000000; --input-border:#6e6e6e;
+      --chip:#333300; --inset:#141400; --btn-ink:#000000; --trace:#e0e0e0;
+      --banner-bg:#2e2000; --banner-ink:#ffd400;
+    }
     * { box-sizing:border-box; }
     body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
     .wrap { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
     h1 { font-size:22px; margin:0 0 4px; }
     .sub { color:var(--muted); margin:0 0 20px; }
     .row { display:flex; gap:10px; margin-bottom:22px; }
-    input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid #2a3550; background:#0d1220; color:var(--ink); font-size:15px; }
-    button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:#04122b; font-weight:600; cursor:pointer; }
+    input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid var(--input-border); background:var(--input-bg); color:var(--ink); font-size:15px; }
+    button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:var(--btn-ink); font-weight:600; cursor:pointer; }
     button:disabled { opacity:.5; cursor:default; }
-    .card { background:var(--card); border:1px solid #24304a; border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
     .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
-    .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:#243350; color:var(--acc); margin-left:6px; }
-    .bar { height:7px; background:#243350; border-radius:5px; overflow:hidden; margin-top:4px; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
+    .bar { height:7px; background:var(--chip); border-radius:5px; overflow:hidden; margin-top:4px; }
     .bar > i { display:block; height:100%; background:var(--acc); }
     .cand { margin-bottom:12px; }
-    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:#0e1626; margin-bottom:7px; border-radius:0 6px 6px 0; }
+    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:var(--inset); margin-bottom:7px; border-radius:0 6px 6px 0; }
     .ev b { color:var(--acc); text-transform:uppercase; font-size:11px; }
     .src { color:var(--muted); }
     ul { margin:6px 0 0; padding-left:18px; }
-    .trace { font:12px/1.5 ui-monospace,monospace; color:#9fb3d0; white-space:pre-wrap; }
+    .trace { font:12px/1.5 ui-monospace,monospace; color:var(--trace); white-space:pre-wrap; }
     .advisory { color:var(--warn); font-size:12px; }
+    .link { color:var(--acc); text-decoration:underline; }
+
+    /* ---- Theme picker (corner) ---- */
+    .theme-btn {
+      position:fixed; top:14px; right:14px; z-index:20;
+      width:38px; height:38px; padding:0; display:grid; place-items:center;
+      border-radius:50%; background:var(--card); color:var(--ink);
+      border:1px solid var(--border); cursor:pointer;
+    }
+    .theme-btn:hover { border-color:var(--acc); color:var(--acc); }
+    .theme-menu {
+      position:fixed; top:60px; right:14px; z-index:20; width:232px;
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+      padding:8px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    .theme-menu[hidden] { display:none; }
+    .theme-menu h3 {
+      font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--muted); margin:4px 8px 8px;
+    }
+    .theme-opt {
+      display:flex; align-items:center; gap:9px; width:100%; padding:7px 8px;
+      background:none; border:0; border-radius:8px; cursor:pointer;
+      color:var(--ink); font:inherit; font-size:13.5px; text-align:left;
+    }
+    .theme-opt:hover { background:var(--inset); }
+    .theme-opt[aria-checked="true"] { background:var(--chip); color:var(--acc); font-weight:600; }
+    .sw { width:15px; height:15px; border-radius:50%; flex:none; border:1px solid rgba(128,128,128,.45); }
+    .theme-note { color:var(--muted); font-size:11.5px; margin:8px 8px 4px; line-height:1.45; }
+    @media print { .theme-btn, .theme-menu { display:none; } }
   </style>
 </head>
 <body>
+
+<!-- Theme picker. Deliberately a plain corner control: the brand direction
+     (Australia Post red vs hackathon purple) is still undecided, so ship all
+     the candidates and let a look at them settle it rather than guessing. -->
+<button class="theme-btn" id="themeBtn" title="Change theme"
+        aria-haspopup="true" aria-expanded="false" aria-controls="themeMenu">
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="13.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="17.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="8.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="6.5" cy="12.5" r="1.2" fill="currentColor" stroke="none"/>
+    <path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.5-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/>
+  </svg>
+  <span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Change theme</span>
+</button>
+
+<div class="theme-menu" id="themeMenu" role="menu" aria-labelledby="themeBtn" hidden>
+  <h3>Theme</h3>
+  <div id="themeList"></div>
+  <p class="theme-note">Cosmetic only — never changes what the report says.
+     Saved locally; <b>Projector</b> is the max-contrast one to try on the real screen.</p>
+</div>
+
 <div class="wrap">
   <h1>TriageMate <span class="pill">advisory</span></h1>
   <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
@@ -43,6 +168,57 @@
 </div>
 
 <script>
+/* ---- Theme picker -------------------------------------------------------
+   Themes are pure CSS-variable overrides (see <style>), applied by setting
+   data-theme on <html>. Nothing here touches report rendering — a theme can
+   never change what the page claims happened.
+   The list order is the review order: the two real candidates first.
+*/
+const THEMES = [
+  { id:'auspost',      name:'Australia Post',   sw:'#dc1928' },
+  { id:'hackathon',    name:'Hackathon',        sw:'#8b5cf6' },
+  { id:'auspost-dark', name:'Aus Post (dark)',  sw:'#ff4b57' },
+  { id:'midnight',     name:'Midnight',         sw:'#5aa9ff' },
+  { id:'servicenow',   name:'ServiceNow',       sw:'#62d84e' },
+  { id:'paper',        name:'Paper (light)',    sw:'#0969da' },
+  { id:'projector',    name:'Projector',        sw:'#ffd400' },
+];
+const THEME_KEY = 'triagemate.theme';
+const DEFAULT_THEME = 'midnight';
+
+function applyTheme(id) {
+  const theme = THEMES.some(t => t.id === id) ? id : DEFAULT_THEME;
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode — fine */ }
+  document.querySelectorAll('.theme-opt').forEach(el =>
+    el.setAttribute('aria-checked', String(el.dataset.theme === theme)));
+}
+
+function initThemes() {
+  const list = document.getElementById('themeList');
+  const menu = document.getElementById('themeMenu');
+  const btn = document.getElementById('themeBtn');
+
+  list.innerHTML = THEMES.map(t =>
+    `<button class="theme-opt" role="menuitemradio" aria-checked="false" data-theme="${t.id}">
+       <span class="sw" style="background:${t.sw}"></span>${t.name}
+     </button>`).join('');
+  list.querySelectorAll('.theme-opt').forEach(el =>
+    el.addEventListener('click', () => { applyTheme(el.dataset.theme); close(); }));
+
+  const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', e => { e.stopPropagation(); menu.hidden ? open() : close(); });
+  menu.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+  let saved = DEFAULT_THEME;
+  try { saved = localStorage.getItem(THEME_KEY) || DEFAULT_THEME; } catch (e) { /* ignore */ }
+  applyTheme(saved);
+}
+initThemes();
+
 async function run() {
   const inc = document.getElementById('inc').value.trim();
   const btn = document.getElementById('go'); const out = document.getElementById('out');
@@ -93,7 +269,7 @@ function render(data) {
       <div style="margin-top:3px">${esc(c.reason)}</div>
       ${c.signal?`<div class="src" style="margin-top:2px;font-size:12px">${esc(c.signal)}</div>`:''}
     </div>`).join('');
-  const cmt = 'border-left:3px solid var(--acc);background:#0e1626;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
+  const cmt = 'border-left:3px solid var(--acc);background:var(--inset);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
   const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc);display:block;margin-bottom:8px';
   // Which engine actually produced this report? The orchestrator degrades from the live
   // ADK agent to the deterministic engine on failure (FND-7) and discloses it via
@@ -105,12 +281,12 @@ function render(data) {
   const degraded = data.engine === 'DEGRADED_TO_DETERMINISTIC';
   const degradedLine = t.find(s => /degraded to the deterministic engine/i.test(s || ''));
   const banner = degraded ? `
-    <div class="card" style="border:1px solid #f2b25c;background:#2a1e0c">
-      <h2 style="color:#f2b25c;margin-top:0">⚠ Degraded run — this is NOT the live agent</h2>
+    <div class="card" style="border:1px solid var(--banner-ink);background:var(--banner-bg)">
+      <h2 style="color:var(--banner-ink);margin-top:0">⚠ Degraded run — this is NOT the live agent</h2>
       <p style="margin:0 0 8px">The live ADK agent failed, so this report was produced by the
       <b>offline deterministic engine</b>. The output below is real and complete, but
       <b>no LLM was involved</b> — do not describe it as model reasoning.</p>
-      ${degradedLine ? `<div class="trace" style="color:#f2b25c">${esc(degradedLine)}</div>` : ''}
+      ${degradedLine ? `<div class="trace" style="color:var(--banner-ink)">${esc(degradedLine)}</div>` : ''}
     </div>` : '';
 
   // FND-25: this card previously rendered unconditionally, reconstructed client-side
