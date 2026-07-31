@@ -12,9 +12,9 @@ copilot-cli-runtime/` (the E2 LLM-backend decision).
 
 Implementation is at the **repo root** (`pom.xml`, `src/`; FND-11 — an earlier `app/`
 subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3.
-- `mvn test` → **41/41 pass** (default profile); `./run-deterministic.sh` boots in
+- `mvn test` → **43/43 pass** (default profile); `./run-deterministic.sh` boots in
   ~1s and `POST /api/diagnose/INC0012345` returns the full result end-to-end (offline).
-- `mvn -Padk test` → **57/57 pass**: the real ADK 1.7.0 `LlmAgent` loop runs
+- `mvn -Padk test` → **59/59 pass**: the real ADK 1.7.0 `LlmAgent` loop runs
   end-to-end against a local fake OpenAI endpoint (tool-call → tool exec → J4 parse),
   the J8 tool allowlist + call bound are proven, and the orchestrator's timeout +
   concurrency-coalescing (FND-15/31) are covered. (FND-30: hand-maintained test

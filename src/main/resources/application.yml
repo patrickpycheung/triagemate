@@ -57,6 +57,11 @@ triage:
       interval-ms: 30000     # 30s — poll latency is the accepted cost of no inbound path
       batch-limit: 10        # max incidents pulled per tick
       completed-cap: 500     # in-process completed-set bound (FND-1 layer 3)
+      # FND-45: K1 (poll.enabled=true) + triage.engine=adk is unattended, programmatic LLM
+      # use, which the C6 ToS ruling gates (docs/discovery/copilot-cli-runtime). Previously
+      # documented only in prose; the app now WARNs at startup unless this is explicitly
+      # set true — turning a silent gap into a decision on record, not a hard refusal.
+      unattended-llm-ack: false
 
   writeback:
     # Automatic advisory write-back (J5) — two comments per run (sources first, then

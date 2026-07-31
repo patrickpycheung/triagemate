@@ -1,8 +1,12 @@
 package com.company.triage.orchestration;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.*;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -67,7 +71,47 @@ class IncidentPollerTest {
     }
 
     private IncidentPoller poller(FakeSnow snow, CountingOrchestrator orch) {
-        return new IncidentPoller(snow, orch, 10, 500);
+        return new IncidentPoller(snow, orch, 10, 500, "deterministic", false);
+    }
+
+    /**
+     * FND-45: K1 (this bean existing at all means poll.enabled=true) combined with
+     * triage.engine=adk is exactly the unattended, programmatic LLM use the C6 ToS ruling
+     * gates. Previously documented in J10's prose but not enforced or even warned about.
+     */
+    @Test
+    void warnsWhenPollingWithAdkEngineAndNoAck() {
+        Logger logger = (Logger) LoggerFactory.getLogger(IncidentPoller.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.ADK),
+                    10, 500, "adk", false);
+
+            assertThat(appender.list).anyMatch(e ->
+                    e.getFormattedMessage().contains("C6") && e.getFormattedMessage().contains("unattended"));
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    void noWarningWhenAckIsSetOrEngineIsDeterministic() {
+        Logger logger = (Logger) LoggerFactory.getLogger(IncidentPoller.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.ADK),
+                    10, 500, "adk", true);   // acked
+            new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.DETERMINISTIC),
+                    10, 500, "deterministic", false);   // not adk
+
+            assertThat(appender.list).noneMatch(e -> e.getFormattedMessage().contains("C6"));
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     /**

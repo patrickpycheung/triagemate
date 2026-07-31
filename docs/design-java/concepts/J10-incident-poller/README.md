@@ -105,6 +105,14 @@ currently the only place it surfaces on an unattended run.
 
 ## Open / risks
 
+- **C6 gate now warned, not just documented (FND-45, fixed 2026-07-31).** This bean existing
+  at all means `poll.enabled=true`; combined with `triage.engine=adk` that is exactly the
+  unattended, programmatic LLM use the C6 ToS ruling gates. Previously stated only in prose
+  below — nothing warned or refused. The constructor now logs a WARN at startup unless
+  `triage.trigger.poll.unattended-llm-ack=true` is explicitly set (deliberately a warning,
+  not a hard failure — matches FND-49's precedent that a hackathon build shouldn't refuse to
+  boot). `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
+  `#noWarningWhenAckIsSetOrEngineIsDeterministic`.
 - **Accepted limitation (FND-43, closed 2026-07-31, not fixed): same-second timestamp
   collision beyond `batch-limit`.** If more than `triage.trigger.poll.batch-limit` (default
   10) incidents share the exact same `sys_created_on` second, the "unbroken handled prefix"

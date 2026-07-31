@@ -96,7 +96,9 @@ public class IncidentPoller {
     public IncidentPoller(ServiceNowGateway serviceNow,
                           DiagnosisOrchestrator orchestrator,
                           @Value("${triage.trigger.poll.batch-limit:10}") int batchLimit,
-                          @Value("${triage.trigger.poll.completed-cap:500}") int completedCap) {
+                          @Value("${triage.trigger.poll.completed-cap:500}") int completedCap,
+                          @Value("${triage.engine:deterministic}") String configuredEngine,
+                          @Value("${triage.trigger.poll.unattended-llm-ack:false}") boolean unattendedLlmAck) {
         this.serviceNow = serviceNow;
         this.orchestrator = orchestrator;
         this.batchLimit = batchLimit;
@@ -104,6 +106,19 @@ public class IncidentPoller {
         this.cursor = OffsetDateTime.now();
         log.info("K1 poller enabled — polling incidents created after {} (batch limit {})",
                 cursor, batchLimit);
+        // FND-45: this bean existing at all means poll.enabled=true (its @ConditionalOnProperty
+        // gate). Combined with triage.engine=adk, that is exactly the unattended, programmatic
+        // LLM use the C6 ToS ruling gates — previously documented in J10's prose but not
+        // enforced anywhere. WARN, don't refuse (matches FND-49's precedent: a hackathon build
+        // shouldn't fail to boot over this) — but an explicit ack property means someone had to
+        // actually set it, turning a silent gap into a decision on record.
+        if ("adk".equalsIgnoreCase(configuredEngine) && !unattendedLlmAck) {
+            log.warn("K1 poller is running WITH triage.engine=adk — this is unattended, "
+                    + "programmatic LLM use, which the C6 ToS ruling gates (see "
+                    + "docs/discovery/copilot-cli-runtime). Set "
+                    + "triage.trigger.poll.unattended-llm-ack=true once that's cleared to "
+                    + "silence this warning.");
+        }
     }
 
     @Scheduled(fixedDelayString = "${triage.trigger.poll.interval-ms:30000}")

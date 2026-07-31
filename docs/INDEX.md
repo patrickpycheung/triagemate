@@ -20,7 +20,7 @@
 
 ## audit
 
-- [**Found-issues archive**](audit/found-issues-archive.md) — Append-only record of resolved `FND-*` entries from `/FOUND-ISSUES.md`, newest first.  `2026-07-30`
+- [**Found-issues archive**](audit/found-issues-archive.md) — Append-only record of resolved `FND-*` entries from `/FOUND-ISSUES.md`, newest first.  `2026-07-31`
 
 ## design
 
@@ -39,19 +39,19 @@
 ## design-java
 
 - [**Live demo runbook — Copilot-backed triage (Option 1: D1 + D2 + D3)**](design-java/DEMO-RUNBOOK.md) — The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:  `2026-07-30`
-- [**Demo Walkthrough — TriageMate**](design-java/DEMO.md) — What the running Spring Boot app does, end to end, and how to run it.  `2026-07-30`
+- [**Demo Walkthrough — TriageMate**](design-java/DEMO.md) — What the running Spring Boot app does, end to end, and how to run it.  `2026-07-31`
 - [**CDS Workspace — Java Triage Copilot (Spring Boot + Google ADK)**](design-java/README.md) — Active design workspace. Turns the Java-pivot DDS decision  `2026-07-31`
 - [**STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)**](design-java/STATUS.md) — Round 1 — concepts J1–J8 drafted", stale against the table below for some time).  `2026-07-31`
 
 ### design-java/concepts/
 
 - [**J1 — Spring Boot Orchestrator**](design-java/concepts/J1-spring-boot-orchestrator/README.md) — The Spring Boot skeleton and the shared entry point both triggers call through.  `2026-07-31`
-- [**J10 — Incident Poller (the K1 trigger)**](design-java/concepts/J10-incident-poller/README.md) — · **Carries**: K1–K3 from DDS `servicenow-local-trigger`  `2026-07-30`
+- [**J10 — Incident Poller (the K1 trigger)**](design-java/concepts/J10-incident-poller/README.md) — · **Carries**: K1–K3 from DDS `servicenow-local-trigger`  `2026-07-31`
 - [**J11 — Live Thinking Trace (animated per-step agent trace)**](design-java/concepts/J11-live-thinking-trace/README.md) — Show the copilot's *process*, not a spinner. A per-step trace where each row carries the  · 2 docs  `2026-07-31`
 - [**J2 — ADK Agent Loop**](design-java/concepts/J2-adk-agent-loop/README.md) — Gates on Spike JS-1  `2026-07-30`
 - [**J3 — Connector Tools (gateways + FunctionTool adapters)**](design-java/concepts/J3-connector-tools/README.md) — Each enterprise system is a Spring `@Service` behind a narrow interface, with a  `2026-07-30`
 - [**J4 — Diagnosis Report (JSON contract)**](design-java/concepts/J4-diagnosis-report/README.md) — The strict JSON contract every run produces. Building the report **before** the  `2026-07-30`
-- [**J5 — ServiceNow Gateway (the primary source)**](design-java/concepts/J5-servicenow-gateway/README.md) — wording was superseded 2026-07-23, see below)  `2026-07-30`
+- [**J5 — ServiceNow Gateway (the primary source)**](design-java/concepts/J5-servicenow-gateway/README.md) — wording was superseded 2026-07-23, see below)  `2026-07-31`
 - [**J6 — Knowledge Tools (Confluence · Sumo · GitLab)**](design-java/concepts/J6-knowledge-tools/README.md) — The three "arms" the investigator reaches for **after** it has a hypothesis. Ordered  `2026-07-30`
 - [**J7 — Demo UI & Ground-Truth Dataset**](design-java/concepts/J7-demo-ui-and-dataset/README.md) — What the audience sees, and the curated data that makes it work offline and  `2026-07-31`
 - [**J8 — Guardrails & Observability (cross-cutting)**](design-java/concepts/J8-guardrails-observability/README.md) — The leash and the flight recorder. Makes the copilot safe to point at real  `2026-07-31`
@@ -61,7 +61,7 @@
 
 - [**STATUS — DDS: Run TriageMate on a GitHub Copilot subscription**](discovery/copilot-cli-runtime/STATUS.md) — **E2 — use the Copilot subscription as a local OpenAI-compatible LLM backend (LiteLLM /  · 9 docs  `2026-07-30`
 - [**STATUS — DDS: Live "thinking trace" UI (animated per-step agent trace)**](discovery/live-thinking-trace-ui/STATUS.md) — engineering pass + 2 direct `javap` verifications against the real ADK jar.  · 11 docs  `2026-07-31`
-- [**STATUS — DDS: Our orchestration vs Copilot CLI autonomous (for the demo)**](discovery/orchestrator-vs-copilot-cli/STATUS.md) — Demo runs on **our orchestration driving a high Copilot-served model** (D1), with the  · 7 docs  `2026-07-30`
+- [**STATUS — DDS: Our orchestration vs Copilot CLI autonomous (for the demo)**](discovery/orchestrator-vs-copilot-cli/STATUS.md) — Demo runs on **our orchestration driving a high Copilot-served model** (D1), with the  · 7 docs  `2026-07-31`
 - [**STATUS — DDS: Automatic trigger on ServiceNow incident creation**](discovery/servicenow-auto-trigger/STATUS.md)  · 4 docs  `2026-07-30`
 - [**STATUS — DDS: ServiceNow (cloud) → local app on corporate laptop**](discovery/servicenow-local-trigger/STATUS.md) — Consumed downstream by DDS `copilot-cli-runtime` (C4).  · 8 docs  `2026-07-30`
 - [**STATUS — DDS: ServiceNow Triage Copilot (Java / Spring Boot pivot)**](discovery/servicenow-triage-java/STATUS.md) — checkpoints passed — Phase 1 "Yes — proceed"; Phase 4 concepts J1–J8 "Yes — lock &  · 14 docs  `2026-07-30`
