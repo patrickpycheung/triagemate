@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,7 +33,6 @@ import java.util.regex.Pattern;
 @Component
 public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
-    private static final Pattern ORDER_ID = Pattern.compile("\\bINC-ORD-\\d+\\b");
     private static final Pattern ERROR_TOKEN = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b");
 
     private final ServiceNowGateway serviceNow;
@@ -40,6 +40,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private final SumoGateway sumo;
     private final GitLabGateway gitLab;
     private final List<String> sumoScopeAllowlist;
+    private final List<String> gitLabProjectAllowlist;
 
     public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
                                         SumoGateway sumo, GitLabGateway gitLab,
@@ -55,6 +56,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // script), so there was no guardrail-bypass risk, but "which scope is default"
         // now has one source of truth instead of two independently-maintained copies.
         this.sumoScopeAllowlist = props.sumo().allowedScopes();
+        // FND-62: the GitLab project was a hardcoded literal here, so this engine ignored
+        // triage.gitlab.allowed-projects while the ADK path enforced it — the same
+        // two-sources-of-truth split FND-40 fixed for Sumo scopes and missed here.
+        this.gitLabProjectAllowlist = props.gitlab().allowedProjects();
     }
 
     @Override
@@ -67,11 +72,25 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         trace.add("servicenow.getIncident(%s) → CI=%s, env=%s".formatted(
                 incidentNumber, inc.configurationItem(), inc.environment()));
 
-        // ---- Step 2: clarify symptom (extract identifiers) --------------------
-        String rawText = (inc.shortDescription() + " " + inc.description());
-        String orderId = firstMatch(ORDER_ID, rawText);
+        // FND-63: the ticket itself is evidence — it is a real source with real content, and
+        // every conclusion below is at minimum grounded in what it says. It was never cited,
+        // which left an incident whose other four sources all come back empty with ZERO
+        // evidence and therefore no valid J4 report at all (the contract requires ≥1). That
+        // is the no-signal case the FND-7 fallback most needs to survive: "here is what the
+        // ticket says and nothing corroborated it" is a legitimate, honest triage outcome,
+        // whereas failing to produce a report is not.
+        evidence.add(new Evidence("e-incident", "servicenow-incident",
+                joinNonBlank(" — ", inc.shortDescription(), inc.description()), incidentNumber));
+
+        // ---- Step 2: clarify symptom (extract identifiers + keywords) ---------
+        // FND-62: was a single regex for the demo fixture's exact id shape
+        // (INC-ORD-\d+), with everything else falling through to the literal "error".
+        // IncidentSignals derives ids, keywords and the affected app from the ticket.
+        IncidentSignals signals = IncidentSignals.from(inc);
+        String orderId = signals.primaryIdentifier();
         Identifiers ids = new Identifiers(orderId, null, orderId);
-        trace.add("understand: symptom clarified; orderId=%s".formatted(orderId));
+        trace.add("understand: id=%s, keywords=%s, app=%s".formatted(
+                orderId, signals.keywords(), signals.app()));
 
         // ---- Step 3: similar incidents + ownership ----------------------------
         List<ResolvedIncident> similar = serviceNow.findSimilarIncidents(inc);
@@ -96,7 +115,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // (shortDescription) plus the affected system (configurationItem), same as the
         // orderId/scope/window derivations already used for the similar-incidents and Sumo
         // lookups below.
-        String confluenceQuery = buildConfluenceQuery(inc);
+        // FND-62: keywords + app rather than the whole sentence + app, so the search gets
+        // distinctive terms instead of English function words.
+        String confluenceQuery = signals.confluenceQuery();
         List<KnowledgeDoc> docs = confluence.search(confluenceQuery);
         for (KnowledgeDoc d : docs) {
             evidence.add(new Evidence("e-kb-" + d.id(), "confluence",
@@ -105,33 +126,62 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         trace.add("confluence.search(query=\"%s\") → %d page(s)".formatted(confluenceQuery, docs.size()));
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
-        String scope = sumoScopeAllowlist.get(0);   // allowlisted scope only
-        LogSearchRequest req = new LogSearchRequest(scope,
-                orderId == null ? "error" : orderId,
-                inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), 20);
-        List<LogEvidence> logs = sumo.search(req);
-        LogEvidence errorLine = logs.stream().filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
+        // FND-62: was always allowedScopes.get(0) — the first configured scope, whatever the
+        // incident was about. Now: rank the allowlist by relevance to the affected app, then
+        // sweep it in that order, stopping at the first scope that yields an ERROR line.
+        // Ranking alone would be a guess, and this incident is precisely the case where the
+        // guess is wrong: the CI says "Order Portal" but the failure is downstream in Payment
+        // Service. Sweeping is affordable here in a way it isn't for the ADK path — the
+        // allowlist is small and config-bounded, and there is no per-call LLM budget.
+        String logQuery = signals.logQuery();
+        List<String> scopesToTry = IncidentSignals.rankAllowlist(signals.app(), sumoScopeAllowlist);
+        String scope = scopesToTry.isEmpty() ? null : scopesToTry.get(0);
+        List<LogEvidence> logs = List.of();
+        LogEvidence errorLine = null;
+        for (String candidateScope : scopesToTry) {
+            List<LogEvidence> hits = sumo.search(new LogSearchRequest(candidateScope, logQuery,
+                    inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), 20));
+            LogEvidence err = hits.stream().filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
+            if (!hits.isEmpty() && (logs.isEmpty() || err != null)) {
+                logs = hits;
+                scope = candidateScope;
+            }
+            if (err != null) { errorLine = err; scope = candidateScope; break; }
+        }
         String errorToken = errorLine == null ? null : firstMatch(ERROR_TOKEN, errorLine.message());
         if (errorLine != null) {
             evidence.add(new Evidence("e-log", "sumo",
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),
                     scope));
         }
-        trace.add("sumo.search(scope=%s, window=±10m, max=20) → %d line(s); errorToken=%s"
-                .formatted(scope, logs.size(), errorToken));
+        trace.add("sumo.search(query=\"%s\", scopes=%s → %s, window=±10m, max=20) → %d line(s); errorToken=%s"
+                .formatted(logQuery, scopesToTry, scope, logs.size(), errorToken));
 
         // ---- Step 6: targeted code search + log↔code citation (RC3) -----------
-        String function = "Order submission (checkout)";
+        // FND-63: was the literal "Order submission (checkout)". The ticket's own
+        // category/subcategory is the structured answer to "what function is affected";
+        // fall back to the symptom line when they're unset.
+        String function = joinNonBlank(" / ", inc.category(), inc.subcategory());
+        if (function.isBlank()) function = text(inc.shortDescription());
         List<CodeSearchResult> codeHits = List.of();
         if (errorToken != null) {
-            codeHits = gitLab.searchCode("order-payments/payment-service", errorToken);
+            // FND-62: was the literal "order-payments/payment-service" — hardcoded, and
+            // bypassing triage.gitlab.allowed-projects entirely, so config and behaviour
+            // could silently disagree (FND-40's exact class, fixed there for Sumo scopes and
+            // missed here). Same rank-then-sweep as the log search above.
+            List<String> projectsToTry =
+                    IncidentSignals.rankAllowlist(signals.app(), gitLabProjectAllowlist);
+            for (String project : projectsToTry) {
+                codeHits = gitLab.searchCode(project, errorToken);
+                if (!codeHits.isEmpty()) break;
+            }
             for (CodeSearchResult h : codeHits) {
                 evidence.add(new Evidence("e-code", "gitlab",
                         "log line '%s' is emitted at %s:%d".formatted(errorToken, h.filePath(), h.line()),
                         "%s/%s#L%d".formatted(h.project(), h.filePath(), h.line())));
             }
-            trace.add("gitlab.searchCode('%s') → %d hit(s) (log↔code citation)"
-                    .formatted(errorToken, codeHits.size()));
+            trace.add("gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
+                    .formatted(errorToken, projectsToTry, codeHits.size()));
         }
 
         // ---- Step 7: who to talk to (J9) --------------------------------------
@@ -142,31 +192,103 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 .formatted(contacts.size(), docs.size(), codeHits.size()));
 
         // ---- Step 8: assemble the diagnosis report (J4) -----------------------
-        List<CandidateSystem> candidates = List.of(
-                new CandidateSystem("Payment Service", 0.86,
-                        List.of("e-log", "e-code", "e-kb-KB001234", "e-sim-INC0011902")),
-                new CandidateSystem("Order Portal", 0.55, List.of("e-cmdb")));
+        // FND-63: candidates and their evidenceRefs were hardcoded, and two of the refs
+        // ("e-kb-KB001234", "e-sim-INC0011902") were literal ids from the seeded demo
+        // fixture. For any other incident those Evidence entries don't exist, so the J4
+        // validator's dangling-evidenceRef rule threw — meaning THIS ENGINE COULD NOT
+        // ACTUALLY SERVE AS THE FND-7 FALLBACK for any incident but the demo one: the
+        // orchestrator would degrade to it and then get a 500 out of it. Now derived from
+        // the evidence actually gathered above, so refs are dangling-free by construction.
+        java.util.Set<String> gathered = evidence.stream()
+                .map(Evidence::id).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
 
+        // Candidate systems come from the two signals that actually name a system: the
+        // loggers that emitted the log lines, and the CMDB's owning application. A system
+        // with a resolved log↔code citation ranks above one seen only in logs, which ranks
+        // above one known only from the CMDB path.
+        Map<String, CandidateSystem> byName = new LinkedHashMap<>();
+        String codeBackedSystem = codeHits.isEmpty() ? null : prettifySystem(codeHits.get(0).project());
+        for (LogEvidence l : logs) {
+            String name = prettifySystem(l.logger());
+            boolean hasCode = codeBackedSystem != null
+                    && (errorLine != null && l.logger().equals(errorLine.logger()));
+            double confidence = hasCode ? 0.86 : ("ERROR".equals(l.level()) ? 0.70 : 0.45);
+            List<String> refs = refsThatExist(gathered, hasCode ? List.of("e-log", "e-code") : List.of("e-log"));
+            byName.merge(name, new CandidateSystem(name, confidence, refs),
+                    (a, b) -> a.confidence() >= b.confidence() ? a : b);
+        }
+        ownership.ifPresent(o -> byName.putIfAbsent(o.application(),
+                new CandidateSystem(o.application(), 0.55, refsThatExist(gathered, List.of("e-cmdb")))));
+        if (byName.isEmpty() && inc.configurationItem() != null) {
+            // Nothing observed — name the CI so the report still says what was looked at,
+            // at a confidence that admits we found nothing to back it.
+            byName.put(inc.configurationItem(),
+                    new CandidateSystem(inc.configurationItem(), 0.30, List.of("e-incident")));
+        }
+        List<CandidateSystem> candidates = byName.values().stream()
+                .sorted(Comparator.comparingDouble(CandidateSystem::confidence).reversed())
+                .toList();
+
+        // Routing evidence: the CMDB owner plus any similar-incident resolutions — whichever
+        // of those actually exist for THIS incident.
+        List<String> assignmentRefs = refsThatExist(gathered, java.util.stream.Stream.concat(
+                java.util.stream.Stream.of("e-cmdb", "e-kb-" + firstDocId(docs)),
+                similar.stream().map(r -> "e-sim-" + r.number())).toList());
         SuggestedAssignment assignment = ownership
-                .map(o -> new SuggestedAssignment(o.supportGroup(), Confidence.MEDIUM,
-                        List.of("e-cmdb", "e-sim-INC0011902", "e-kb-KB001234")))
-                .orElse(new SuggestedAssignment("Payments Platform Support", Confidence.MEDIUM,
-                        List.of("e-sim-INC0011902")));
+                .map(o -> new SuggestedAssignment(o.supportGroup(), Confidence.MEDIUM, assignmentRefs))
+                .orElseGet(() -> similar.stream().findFirst()
+                        .map(r -> new SuggestedAssignment(r.resolutionGroup(), Confidence.LOW, assignmentRefs))
+                        .orElse(new SuggestedAssignment("Unassigned — no ownership or similar-incident signal",
+                                Confidence.LOW, List.of("e-incident"))));
+
+        // FND-63: the narrative fields were hardcoded prose about checkout/payment
+        // reconciliation. Correct for the demo incident, an outright fabrication for any
+        // other — the FND-8 failure class (narrating something that did not happen), which
+        // is the worst one in this project. Derived from the ticket and the run instead.
+        String reportedSymptom = joinNonBlank(" — ", inc.shortDescription(), inc.description());
+
+        List<String> contradicting = new ArrayList<>();
+        final List<LogEvidence> observedLogs = logs;   // effectively final for the lambda below
+        ownership.ifPresent(o -> {
+            boolean cmdbSystemSeenInLogs = observedLogs.stream()
+                    .anyMatch(l -> prettifySystem(l.logger()).equalsIgnoreCase(o.application()));
+            if (!cmdbSystemSeenInLogs && !observedLogs.isEmpty()) {
+                contradicting.add(("%s is the CMDB owner for this CI, but no %s errors appear in the "
+                        + "searched window — the failure looks downstream of it.")
+                        .formatted(o.application(), o.application()));
+            }
+        });
+
+        List<String> missing = new ArrayList<>();
+        if (orderId == null) missing.add("No transaction/correlation identifier in the ticket text");
+        if (logs.isEmpty()) missing.add("No log lines matched in the ±10m window around opened_at");
+        if (docs.isEmpty()) missing.add("No runbook or known-error page matched the symptom terms");
+        if (inc.environment() == null || inc.environment().isBlank()) missing.add("Environment not set on the ticket");
+        if (inc.comments().isEmpty()) missing.add("No caller follow-up comments to narrow scope/timing");
+
+        String nextAction;
+        if (!codeHits.isEmpty()) {
+            CodeSearchResult h = codeHits.get(0);
+            nextAction = ("Review %s:%d, which emits '%s' — the log line correlated to this incident.")
+                    .formatted(h.filePath(), h.line(), errorToken);
+        } else if (errorToken != null) {
+            nextAction = "Trace '%s' to its emitting source; no allowlisted project matched it."
+                    .formatted(errorToken);
+        } else if (orderId != null) {
+            nextAction = "Widen the log window around %s — no ERROR line matched in ±10m of opened_at."
+                    .formatted(orderId);
+        } else {
+            nextAction = "Reproduce the failure and capture a correlation id; the ticket text carries none.";
+        }
 
         DiagnosisReport report = new DiagnosisReport(
                 incidentNumber, OffsetDateTime.now(),
-                "Checkout order submission intermittently fails with a server error; "
-                        + "logs show a payment reconcile mismatch on a discounted order.",
+                reportedSymptom,
                 function, inc.environment(), ids,
                 candidates, assignment, evidence, contacts,
-                List.of("Order Portal also appears in the CMDB path but no Order Portal errors "
-                        + "were observed in the window — the failure is downstream in payment reconciliation."),
-                List.of("Whether all customers are affected or only discounted orders",
-                        "Affected user id / session", "Exact app URL / environment build"),
-                errorToken != null
-                        ? "Confirm the discount-before-tax vs after-tax order of operations in payment_service.reconcile(); "
-                          + "compare expected vs charged for a discounted+taxed order (see payment_service.py:44)."
-                        : "Reproduce a failing checkout and capture the correlation id.",
+                List.copyOf(contradicting),
+                List.copyOf(missing),
+                nextAction,
                 Confidence.MEDIUM, true);
 
         // FND-39: J4's validator was previously wired only into the ADK engine — an
@@ -226,10 +348,41 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         return m.find() ? m.group() : null;
     }
 
-    /** FND-59: symptom text + affected system, not a hardcoded literal (see diagnose()). */
-    private static String buildConfluenceQuery(IncidentContext inc) {
-        String symptom = inc.shortDescription() == null ? "" : inc.shortDescription().trim();
-        String ci = inc.configurationItem();
-        return (ci == null || ci.isBlank()) ? symptom : (symptom + " " + ci).trim();
+    /**
+     * FND-63: keep only refs whose Evidence actually exists in THIS report. The J4 validator
+     * rejects a dangling evidenceRef, so filtering here is what lets the candidate/assignment
+     * derivation name whatever it likes without risking a validation failure on an incident
+     * whose evidence came out differently.
+     */
+    private static List<String> refsThatExist(java.util.Set<String> gathered, List<String> wanted) {
+        return wanted.stream().filter(gathered::contains).distinct().toList();
     }
+
+    /** {@code payment_service} / {@code order-payments/payment-service} → {@code Payment Service}. */
+    private static String prettifySystem(String raw) {
+        if (raw == null || raw.isBlank()) return "unknown";
+        String last = raw.substring(raw.lastIndexOf('/') + 1);
+        String[] parts = last.split("[_\\-]+");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (p.isBlank()) continue;
+            if (!sb.isEmpty()) sb.append(' ');
+            sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+        }
+        return sb.isEmpty() ? last : sb.toString();
+    }
+
+    private static String firstDocId(List<KnowledgeDoc> docs) {
+        return docs.isEmpty() ? " none" : docs.get(0).id();
+    }
+
+    private static String joinNonBlank(String sep, String... parts) {
+        return java.util.Arrays.stream(parts)
+                .filter(p -> p != null && !p.isBlank())
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.joining(sep));
+    }
+
+    private static String text(String s) { return s == null ? "" : s; }
+
 }

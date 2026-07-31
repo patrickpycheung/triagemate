@@ -1,0 +1,165 @@
+package com.company.triage.orchestration;
+
+import com.company.triage.model.IncidentContext;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * What {@link DeterministicDiagnosisEngine} can work out about an incident <b>from the
+ * incident itself</b>, and how it turns that into per-platform query parameters (FND-62).
+ *
+ * <p><b>Why this exists.</b> "Deterministic" was being read as "hardcoded": the engine sent a
+ * fixed Confluence string (FND-59), always searched {@code allowedScopes.get(0)} whatever the
+ * incident was about, and passed a GitLab project as a <i>literal</i> that bypassed
+ * {@code triage.gitlab.allowed-projects} entirely. That is fine for the one seeded demo
+ * incident and wrong for every other one — and this engine is also the FND-7 fallback, so
+ * "every other one" is exactly when it runs for real.
+ *
+ * <p>Deterministic means <b>predictable</b>, not <b>fixed</b>: same incident in, same queries
+ * out, no model involved — but the queries are derived from the ticket. Three derivations:
+ *
+ * <ol>
+ *   <li><b>Identifiers</b> — an order/correlation id to search logs by. The old pattern only
+ *       matched {@code INC-ORD-\d+}, the demo fixture's exact shape; anything else fell back
+ *       to the literal {@code "error"}. Now several common shapes, most specific first.</li>
+ *   <li><b>Keywords</b> — distinctive terms from the symptom text, function words removed, so
+ *       a knowledge search gets signal rather than a whole English sentence.</li>
+ *   <li><b>Platform targeting</b> — which allowlisted Sumo scope / GitLab project to search.
+ *       Ranked by name overlap with the affected application, then <b>all of them are swept
+ *       in that order</b>. Ranking alone would be a guess, and a wrong guess silently loses
+ *       the evidence: the demo incident's CI is "Order Portal" while the failing system is
+ *       Payment Service downstream — unguessable from the ticket, which is the whole point of
+ *       the diagnosis. Sweeping is affordable precisely because this engine is not the agent:
+ *       the allowlist is small and bounded by config, and there is no per-call LLM budget to
+ *       spend (the J8 tool budget bounds the ADK path, not this one). Rank-then-sweep gets
+ *       the most likely source first for a readable trace, and correctness regardless.</li>
+ * </ol>
+ */
+record IncidentSignals(
+        String app,
+        List<String> keywords,
+        String primaryIdentifier,
+        List<String> identifiers
+) {
+
+    /** Ticket-ish ids: {@code INC-ORD-4471}, {@code ORD-1234}, {@code PAY-99}. Most specific. */
+    private static final Pattern DASHED_ID = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\\d{3,}\\b");
+    private static final Pattern UUID = Pattern.compile(
+            "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b");
+    /** Trace/correlation ids: a long bare hex run. Least specific, so ranked last. */
+    private static final Pattern HEX_TRACE = Pattern.compile("\\b[0-9a-f]{16,32}\\b");
+
+    /**
+     * Function words only. Deliberately NOT domain words — "error", "order", "payment",
+     * "checkout" are exactly the terms a runbook search needs, so stripping them to look
+     * clever would defeat the purpose.
+     */
+    private static final Set<String> STOPWORDS = Set.of(
+            "a", "an", "the", "and", "but", "for", "with", "that", "this", "these", "those",
+            "when", "they", "them", "from", "some", "just", "only", "been", "have", "has",
+            "had", "was", "were", "are", "its", "it", "into", "then", "than", "there",
+            "their", "what", "which", "would", "could", "should", "about", "after", "before",
+            "not", "get", "got", "gets", "does", "did", "doing", "say", "says", "said",
+            "reported", "reports", "report", "please", "also", "very", "much", "many",
+            "sometimes", "happens", "happening", "example", "gave", "give", "given",
+            "try", "tries", "trying", "one", "two", "few", "all", "any", "out", "off");
+
+    static IncidentSignals from(IncidentContext inc) {
+        String symptom = text(inc.shortDescription());
+        String detail = text(inc.description());
+        String rawText = (symptom + " " + detail).trim();
+
+        List<String> ids = extractIdentifiers(rawText, inc.number());
+
+        // The affected application, best available signal. configurationItem is the CMDB's
+        // answer and the most structured thing we have; fall back to the symptom line so a
+        // ticket with no CI still targets something rather than defaulting blindly.
+        String app = notBlank(inc.configurationItem()) ? inc.configurationItem().trim() : symptom;
+
+        return new IncidentSignals(app, extractKeywords(rawText),
+                ids.isEmpty() ? null : ids.get(0), ids);
+    }
+
+    /** Identifiers in the ticket text, most specific pattern first, deduped, in order. */
+    private static List<String> extractIdentifiers(String rawText, String incidentNumber) {
+        Set<String> found = new LinkedHashSet<>();
+        for (Pattern p : List.of(DASHED_ID, UUID, HEX_TRACE)) {
+            Matcher m = p.matcher(rawText);
+            while (m.find()) {
+                String hit = m.group();
+                // The incident's own number is not a useful log-search term — it identifies
+                // the ticket, not the failing transaction.
+                if (!hit.equalsIgnoreCase(text(incidentNumber))) {
+                    found.add(hit);
+                }
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    /** Distinctive terms, in first-appearance order. Capped so a long ticket can't dominate. */
+    private static List<String> extractKeywords(String rawText) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String token : rawText.split("[^A-Za-z0-9]+")) {
+            String t = token.toLowerCase(Locale.ROOT);
+            if (t.length() >= 4 && !STOPWORDS.contains(t) && !t.chars().allMatch(Character::isDigit)) {
+                out.add(t);
+            }
+            if (out.size() >= 8) break;
+        }
+        return List.copyOf(out);
+    }
+
+    /** Knowledge search: distinctive symptom terms plus the affected system. */
+    String confluenceQuery() {
+        String kw = String.join(" ", keywords);
+        return notBlank(app) ? (kw + " " + app).trim() : kw;
+    }
+
+    /**
+     * Log search: the transaction identifier when the ticket carries one — by far the most
+     * selective term available. Otherwise the top keywords; {@code "error"} only as a genuine
+     * last resort, which is what the old code used unconditionally whenever the one hardcoded
+     * order-id pattern missed.
+     */
+    String logQuery() {
+        if (primaryIdentifier != null) return primaryIdentifier;
+        if (!keywords.isEmpty()) return String.join(" ", keywords.subList(0, Math.min(3, keywords.size())));
+        return "error";
+    }
+
+    /**
+     * The allowlist, most-likely-relevant first, by token overlap with {@link #app}. Never
+     * filters: an entry that matches nothing still appears, last — see the class javadoc on
+     * why the engine sweeps rather than picks. Stable, so equal scores keep config order.
+     */
+    static List<String> rankAllowlist(String app, List<String> allowlist) {
+        Set<String> appTokens = tokens(app);
+        List<String> ranked = new ArrayList<>(allowlist);
+        ranked.sort(Comparator.comparingInt((String entry) -> {
+            Set<String> t = tokens(entry);
+            t.retainAll(appTokens);
+            return -t.size();          // negative → higher overlap first
+        }));
+        return List.copyOf(ranked);
+    }
+
+    private static Set<String> tokens(String s) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String t : text(s).toLowerCase(Locale.ROOT).split("[^a-z0-9]+")) {
+            if (t.length() >= 3) out.add(t);
+        }
+        return out;
+    }
+
+    private static String text(String s) { return s == null ? "" : s; }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+}

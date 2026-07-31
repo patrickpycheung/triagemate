@@ -109,4 +109,71 @@ class DeterministicDiagnosisEngineTest {
                 .contains("Order Portal")      // from configurationItem
                 .doesNotContain("reconcile", "discount", "500");   // the old fixed literal's terms
     }
+
+    /** An incident with nothing to do with the seeded demo scenario. */
+    private static com.company.triage.gateway.ServiceNowGateway unrelatedIncidentGateway() {
+        return new com.company.triage.gateway.ServiceNowGateway() {
+            @Override
+            public com.company.triage.model.IncidentContext getIncident(String number) {
+                return new com.company.triage.model.IncidentContext(
+                        number,
+                        "Nightly invoice export to the ledger is failing",
+                        "The finance batch job aborts partway. Correlation id BATCH-778812.",
+                        "finance.ops", "Software", "Batch failure",
+                        java.time.OffsetDateTime.parse("2026-07-30T02:00:00+10:00"),
+                        "Production", "Finance Systems",
+                        List.of(), List.of(), "Ledger Export Service", List.of());
+            }
+            @Override public List<com.company.triage.model.ResolvedIncident> findSimilarIncidents(
+                    com.company.triage.model.IncidentContext c) { return List.of(); }
+            @Override public java.util.Optional<com.company.triage.model.ServiceOwnership> findOwnership(String a) {
+                return java.util.Optional.empty();
+            }
+            @Override public void addWorkNote(String number, String note) {}
+            @Override public List<com.company.triage.model.NewIncident> findIncidentsCreatedSince(
+                    java.time.OffsetDateTime since, int limit) { return List.of(); }
+        };
+    }
+
+    /**
+     * FND-63 — the bug that made this engine unusable as the FND-7 fallback.
+     *
+     * <p>The report's candidateSystems and their evidenceRefs were hardcoded, and two refs
+     * ({@code e-kb-KB001234}, {@code e-sim-INC0011902}) were literal ids from the seeded demo
+     * fixture. For any other incident those Evidence entries don't exist, so
+     * {@code DiagnosisReportValidator}'s dangling-evidenceRef rule threw — meaning the
+     * orchestrator would degrade to this engine and then get a 500 out of it, defeating FND-7
+     * precisely when it mattered. Nothing caught it because every existing test used the one
+     * seeded incident, for which the hardcoded ids happen to resolve.
+     */
+    @Test
+    void producesAValidReportForAnIncidentUnrelatedToTheSeededScenario() {
+        var engineForOtherIncident = new DeterministicDiagnosisEngine(
+                unrelatedIncidentGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), new MockGitLabGateway(),
+                TriagePropertiesFixture.deterministic());
+
+        // Must not throw — the J4 validator runs inside diagnose().
+        DiagnosisResult result = engineForOtherIncident.diagnose("INC0077777");
+        DiagnosisReport r = result.report();
+
+        // FND-63: the narrative must describe THIS incident, not the demo's.
+        assertThat(r.reportedSymptom()).contains("invoice export");
+        assertThat(r.reportedSymptom()).doesNotContain("checkout", "reconcile");
+        assertThat(r.recommendedNextAction()).doesNotContain("payment_service.py");
+
+        // FND-62: the correlation id is extracted despite not matching the demo's INC-ORD- shape.
+        assertThat(r.identifiers().correlationId()).isEqualTo("BATCH-778812");
+
+        // Every evidenceRef must resolve to Evidence actually in this report (the rule that
+        // used to throw). Belt and braces alongside the validator inside diagnose().
+        var ids = r.evidence().stream().map(com.company.triage.model.Evidence::id).toList();
+        assertThat(r.candidateSystems()).allSatisfy(c -> assertThat(ids).containsAll(c.evidenceRefs()));
+        assertThat(ids).containsAll(r.suggestedAssignment().evidenceRefs());
+
+        // No ownership and no similar incidents for this one — say so rather than inventing
+        // the demo's "Payments Platform Support".
+        assertThat(r.suggestedAssignment().group()).doesNotContain("Payments Platform Support");
+        assertThat(r.missingInformation()).isNotEmpty();
+    }
 }
