@@ -24,6 +24,15 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
 
 ## 0. One-time prep (before demo day)
 
+> **After the first-time setup below, `./run-adk.sh` starts the proxy for you** —
+> it checks `http://localhost:4000/v1/models`, and if nothing answers, runs
+> `copilot-api start --port 4000 --proxy-env` itself (falling back to `npx
+> copilot-api@latest` if `copilot-api` isn't on PATH) and waits up to 30s for it to
+> come up. The GitHub OAuth device-flow (step a below) only has to happen once —
+> the token is cached, so later runs just reuse it. Steps (a)-(d) are still the
+> reference for first-time setup, corp-laptop npm/proxy issues
+> (`./bin/setup-copilot-api.sh`), and picking/validating the model.
+
 ### a) Stand up the Copilot → OpenAI proxy (E2)
 
 > **Validate with `./bin/e2-proxy-spike.sh` once it's up** — in particular check 4,
