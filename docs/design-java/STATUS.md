@@ -74,4 +74,10 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
   real ADK per-step latency (needs the corp laptop + Copilot proxy running) and projector
   legibility of the glow-pulse badge (needs an actual projector). No further CDS round can
   produce signal on either — they need the operator to run the physical spike, not more
-  analysis. Re-enter CDS once either spike result is available.
+  analysis.
+  **Disposition (2026-07-31): operator will run both spikes and report back.** Re-enter CDS
+  Round 5 once either result lands — record it in `verification-lt4-latency/` (real per-step
+  ADK timing against a live Copilot proxy — also settles whether `timeout-ms: 90000` was
+  the right guess) or `verification-lt5-projector/` (badge legibility at distance), whichever
+  arrives first. Until then, treat J11 as **parked, not abandoned** — do not restart CDS
+  rounds on it speculatively; wait for the spike data.
