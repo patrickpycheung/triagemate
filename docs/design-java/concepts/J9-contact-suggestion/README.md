@@ -19,22 +19,58 @@ After the triage has gathered its evidence, it also surfaces **who to talk to** 
 the incident. This is not a fresh people-search: it is derived from the **same
 evidence already cited**, so every suggested contact is one the run can justify.
 
-Two signals, both leashed to material the triage already used:
+Signals from **three** name-bearing sources, all leashed to material the triage already used.
+Each source contributes both what its API exposes as structured metadata **and** what its text
+says (FND-64 — the free-text half was missing entirely until 2026-07-31):
 
-- **Confluence** (`ConfluenceGateway.contributors(doc)`) — the **author and last
-  editor(s)** of the runbook pages J6 returned. Someone who wrote or recently updated
-  the known-error runbook has direct context.
-- **GitLab** (`GitLabGateway.recentCommitters(project, file)`) — the **recent
-  committers** to the implicated source file, from git history **since the last
-  release/tag**. Whoever last changed the emitting code is the person to ask.
+| Source | Structured (API) | Free text |
+|---|---|---|
+| **ServiceNow** | author of each comment / work note (`sys_created_by`) | people **named** in the description or comments |
+| **Confluence** | page author + last editor(s) (`contributors(doc)`) | people **named in the page body** — a runbook's escalation contact |
+| **GitLab** | recent committers to the implicated file, since the last release/tag | — |
+| **Sumo** | — | — |
+
+**ServiceNow was contributing nothing at all** before FND-64, which was the biggest gap: the
+ticket is where a human has *already written down* who else is involved, and someone engaged
+with **this** incident generally beats someone who edited a runbook months ago. **Sumo is
+deliberately empty** — log lines carry no identity, and deriving a person from a logger name
+would be fabrication.
+
+**Extraction is tuned for precision, not recall** (`MentionedPeople`): a false positive sends
+an engineer to bother an uninvolved colleague. Three tiers — emails/`@handles` (unambiguous),
+cue-phrase names (`spoke with X`, `owned by X`), then bare capitalised pairs filtered against a
+static system-vocabulary denylist **and** the system names on this specific incident (CI,
+assignment group, CMDB owner, log emitters). That last filter carries the most weight:
+*Payment Service*, *Order Portal* and *Service Desk* all have person-name shape.
 
 ## Merge across sources (the ranking)
-Contacts are merged by handle (email, falling back to name). Someone who **both**
-edited a cited runbook **and** recently committed the implicated file collapses into a
-single `confluence+gitlab` contact and is ranked **first** — the strongest signal.
-The seeded scenario demonstrates this: *Priya Nair* edited `KB001234` and made the
-most recent `reconcile()` commits, so she surfaces at the top over the single-source
-contacts (*Tom Alvarez*, wiki author; *Marcus Chen*, other committer).
+Merged on **normalised full name** when there is one, falling back to handle for handle-only
+records, and ranked by **how many sources corroborate** the person.
+
+> **FND-64 fixed the key here too.** It was handle-else-name, which silently fails when the
+> same person arrives with different identifier completeness — now the normal case, since a
+> prose mention has no handle while the API record does. The demo showed it immediately: Priya
+> Nair appeared twice (`confluence+gitlab` and `servicenow`), Marcus Chen twice. Merging keeps
+> whichever record carries the handle, so a contact first seen as a prose mention still ends up
+> actionable. Ranking also counts sources now, rather than testing a boolean "contains a `+`"
+> that could not tell two sources from three.
+
+The seeded scenario demonstrates it end to end:
+
+```
+Priya Nair    [servicenow+confluence+gitlab]  handle=priya.nair@example.com
+Marcus Chen   [confluence+gitlab]             handle=marcus.chen@example.com
+jane.customer [servicenow]     m.chen [servicenow]     Tom Alvarez [confluence]
+```
+
+*Priya* is named in a ticket work note, edited `KB001234`, **and** made the most recent
+`reconcile()` commits — three independent sources agreeing.
+
+> **Known limitation.** `m.chen` (a ServiceNow username) and `Marcus Chen` (a display name) are
+> almost certainly one person, but resolving that needs a directory lookup this app doesn't
+> have. Listing both is honest; silently guessing they match is not.
+
+**Full walkthrough**: [`../../DETERMINISTIC-FLOW.md`](../../DETERMINISTIC-FLOW.md) §3.
 
 ## Where it flows
 - **J4 report**: new `suggestedContacts: List<Contact>` field

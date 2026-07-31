@@ -73,6 +73,11 @@ Each concept is a single `README.md` — no `design.md`, no `mechanics/`. That i
 **deliberate** for hackathon/RAPID rigor: one file per concept that stays current beats
 three that drift. Recorded here so the layout reads as a choice, not an omission.
 
+**Cross-cutting walkthrough**: [DETERMINISTIC-FLOW.md](DETERMINISTIC-FLOW.md) — how the
+default engine turns a ServiceNow ticket into Confluence/Sumo/GitLab queries and a report,
+step by step, with a live worked example. Read it before changing query construction or
+contact extraction; it spans J1/J2/J6/J9 so no single concept card owns it.
+
 ## Two engines (read this before the diagram above)
 
 `triage.engine` selects the active `DiagnosisEngine`: **`deterministic` is the default**

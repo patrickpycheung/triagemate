@@ -19,7 +19,8 @@ Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
 code-review walkthrough of the ServiceNow→Confluence data flow, not by
 `/doc-test`. FND-60/61 likewise, from validating the ADK agent's tool-context
 design (does the agent get what it needs to construct good queries?), and
-FND-62/63 from asking the same question of the DETERMINISTIC path. `/found-issues-resolve` run the same day tested the "deferred
+FND-62/63 from asking the same question of the DETERMINISTIC path; FND-64 from
+reviewing name extraction across all four providers. `/found-issues-resolve` run the same day tested the "deferred
 pending design decision" premise on FND-55/56 and found both decidable now
 (see their Resolution notes) — backlog empty again.
 
@@ -65,6 +66,35 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
   question ("is ADK actually the active engine?") from two different signals (config vs bean
   identity) will eventually disagree; the fix should share one source of truth, not duplicate
   the check.
+
+## FND-64 — J9 read names only from API metadata; ServiceNow contributed none at all · **MEDIUM**
+
+**Where**: `DeterministicDiagnosisEngine.gatherContacts`, `AdkDiagnosisEngine.INSTRUCTION`.
+**What**: "who should I talk to?" was answered from Confluence page author/last-editor and
+GitLab recent committers — API metadata only. **ServiceNow contributed no names whatsoever**,
+even though the ticket is where a human has already written down who else is involved: the
+author of each comment/work note, and anyone they name in one ("escalated after speaking with
+Priya Nair"). Someone already engaged with *this* incident is a better contact than someone who
+edited a runbook months ago. Confluence **page bodies** were likewise never read for names, only
+page metadata — a runbook's "Escalation contact: …" is frequently more relevant than whoever
+last fixed a typo on it. (Sumo is correctly excluded: log lines carry no identity.)
+- **Resolution**: fixed:01c02cf — new `MentionedPeople` extracts from ServiceNow prose +
+  journal authors and from Confluence page bodies, in three precision tiers (emails/@handles;
+  cue-phrase names like "spoke with X"; bare capitalised pairs filtered against a static
+  system-vocabulary denylist **and** the system names on this specific incident — "Payment
+  Service"/"Order Portal" have person-name shape and are the likeliest false positives). The
+  ADK instruction now names all three sources explicitly and forbids listing a team/service as
+  a contact. `MentionedPeopleTest` (7 cases, mostly about what must NOT be extracted).
+- **Latent bug this exposed**: the contact merge key was handle-else-name, which fails whenever
+  the same person arrives with different identifier completeness — now the normal case, since a
+  prose mention has no handle while the API record does. The demo showed it at once: Priya Nair
+  and Marcus Chen each listed twice. Now keyed on normalised full name, keeping whichever record
+  carries the handle, and ranked by *number* of corroborating sources instead of a boolean
+  "contains a +" that could not distinguish 2 sources from 3.
+- **Escape**: design review — when a concept says "gather X from our sources", enumerate the
+  sources against the *providers* and check each one contributes; J9 was built from the two
+  providers that expose X as structured metadata, and the two where X only exists in free text
+  were never revisited. Same shape as FND-61 (a field consumed but never fetched), one level up.
 
 ## FND-62 — The deterministic engine's platform queries were targeted at the demo fixture, not the incident · **HIGH**
 
