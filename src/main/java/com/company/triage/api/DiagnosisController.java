@@ -2,6 +2,8 @@ package com.company.triage.api;
 
 import com.company.triage.orchestration.DiagnosisOrchestrator;
 import com.company.triage.orchestration.DiagnosisResult;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/diagnose")
+@Validated
 public class DiagnosisController {
 
     private final DiagnosisOrchestrator orchestrator;
@@ -25,8 +28,14 @@ public class DiagnosisController {
         this.orchestrator = orchestrator;
     }
 
+    // FND-58: previously unconstrained — any string reached the gateway, becoming part of
+    // a raw ServiceNow query under real connectors. The mock's FND-54 fix makes this safe
+    // in the demo config (any non-INC0012345 number is a clean 404), but the real-connector
+    // contract gap was real. Anchors the K3 shape (INC + a flexible digit count — every
+    // incident number in code/tests/docs is INC followed by 6-10 digits).
     @PostMapping("/{incidentNumber}")
-    public DiagnosisResult diagnose(@PathVariable String incidentNumber) {
+    public DiagnosisResult diagnose(
+            @PathVariable @Pattern(regexp = "INC\\d{6,10}") String incidentNumber) {
         // FND-37/FND-50: normalization now lives in DiagnosisOrchestrator.run() itself,
         // so every trigger (K1 and K3) normalizes identically for FND-31's coalescing map.
         return orchestrator.run(incidentNumber);

@@ -1,10 +1,10 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.NewIncident;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -78,8 +78,7 @@ public class IncidentPoller {
 
     private final ServiceNowGateway serviceNow;
     private final DiagnosisOrchestrator orchestrator;
-    private final int batchLimit;
-    private final int completedCap;
+    private final TriageProperties props;
 
     /** High-water mark: only incidents created strictly after this are considered. */
     private volatile OffsetDateTime cursor;
@@ -95,24 +94,20 @@ public class IncidentPoller {
 
     public IncidentPoller(ServiceNowGateway serviceNow,
                           DiagnosisOrchestrator orchestrator,
-                          @Value("${triage.trigger.poll.batch-limit:10}") int batchLimit,
-                          @Value("${triage.trigger.poll.completed-cap:500}") int completedCap,
-                          @Value("${triage.engine:deterministic}") String configuredEngine,
-                          @Value("${triage.trigger.poll.unattended-llm-ack:false}") boolean unattendedLlmAck) {
+                          TriageProperties props) {
         this.serviceNow = serviceNow;
         this.orchestrator = orchestrator;
-        this.batchLimit = batchLimit;
-        this.completedCap = completedCap;
+        this.props = props;
         this.cursor = OffsetDateTime.now();
         log.info("K1 poller enabled — polling incidents created after {} (batch limit {})",
-                cursor, batchLimit);
+                cursor, props.trigger().poll().batchLimit());
         // FND-45: this bean existing at all means poll.enabled=true (its @ConditionalOnProperty
         // gate). Combined with triage.engine=adk, that is exactly the unattended, programmatic
         // LLM use the C6 ToS ruling gates — previously documented in J10's prose but not
         // enforced anywhere. WARN, don't refuse (matches FND-49's precedent: a hackathon build
         // shouldn't fail to boot over this) — but an explicit ack property means someone had to
         // actually set it, turning a silent gap into a decision on record.
-        if ("adk".equalsIgnoreCase(configuredEngine) && !unattendedLlmAck) {
+        if (props.engine() == TriageProperties.Engine.ADK && !props.trigger().poll().unattendedLlmAck()) {
             log.warn("K1 poller is running WITH triage.engine=adk — this is unattended, "
                     + "programmatic LLM use, which the C6 ToS ruling gates (see "
                     + "docs/discovery/copilot-cli-runtime). Set "
@@ -138,7 +133,7 @@ public class IncidentPoller {
     private void pollOnce() {
         List<NewIncident> found;
         try {
-            found = serviceNow.findIncidentsCreatedSince(cursor, batchLimit);
+            found = serviceNow.findIncidentsCreatedSince(cursor, props.trigger().poll().batchLimit());
         } catch (Exception e) {
             // A transient ServiceNow/network failure must not kill the scheduler thread.
             // The cursor is untouched, so the next tick retries the same window.
@@ -222,6 +217,7 @@ public class IncidentPoller {
     private void markCompleted(String number) {
         synchronized (completed) {
             completed.add(number);
+            int completedCap = props.trigger().poll().completedCap();
             if (completed.size() > completedCap) {
                 var it = completed.iterator();   // LinkedHashSet → insertion order → FIFO
                 while (completed.size() > completedCap && it.hasNext()) {

@@ -1,5 +1,6 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ConfluenceGateway;
 import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.gateway.ServiceNowGateway;
@@ -42,9 +43,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
     public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
                                         SumoGateway sumo, GitLabGateway gitLab,
-                                        @org.springframework.beans.factory.annotation.Value(
-                                                "${triage.sumo.allowed-scopes:prod/payment,prod/order-api}")
-                                        List<String> sumoScopeAllowlist) {
+                                        TriageProperties props) {
         this.serviceNow = serviceNow;
         this.confluence = confluence;
         this.sumo = sumo;
@@ -55,7 +54,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // not this one. This engine doesn't take model-chosen scope (it's a fixed
         // script), so there was no guardrail-bypass risk, but "which scope is default"
         // now has one source of truth instead of two independently-maintained copies.
-        this.sumoScopeAllowlist = sumoScopeAllowlist;
+        this.sumoScopeAllowlist = props.sumo().allowedScopes();
     }
 
     @Override

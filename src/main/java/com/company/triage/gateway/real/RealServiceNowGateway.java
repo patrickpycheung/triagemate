@@ -1,6 +1,7 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.IncidentContext;
 import com.company.triage.model.NewIncident;
@@ -10,7 +11,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -42,9 +42,9 @@ public class RealServiceNowGateway implements ServiceNowGateway {
     private final RestClient http;
     private final String writeField;   // "work_notes" (internal) or "comments" (customer-facing)
 
-    public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties props,
-                                 @Value("${triage.servicenow.write-field:work_notes}") String writeField) {
-        var sn = props.servicenow();
+    public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties integrationProps,
+                                 TriageProperties props) {
+        var sn = integrationProps.servicenow();
         String basic = Base64.getEncoder()
                 .encodeToString((sn.user() + ":" + sn.secret()).getBytes());
         // Injected RestClient.Builder (Spring Boot autoconfigures a fresh prototype per
@@ -57,19 +57,13 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
                 .build();
-        // FND-51: writeField was interpolated directly into the PATCH body with no
-        // restriction — a typo'd or hostile config value could write to an arbitrary
-        // incident field, violating J8's "only comment, never reassign/close/re-prioritise"
-        // invariant at the config layer rather than the model layer. Fail fast instead.
-        if (!WRITE_FIELDS.contains(writeField)) {
-            throw new IllegalArgumentException(
-                    "triage.servicenow.write-field must be one of " + WRITE_FIELDS
-                            + ", got: " + writeField);
-        }
-        this.writeField = writeField;
+        // FND-51/FND-57: writeField used to be checked here with a manual constructor throw,
+        // which only ran when THIS bean was constructed — i.e. never under the default mock
+        // connector config. It's now a @Pattern on TriageProperties, validated unconditionally
+        // at boot regardless of connector mode, so a bad value fails before serving traffic
+        // rather than the first time `triage.connectors.servicenow=real` is set on stage.
+        this.writeField = props.servicenow().writeField();
     }
-
-    private static final java.util.Set<String> WRITE_FIELDS = java.util.Set.of("work_notes", "comments");
 
     @Override
     public IncidentContext getIncident(String number) {

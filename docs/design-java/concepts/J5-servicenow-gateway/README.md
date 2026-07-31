@@ -69,9 +69,19 @@ gateway's `findIncidentsCreatedSince` is what J10 polls through (FND-21).
   asserts the field is both requested and parsed.
 - **FND-51, fixed 2026-07-31**: `triage.servicenow.write-field` was interpolated directly
   into the PATCH body with no restriction, and the hand-rolled JSON escaping covered only
-  `\`, `"`, `\n` (a `\r` or tab in evidence text produced invalid JSON). Now: construction
-  fails fast on any value outside `{work_notes, comments}`, and note text is serialized via
-  Jackson (already a transitive dependency) rather than re-derived escaping rules.
+  `\`, `"`, `\n` (a `\r` or tab in evidence text produced invalid JSON). Note text is now
+  serialized via Jackson (already a transitive dependency) rather than re-derived escaping
+  rules.
+- **FND-57, fixed 2026-07-31**: the `write-field` allowlist check above originally lived
+  in this gateway's own constructor — a manual `IllegalArgumentException`-or-nothing throw
+  that only ran when `triage.connectors.servicenow=real` constructed this bean, i.e. never
+  under the default `mock` config. A typo'd value booted clean all week in mock and threw
+  for the first time on stage under `snow-live`. Moved to a `@Pattern(regexp =
+  "work_notes|comments")` on `TriageProperties.ServiceNow.writeField` — validated
+  unconditionally at boot by Spring's Bean Validation (`@Validated` on the
+  `@ConfigurationProperties` record), regardless of which connector mode is active.
+  This gateway now just reads the already-validated value. See **J1** for the full
+  `TriageProperties` shape.
   `RealServiceNowGatewayTest#rejectsAnUnrecognisedWriteField`,
   `#workNoteWithCarriageReturnAndTabIsValidJson`.
 

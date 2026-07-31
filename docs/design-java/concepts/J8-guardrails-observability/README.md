@@ -48,10 +48,13 @@ tools, within these limits").
   A tool *existing* ≠ the model may call it anywhere — but "anywhere" is bounded at
   the layer that actually owns each limit, not uniformly by one callback.
   **Scope note (2026-07-31):** these three are the *model-facing* bounds — what the agent
-  can do at runtime. `RealServiceNowGateway`'s constructor check on
-  `triage.servicenow.write-field` (FND-51) is a fourth enforcement point but a different
-  kind: it constrains an **operator** config value, not model behaviour, and fails fast at
-  startup rather than mid-run. Listed here so the count isn't read as exhaustive.
+  can do at runtime. `triage.servicenow.write-field` (FND-51) is a fourth enforcement point
+  but a different kind: it constrains an **operator** config value, not model behaviour, and
+  fails fast at startup rather than mid-run. Listed here so the count isn't read as
+  exhaustive. **Updated 2026-07-31 (FND-57)**: this check moved from a manual constructor
+  throw in `RealServiceNowGateway` (only ran when that bean was constructed, i.e. only under
+  `triage.connectors.servicenow=real`) to a `@Pattern` on `TriageProperties`, validated
+  unconditionally at every boot regardless of connector mode — see J1/J5.
 
 ## Observability (per-run trace)
 Record for every run: which tools were called and, for J9, who was suggested and

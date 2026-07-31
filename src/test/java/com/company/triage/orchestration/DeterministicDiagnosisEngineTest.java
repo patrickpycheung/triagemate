@@ -1,11 +1,10 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.mock.*;
 import com.company.triage.model.Contact;
 import com.company.triage.model.DiagnosisReport;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,7 +17,7 @@ class DeterministicDiagnosisEngineTest {
     private final DeterministicDiagnosisEngine engine = new DeterministicDiagnosisEngine(
             new MockServiceNowGateway(), new MockConfluenceGateway(),
             new MockSumoGateway(), new MockGitLabGateway(),
-            List.of("prod/payment", "prod/order-api"));
+            TriagePropertiesFixture.deterministic());
 
     /**
      * FND-54: the mock used to echo ANY number into the seeded context, so a stage typo

@@ -3,6 +3,8 @@ package com.company.triage.orchestration;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.company.triage.config.TriageProperties;
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.*;
 import org.junit.jupiter.api.Test;
@@ -58,7 +60,7 @@ class IncidentPollerTest {
         CountingOrchestrator(ServiceNowGateway snow, DiagnosisResult.Engine engine) {
             super(i -> new DiagnosisResult(null, new ArrayList<>(), engine),
                   i -> new DiagnosisResult(null, new ArrayList<>(), engine),
-                  snow, false, 5000, "deterministic");
+                  snow, orchestratorProps());
             this.engine = engine;
         }
 
@@ -70,8 +72,21 @@ class IncidentPollerTest {
         }
     }
 
+    private static TriageProperties orchestratorProps() {
+        var base = TriagePropertiesFixture.deterministic();
+        return new TriageProperties(base.engine(), new TriageProperties.Writeback(false), base.orchestrator(),
+                base.agent(), base.trigger(), base.servicenow(), base.sumo(), base.gitlab());
+    }
+
+    private static TriageProperties pollerProps(TriageProperties.Engine engine, boolean unattendedLlmAck) {
+        var base = TriagePropertiesFixture.withEngine(engine);
+        return new TriageProperties(base.engine(), base.writeback(), base.orchestrator(), base.agent(),
+                new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, unattendedLlmAck)),
+                base.servicenow(), base.sumo(), base.gitlab());
+    }
+
     private IncidentPoller poller(FakeSnow snow, CountingOrchestrator orch) {
-        return new IncidentPoller(snow, orch, 10, 500, "deterministic", false);
+        return new IncidentPoller(snow, orch, pollerProps(TriageProperties.Engine.DETERMINISTIC, false));
     }
 
     /**
@@ -87,7 +102,7 @@ class IncidentPollerTest {
         logger.addAppender(appender);
         try {
             new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.ADK),
-                    10, 500, "adk", false);
+                    pollerProps(TriageProperties.Engine.ADK, false));
 
             assertThat(appender.list).anyMatch(e ->
                     e.getFormattedMessage().contains("C6") && e.getFormattedMessage().contains("unattended"));
@@ -104,9 +119,9 @@ class IncidentPollerTest {
         logger.addAppender(appender);
         try {
             new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.ADK),
-                    10, 500, "adk", true);   // acked
+                    pollerProps(TriageProperties.Engine.ADK, true));   // acked
             new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.DETERMINISTIC),
-                    10, 500, "deterministic", false);   // not adk
+                    pollerProps(TriageProperties.Engine.DETERMINISTIC, false));   // not adk
 
             assertThat(appender.list).noneMatch(e -> e.getFormattedMessage().contains("C6"));
         } finally {

@@ -1,6 +1,8 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.TriageProperties;
+import com.company.triage.config.TriagePropertiesFixture;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -30,7 +32,7 @@ class RealServiceNowGatewayTest {
     private Fixture build() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        return new Fixture(new RealServiceNowGateway(builder, PROPS, "work_notes"), server);
+        return new Fixture(new RealServiceNowGateway(builder, PROPS, TriagePropertiesFixture.deterministic()), server);
     }
 
     private void expectSysIdLookup(MockRestServiceServer server) {
@@ -45,18 +47,24 @@ class RealServiceNowGatewayTest {
     }
 
     /**
-     * FND-51: {@code triage.servicenow.write-field} was interpolated into the PATCH body
-     * with no restriction. A misconfigured value must fail construction, not silently write
-     * to an arbitrary incident field.
+     * FND-51/FND-57: {@code triage.servicenow.write-field} used to be interpolated into the
+     * PATCH body with no restriction, checked only inside this gateway's constructor — i.e.
+     * only when {@code triage.connectors.servicenow=real}. It's now a {@code @Pattern} on
+     * {@link TriageProperties} itself, enforced unconditionally at boot by Spring's Bean
+     * Validation (via {@code @Validated} on the {@code @ConfigurationProperties} bean) —
+     * asserted here directly against the validator, since a plain record constructor call
+     * doesn't trigger JSR-303 validation.
      */
     @Test
     void rejectsAnUnrecognisedWriteField() {
-        RestClient.Builder builder = RestClient.builder();
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-                () -> new RealServiceNowGateway(builder, PROPS, "priority"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("work_notes")
-                .hasMessageContaining("comments");
+        var props = TriagePropertiesFixture.withEngine(TriageProperties.Engine.DETERMINISTIC);
+        var badProps = new TriageProperties(props.engine(), props.writeback(), props.orchestrator(),
+                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority"),
+                props.sumo(), props.gitlab());
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var violations = factory.getValidator().validate(badProps);
+            org.assertj.core.api.Assertions.assertThat(violations).isNotEmpty();
+        }
     }
 
     /**

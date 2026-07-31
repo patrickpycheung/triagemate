@@ -1,5 +1,7 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriageProperties;
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.*;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Verifies the automatic (no-human) two-comment write-back: sources first, then diagnosis (J5/J8). */
 class DiagnosisOrchestratorTest {
+
+    private static TriageProperties props(boolean writebackEnabled, long timeoutMs) {
+        var base = TriagePropertiesFixture.deterministic();
+        return new TriageProperties(base.engine(), new TriageProperties.Writeback(writebackEnabled),
+                new TriageProperties.Orchestrator(timeoutMs), base.agent(), base.trigger(),
+                base.servicenow(), base.sumo(), base.gitlab());
+    }
 
     /** Records the work notes posted, in order. */
     static class RecordingServiceNow implements ServiceNowGateway {
@@ -51,7 +60,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, true, 5000, "deterministic").run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0012345");
 
         assertThat(snow.notes).hasSize(2);
         assertThat(snow.notes.get(0)).contains("Sources consulted").contains("prod/payment");   // sources first
@@ -96,7 +105,7 @@ class DiagnosisOrchestratorTest {
             return new DiagnosisResult(sampleReport(), new ArrayList<>(List.of("diagnose")));
         };
         var snow = new RecordingServiceNow();
-        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, true, 5000, "deterministic");
+        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, props(true, 5000));
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -120,7 +129,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, true, 5000, "deterministic").run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0012345");
 
         assertThat(snow.notes).hasSize(2);   // first write landed, second was attempted and failed
         assertThat(r.report()).isSameAs(report);   // diagnosis itself is not lost
@@ -133,7 +142,7 @@ class DiagnosisOrchestratorTest {
         var snow = new RecordingServiceNow();
         DiagnosisEngine engine = incident -> new DiagnosisResult(sampleReport(), new ArrayList<>());
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, false, 5000, "deterministic").run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(false, 5000)).run("INC0012345");
         assertThat(snow.notes).isEmpty();
         // FND-25: the UI reads this field, not report content, to decide whether to
         // claim comments were posted — must be false when writeback is off.
@@ -152,7 +161,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine fallback = incident ->
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: assembled report")));
 
-        DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, true, 5000, "deterministic").run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, props(true, 5000)).run("INC0012345");
 
         assertThat(r.report()).isSameAs(fallbackReport);
         assertThat(r.trace().get(0)).contains("degraded to the deterministic engine")
@@ -168,7 +177,7 @@ class DiagnosisOrchestratorTest {
         var snow = new RecordingServiceNow();
         DiagnosisEngine onlyEngine = incident -> { throw new IllegalStateException("boom"); };
 
-        var orchestrator = new DiagnosisOrchestrator(onlyEngine, onlyEngine, snow, true, 5000, "deterministic");
+        var orchestrator = new DiagnosisOrchestrator(onlyEngine, onlyEngine, snow, props(true, 5000));
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> orchestrator.run("INC0012345"));
@@ -184,7 +193,7 @@ class DiagnosisOrchestratorTest {
             sleepUninterruptibly(500);
             return new DiagnosisResult(sampleReport(), new ArrayList<>());
         };
-        var orchestrator = new DiagnosisOrchestrator(slow, slow, snow, true, 50, "deterministic");   // 50ms << 500ms
+        var orchestrator = new DiagnosisOrchestrator(slow, slow, snow, props(true, 50));   // 50ms << 500ms
 
         assertThatThrownBy(() -> orchestrator.run("INC0012345"))
                 .isInstanceOf(DiagnosisTimeoutException.class)
@@ -202,7 +211,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisReport fallbackReport = sampleReport();
         DiagnosisEngine fallback = incident ->
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: ok")));
-        var orchestrator = new DiagnosisOrchestrator(slowPrimary, fallback, snow, true, 50, "deterministic");
+        var orchestrator = new DiagnosisOrchestrator(slowPrimary, fallback, snow, props(true, 50));
 
         DiagnosisResult r = orchestrator.run("INC0012345");
 
@@ -244,7 +253,7 @@ class DiagnosisOrchestratorTest {
             }
             return new DiagnosisResult(sampleReport(), new ArrayList<>(List.of("diagnose")));
         };
-        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, true, 5000, "deterministic");
+        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, props(true, 5000));
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -277,7 +286,7 @@ class DiagnosisOrchestratorTest {
             engineCalls.incrementAndGet();
             return new DiagnosisResult(sampleReport(), new ArrayList<>());
         };
-        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, true, 5000, "deterministic");
+        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, props(true, 5000));
 
         orchestrator.run("INC0012345");
         orchestrator.run("INC0012345");   // fully separate, deliberate re-trigger

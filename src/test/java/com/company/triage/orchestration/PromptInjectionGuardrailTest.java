@@ -1,5 +1,6 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -103,7 +104,7 @@ class PromptInjectionGuardrailTest {
             DiagnosisEngine engine = incident -> new DiagnosisResult(poisoned, new ArrayList<>(List.of("diagnose")));
             DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-            new DiagnosisOrchestrator(engine, unusedFallback, snow, true, 5000, "deterministic").run("INC0012345");
+            new DiagnosisOrchestrator(engine, unusedFallback, snow, TriagePropertiesFixture.deterministic()).run("INC0012345");
 
             assertThat(snow.notes).as("payload %s (%s) must not change note count", p.id(), p.category())
                     .hasSize(2);

@@ -1,5 +1,7 @@
 package com.company.triage.agent;
 
+import com.company.triage.config.TriageProperties;
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.mock.*;
 import com.company.triage.orchestration.DiagnosisResult;
 import org.junit.jupiter.api.AfterEach;
@@ -16,6 +18,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * without a real LLM. Compiles/runs only with {@code mvn -Padk test}.
  */
 class AdkLiveRoundTripTest {
+
+    private static TriageProperties props(List<String> sumoScopes, int maxResults, int maxWindowMinutes,
+                                          int maxToolCalls, List<String> gitLabProjects) {
+        var base = TriagePropertiesFixture.adk();
+        return new TriageProperties(base.engine(), base.writeback(), base.orchestrator(),
+                new TriageProperties.Agent(maxToolCalls), base.trigger(), base.servicenow(),
+                new TriageProperties.Sumo(sumoScopes, maxResults, maxWindowMinutes),
+                new TriageProperties.GitLab(gitLabProjects));
+    }
 
     @AfterEach
     void clearProps() {
@@ -34,8 +45,8 @@ class AdkLiveRoundTripTest {
             AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
                     new MockServiceNowGateway(), new MockConfluenceGateway(),
                     new MockSumoGateway(), new MockGitLabGateway(),
-                    List.of("prod/payment", "prod/order-api"), 20, 30, 8,
-                    List.of("order-payments/payment-service"));
+                    props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
+                            List.of("order-payments/payment-service")));
 
             DiagnosisResult result = engine.diagnose("INC0012345");
 
@@ -59,8 +70,8 @@ class AdkLiveRoundTripTest {
             AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
                     new MockServiceNowGateway(), new MockConfluenceGateway(),
                     new MockSumoGateway(), new MockGitLabGateway(),
-                    List.of("prod/payment"), 20, 30, 0,   // zero budget → deny every tool
-                    List.of("order-payments/payment-service"));
+                    props(List.of("prod/payment"), 20, 30, 0,   // zero budget → deny every tool
+                            List.of("order-payments/payment-service")));
 
             DiagnosisResult result = engine.diagnose("INC0012345");
 
@@ -87,8 +98,8 @@ class AdkLiveRoundTripTest {
             AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
                     new MockServiceNowGateway(), new MockConfluenceGateway(),
                     new MockSumoGateway(), new MockGitLabGateway(),
-                    List.of("prod/payment", "prod/order-api"), 20, 30, 8,
-                    List.of("order-payments/payment-service"));
+                    props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
+                            List.of("order-payments/payment-service")));
 
             DiagnosisResult result = engine.diagnose("INC0012345");
 

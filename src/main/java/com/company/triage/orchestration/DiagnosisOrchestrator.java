@@ -1,10 +1,10 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
@@ -68,8 +68,7 @@ public class DiagnosisOrchestrator {
     private final DiagnosisEngine engine;
     private final DiagnosisEngine fallbackEngine;
     private final ServiceNowGateway serviceNow;
-    private final boolean writebackEnabled;
-    private final long timeoutMs;
+    private final TriageProperties props;
     private final ExecutorService engineExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /** FND-31: coalesces concurrent runs for the same incident number. */
@@ -79,20 +78,17 @@ public class DiagnosisOrchestrator {
     public DiagnosisOrchestrator(DiagnosisEngine engine,
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
-                                 @Value("${triage.writeback.enabled:true}") boolean writebackEnabled,
-                                 @Value("${triage.orchestrator.timeout-ms:90000}") long timeoutMs,
-                                 @Value("${triage.engine:deterministic}") String configuredEngine) {
+                                 TriageProperties props) {
         this.engine = engine;
         this.fallbackEngine = fallbackEngine;
         this.serviceNow = serviceNow;
-        this.writebackEnabled = writebackEnabled;
-        this.timeoutMs = timeoutMs;
+        this.props = props;
         // FND-49: triage.engine=adk without -Padk matches no ADK bean, so the app silently
         // falls back to `engine == fallbackEngine` (deterministic) with nothing announcing
         // it — the FND-8 failure class (narrating a live model over a scripted run) via a
         // misconfiguration path rather than a runtime one. Log the mismatch loudly at
         // startup; do NOT fail fast (a hackathon build shouldn't refuse to boot over this).
-        if ("adk".equalsIgnoreCase(configuredEngine) && engine == fallbackEngine) {
+        if (props.engine() == TriageProperties.Engine.ADK && engine == fallbackEngine) {
             log.warn("triage.engine=adk but no ADK engine bean is active (missing -Padk build, "
                     + "or the ADK bean failed to register) — running DETERMINISTIC only. "
                     + "This is NOT the FND-7 fallback (no failure occurred); the app never had "
@@ -158,7 +154,7 @@ public class DiagnosisOrchestrator {
         // is caught here rather than left non-atomic-and-silent: disclosed in the trace,
         // writebackPosted reports false, and the diagnosis itself is still returned.
         boolean writebackPosted = false;
-        if (writebackEnabled) {
+        if (props.writeback().enabled()) {
             try {
                 // Automatic, advisory, two comments — sources first so the diagnosis is auditable.
                 serviceNow.addWorkNote(incidentNumber, result.report().toSourcesNote());
@@ -206,6 +202,7 @@ public class DiagnosisOrchestrator {
     /** FND-15: bounds any single engine call to {@code timeoutMs}, on a virtual thread. */
     private DiagnosisResult callWithTimeout(DiagnosisEngine target, String incidentNumber) {
         Future<DiagnosisResult> future = engineExecutor.submit(() -> target.diagnose(incidentNumber));
+        long timeoutMs = props.orchestrator().timeoutMs();
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException te) {

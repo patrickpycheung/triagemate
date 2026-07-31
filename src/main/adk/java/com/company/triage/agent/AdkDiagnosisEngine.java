@@ -1,5 +1,6 @@
 package com.company.triage.agent;
 
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.*;
 import com.company.triage.model.DiagnosisReport;
 import com.company.triage.orchestration.DiagnosisEngine;
@@ -19,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -100,17 +100,13 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     private final int maxToolCalls;
 
     public AdkDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
-                              SumoGateway sumo, GitLabGateway gitLab,
-                              @Value("${triage.sumo.allowed-scopes:prod/payment,prod/order-api}") List<String> sumoScopes,
-                              @Value("${triage.sumo.max-results:20}") int sumoMaxResults,
-                              @Value("${triage.sumo.max-window-minutes:30}") int sumoMaxWindowMinutes,
-                              @Value("${triage.agent.max-tool-calls:10}") int maxToolCalls,
-                              @Value("${triage.gitlab.allowed-projects:order-payments/payment-service}") List<String> gitLabProjects) {
-        // Comma-separated @Value binds cleanly to List<String>; the YAML list is a
-        // human-readable mirror. JS-1b: switch to @ConfigurationProperties if preferred.
-        TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, sumoScopes,
-                sumoMaxResults, sumoMaxWindowMinutes, gitLabProjects);
-        this.maxToolCalls = maxToolCalls;
+                              SumoGateway sumo, GitLabGateway gitLab, TriageProperties props) {
+        // FND-57: was five independent @Value bindings; now a single validated
+        // TriageProperties, the same source DeterministicDiagnosisEngine reads (JS-1b's
+        // TODO — switch to @ConfigurationProperties — resolved here).
+        TriageMateTools.wire(serviceNow, confluence, sumo, gitLab, props.sumo().allowedScopes(),
+                props.sumo().maxResults(), props.sumo().maxWindowMinutes(), props.gitlab().allowedProjects());
+        this.maxToolCalls = props.agent().maxToolCalls();
     }
 
     /**

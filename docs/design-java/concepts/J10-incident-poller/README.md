@@ -128,6 +128,14 @@ currently the only place it surfaces on an unattended run.
   the ack in that state records a ToS acceptance for a run that makes no LLM call. FND-56.
   `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
   `#noWarningWhenAckIsSetOrEngineIsDeterministic`.
+- **Config centralized (FND-57, fixed 2026-07-31).** `batch-limit`, `completed-cap`,
+  `triage.engine`, and `unattended-llm-ack` were four independent `@Value` constructor params;
+  now a single injected `TriageProperties` (see J1), read as
+  `props.trigger().poll().batchLimit()` etc. The `engine == adk` string comparison above is now
+  `props.engine() == TriageProperties.Engine.ADK` — same behaviour, one less place a typo could
+  silently misfire. `triage.trigger.poll.interval-ms` (on `@Scheduled`) and `.enabled` (on
+  `@ConditionalOnProperty`) are unchanged — those two resolve their own property placeholders
+  independently of constructor injection, so migrating them buys nothing (see J1's FND-57 note).
 - **Accepted limitation (FND-43, closed 2026-07-31, not fixed): same-second timestamp
   collision beyond `batch-limit`.** If more than `triage.trigger.poll.batch-limit` (default
   10) incidents share the exact same `sys_created_on` second, the "unbroken handled prefix"

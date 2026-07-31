@@ -6,6 +6,7 @@ import com.company.triage.orchestration.DiagnosisTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -25,7 +26,7 @@ import java.util.Objects;
  * IllegalStateException}→404 mapping that meant an unrelated internal error could be served
  * to the client as "incident not found", with its internal message echoed out.
  *
- * <p>Deliberately narrow: three types, three statuses. Anything else still falls through to
+ * <p>Deliberately narrow: four types, four statuses. Anything else still falls through to
  * Spring's default handling — a demo-quality error contract, not a general-purpose one.
  */
 @RestControllerAdvice(basePackages = "com.company.triage.api")
@@ -58,5 +59,13 @@ class DiagnosisApiExceptionHandler {
     @ExceptionHandler(DiagnosisReportInvalidException.class)
     ResponseEntity<Map<String, String>> invalidReport(DiagnosisReportInvalidException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, e);
+    }
+
+    /** FND-58: {@code @Pattern}-rejected {@code incidentNumber} path variable (Spring Boot 3.2+
+     * translates a {@code @Validated} controller's constraint violations into this type). */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    ResponseEntity<Map<String, String>> invalidRequest(HandlerMethodValidationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "invalid incident number"));
     }
 }

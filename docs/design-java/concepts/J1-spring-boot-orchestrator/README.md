@@ -107,8 +107,49 @@ Three FND-53 corrections to the first cut, all found by review before anyone ran
   by the FND-7 fallback and degrades (200 + banner). Only the *deterministic* engine's own
   validator can surface here — offline code, our own bug. **500** is the honest status.
 
-Deliberately narrow: three types, three statuses. Everything else still falls through to
-Spring, which is why the UI must not assume a JSON body (see J7's FND-52 note).
+Deliberately narrow: three types, three statuses (four after FND-58 below). Everything else
+still falls through to Spring, which is why the UI must not assume a JSON body (see J7's
+FND-52 note).
+
+**Config centralized: `TriageProperties` (FND-57, fixed 2026-07-31).** Every `triage.*` value
+that used to be an independent `@Value` on whichever constructor happened to need it —
+`DiagnosisOrchestrator`, `IncidentPoller`, `RealServiceNowGateway`, `DeterministicDiagnosisEngine`,
+`AdkDiagnosisEngine` — is now a single `@Validated @ConfigurationProperties(prefix = "triage")`
+record, `TriageProperties` (`config/TriageProperties.java`), following the existing
+`IntegrationProperties` convention and picked up by the app-wide `@ConfigurationPropertiesScan`.
+Two concrete gaps this closes:
+- **`triage.engine` is now a real enum** (`TriageProperties.Engine { DETERMINISTIC, ADK }`),
+  not a bare `String` compared via `.equalsIgnoreCase`. An unrecognised value — `agent`, `llm`,
+  `"Adk "` (trailing space), all three of FND-57's own examples — now fails application startup
+  with a clear binding error, instead of silently resolving to deterministic with no warning
+  (which was reopening the exact FND-8/FND-49 failure class via a typo). FND-49's own WARN
+  (`props.engine() == Engine.ADK && engine == fallbackEngine`) is unchanged in behaviour — it
+  catches a *different* case (a valid `adk` value, no ADK bean because the build lacks
+  `-Padk`) that enum validation cannot catch, so both checks stay, now sharing one source.
+- **Validation is unconditional at boot**, not conditional on which bean happens to get
+  constructed. `@ConfigurationProperties` beans are eagerly instantiated at context refresh
+  regardless of which `@ConditionalOnProperty` connector beans are active, so
+  `TriageProperties`'s `@Pattern`/`@Min`/`@NotNull` constraints (e.g. `servicenow.writeField`,
+  see J5's FND-57 note) run every boot — not only when `RealServiceNowGateway` happens to be
+  constructed under `triage.connectors.servicenow=real`.
+
+`triage.trigger.poll.interval-ms` and `.enabled` stay outside constructor-injected fields —
+`@Scheduled(fixedDelayString = "...")` and `@ConditionalOnProperty` resolve their own property
+placeholders independently of bean injection, at a different point in the Spring lifecycle, so
+migrating them would need a custom `SchedulingConfigurer` for no behavioural gain. Both remain
+documented fields on `TriageProperties.Trigger.Poll` for completeness/validation even though
+the `@Scheduled`/`@ConditionalOnProperty` annotations read the raw property directly.
+
+**Incident-number path validation (FND-58, fixed 2026-07-31).** `DiagnosisController` is now
+`@Validated`, and `diagnose(@PathVariable @Pattern(regexp = "INC\\d{6,10}") String
+incidentNumber)` rejects anything not shaped like `INC` + 6–10 digits before it reaches the
+orchestrator. Previously unconstrained: `POST /api/diagnose/banana` was accepted and reached
+`RealServiceNowGateway`, becoming part of a raw ServiceNow query string under
+`connectors.servicenow=real`. FND-54 already makes the *mock* gateway reject any number but
+its one seeded incident, so the demo path was never actually at risk — but the real-connector
+contract gap was real. A `HandlerMethodValidationException` (Spring Boot 3.2+'s translation of
+a `@Validated` controller's constraint violations) is now the API contract's fourth mapped
+type → **400**, `{"error": "invalid incident number"}`.
 
 **Which timeout fires first (FND-34 vs FND-15) — added 2026-07-31, previously undocumented.**
 These two bounds overlap and the HTTP one usually wins. `spring.http.client.read-timeout`
