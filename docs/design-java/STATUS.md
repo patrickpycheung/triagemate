@@ -1,6 +1,6 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: J1–J10 Built; **J11 (live-thinking-trace) in CDS Round 3** — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
+**Phase**: J1–J10 Built; **J11 (live-thinking-trace) STUCK at CDS Round 4** (blocked on 2 external spikes, not a design question) — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
 Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
 **Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
 plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
@@ -41,7 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R3 — doc-test found + fixed 5 design holes: runId protocol, correlation key, degrade-vs-live-display, LT2 ownership, buffer bounds. NOT converged: 2 spikes need physical access) | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R4 — only a doc-freshness fix this round, zero design changes. STUCK on design analysis: everything reachable from a desk is decided/spiked/fixed. Blocked on 2 EXTERNAL spikes — real ADK per-step latency [corp laptop + Copilot proxy] and projector legibility [an actual projector] — neither answerable from here) | J1, J2, J4, J7, J8 |
 
 ## Spikes
 
@@ -53,8 +53,9 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
   `google-adk-langchain4j` → **live** enterprise endpoint → parsed JSON. Fallback:
   swap model backend to `google-adk-spring-ai`. Pin 1.7.0 signatures.
 - **LT1-SPI (J11 SPI feasibility)** ✅ DONE (2026-07-31): flipping `DiagnosisEngine` to
-  `diagnose(String, TraceSink)` as the abstract method **compiles and keeps 34/34 + 50/50
-  green**, zero assertion changes. Blast radius measured **by the compiler** at **18 sites /
+  `diagnose(String, TraceSink)` as the abstract method **compiled and kept the suite green**
+  (34/34 + 50/50 at spike time — see the top-of-file line above for the current count),
+  zero assertion changes. Blast radius measured **by the compiler** at **18 sites /
   3 files** — the DDS's grep-derived "16 / 2 files" missed `IncidentPollerTest` entirely.
   Source reverted (sink was stubbed). Lesson: enumerate a SAM change with the compiler, and
   always `clean` — a warm `test-compile` reported 0 errors from stale classes.
@@ -66,8 +67,11 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 ## Next round triggers
 - **J1–J10**: when JS-2 returns (connectivity), or when a real connector replaces a mock
   and its interface shifts.
-- **J11**: Round 3 = the mandatory end-of-CDS `/doc-test cds` pass (conflicts + architecture
-  + coverage), then converge. Two of its spikes are **not runnable here** and gate
-  🟢 Converged on physical access: real ADK per-step latency (needs the corp laptop + Copilot
-  proxy — also decides how much LT4 matters) and projector legibility of the glow-pulse
-  badge. Everything else in J11 is decided or spiked.
+- **J11**: STUCK at Round 4 (2026-07-31) — every design question reachable through
+  analysis is now decided, spiked, or fixed (Round 3's `/doc-test cds` found 5 real design
+  holes across 9 perspectives; all fixed and re-verified; Round 4 found only a one-line
+  doc-freshness drift, no design change). Remaining blockers are **empirical, not design**:
+  real ADK per-step latency (needs the corp laptop + Copilot proxy running) and projector
+  legibility of the glow-pulse badge (needs an actual projector). No further CDS round can
+  produce signal on either — they need the operator to run the physical spike, not more
+  analysis. Re-enter CDS once either spike result is available.

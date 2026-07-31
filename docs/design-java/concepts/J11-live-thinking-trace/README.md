@@ -87,10 +87,13 @@ the 2-arg form so none can silently drop steps.
 ⚠️ **This is a source-breaking SPI change** — `DiagnosisEngine` is a genuine SAM, so every
 1-arg lambda breaks: **18 sites across 3 files** (14 `DiagnosisOrchestratorTest`,
 2 `IncidentPollerTest`, 2 `PromptInjectionGuardrailTest`) must become
-`(incident, sink) -> …`. 🔬 **Spiked and proven** — compiles clean, **34/34 and 50/50 still
-pass**, zero assertion changes. Accepted deliberately: 18 mechanical edits buys un-droppable
-step emission. *(The DDS claimed "16 across 2 files" from a grep; the compiler found a third
-file. See `verification-lt1-spi/findings.md`.)*
+`(incident, sink) -> …`. 🔬 **Spiked and proven** — compiles clean, the whole suite still
+passes (34/34 + 50/50 *at spike time*, 2026-07-31; the suite has since grown to 43/43 + 59/59
+via unrelated `found-issues-resolve` fixes — this spike's own edits stayed at zero assertion
+changes regardless of the ambient count), zero assertion changes from the spike itself.
+Accepted deliberately: 18 mechanical edits buys un-droppable step emission. *(The DDS claimed
+"16 across 2 files" from a grep; the compiler found a third file. See
+`verification-lt1-spi/findings.md`.)*
 
 **Three invariants that are easy to get wrong:**
 1. **One sink per engine call — and on degrade the primary's segment is FROZEN, not deleted.**
@@ -288,9 +291,12 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
 
 ## Verification
 - 🔬 **Spike LT1-SPI ✅ DONE** (`verification-lt1-spi/findings.md`) — the 2-arg SPI migration
-  compiles and keeps **34/34** + **50/50** green; blast radius measured by the compiler at
-  **18 sites / 3 files**, purely mechanical, zero assertion changes. Source reverted (the
-  spike stubbed the sink, so keeping it would have left dead API surface).
+  compiled and kept the full suite green at spike time (2026-07-31: 34/34 + 50/50; current
+  suite size is 43/43 + 59/59 per `STATUS.md`, grown since via unrelated
+  `found-issues-resolve` fixes — cite `STATUS.md` for the live count, not this line); blast
+  radius measured by the compiler at **18 sites / 3 files**, purely mechanical, zero
+  assertion changes. Source reverted (the spike stubbed the sink, so keeping it would have
+  left dead API surface).
   Two method lessons recorded: enumerate a SAM change's breakage **with the compiler, not a
   regex** (grep missed a whole file), and always `clean` — a warm `test-compile` reported
   0 errors from stale classes.
