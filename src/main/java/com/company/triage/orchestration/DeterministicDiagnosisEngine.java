@@ -90,12 +90,19 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 inc.configurationItem(), ownership.map(ServiceOwnership::supportGroup).orElse("none")));
 
         // ---- Step 4: knowledge (Confluence) -----------------------------------
-        List<KnowledgeDoc> docs = confluence.search("checkout order payment reconcile 500");
+        // FND-59: this used to be the fixed literal "checkout order payment reconcile 500"
+        // for every incident — it only ever "worked" because it happened to match the one
+        // seeded demo incident's keywords. Now built from the incident's own symptom text
+        // (shortDescription) plus the affected system (configurationItem), same as the
+        // orderId/scope/window derivations already used for the similar-incidents and Sumo
+        // lookups below.
+        String confluenceQuery = buildConfluenceQuery(inc);
+        List<KnowledgeDoc> docs = confluence.search(confluenceQuery);
         for (KnowledgeDoc d : docs) {
             evidence.add(new Evidence("e-kb-" + d.id(), "confluence",
                     "%s (%s): %s".formatted(d.title(), d.id(), d.snippet()), d.url()));
         }
-        trace.add("confluence.search → %d page(s)".formatted(docs.size()));
+        trace.add("confluence.search(query=\"%s\") → %d page(s)".formatted(confluenceQuery, docs.size()));
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
         String scope = sumoScopeAllowlist.get(0);   // allowlisted scope only
@@ -217,5 +224,12 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private static String firstMatch(Pattern p, String text) {
         Matcher m = p.matcher(text == null ? "" : text);
         return m.find() ? m.group() : null;
+    }
+
+    /** FND-59: symptom text + affected system, not a hardcoded literal (see diagnose()). */
+    private static String buildConfluenceQuery(IncidentContext inc) {
+        String symptom = inc.shortDescription() == null ? "" : inc.shortDescription().trim();
+        String ci = inc.configurationItem();
+        return (ci == null || ci.isBlank()) ? symptom : (symptom + " " + ci).trim();
     }
 }
