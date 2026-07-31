@@ -182,16 +182,16 @@ class IncidentPollerTest {
         var snow = new FakeSnow();
         var orch = new CountingOrchestrator(snow, DiagnosisResult.Engine.DETERMINISTIC);
         var p = poller(snow, orch);
-        snow.add("INC0012345", OffsetDateTime.now().plusSeconds(1));
+        snow.add("INC0010005", OffsetDateTime.now().plusSeconds(1));
 
         p.poll();
-        snow.addWorkNote("INC0012345", "advisory note");        // simulate J5's two writes
-        snow.addWorkNote("INC0012345", "advisory note 2");
+        snow.addWorkNote("INC0010005", "advisory note");        // simulate J5's two writes
+        snow.addWorkNote("INC0010005", "advisory note 2");
         p.poll();
         p.poll();
 
         assertThat(snow.written).isTrue();
-        assertThat(orch.diagnosed).containsExactly("INC0012345");   // once, not three times
+        assertThat(orch.diagnosed).containsExactly("INC0010005");   // once, not three times
     }
 
     /**
@@ -304,13 +304,13 @@ class IncidentPollerTest {
         var snow = new FakeSnow();
         var orch = new CountingOrchestrator(snow, DiagnosisResult.Engine.DETERMINISTIC);
         var p = poller(snow, orch);
-        snow.add("INC0012345", OffsetDateTime.now().plusSeconds(1));
+        snow.add("INC0010005", OffsetDateTime.now().plusSeconds(1));
 
         // Re-enter poll() from inside a diagnosis: the guard must refuse the nested tick.
         orch.duringRun = p::poll;
         p.poll();
 
-        assertThat(orch.diagnosed).containsExactly("INC0012345");   // not twice
+        assertThat(orch.diagnosed).containsExactly("INC0010005");   // not twice
     }
 
     /** In-flight is released after a run so a later legitimate retry isn't blocked forever. */
@@ -319,12 +319,12 @@ class IncidentPollerTest {
         var snow = new FakeSnow();
         var orch = new CountingOrchestrator(snow, DiagnosisResult.Engine.DETERMINISTIC);
         var p = poller(snow, orch);
-        snow.add("INC0012345", OffsetDateTime.now().plusSeconds(1));
+        snow.add("INC0010005", OffsetDateTime.now().plusSeconds(1));
 
         p.poll();
 
-        assertThat(p.isInFlight("INC0012345")).isFalse();
-        assertThat(p.isCompleted("INC0012345")).isTrue();
+        assertThat(p.isInFlight("INC0010005")).isFalse();
+        assertThat(p.isCompleted("INC0010005")).isTrue();
     }
 
     /** FND-8: an unattended run must distinguish a degraded diagnosis from a live one. */
@@ -333,11 +333,11 @@ class IncidentPollerTest {
         var snow = new FakeSnow();
         var orch = new CountingOrchestrator(snow, DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
         var p = poller(snow, orch);
-        snow.add("INC0012345", OffsetDateTime.now().plusSeconds(1));
+        snow.add("INC0010005", OffsetDateTime.now().plusSeconds(1));
 
         p.poll();
 
-        assertThat(orch.diagnosed).containsExactly("INC0012345");
+        assertThat(orch.diagnosed).containsExactly("INC0010005");
         assertThat(new DiagnosisResult(null, List.of(), DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC)
                 .degraded()).isTrue();
         assertThat(new DiagnosisResult(null, List.of(), DiagnosisResult.Engine.ADK).degraded()).isFalse();

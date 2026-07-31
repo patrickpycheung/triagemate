@@ -279,7 +279,7 @@ landing LT5 — until then the marks would render in the inherited text colour.
 
 ### LT7 — Provenance chips (separable)
 
-Putting `4 ms` beside `servicenow.getIncident(INC0012345)` makes an *existing* ambiguity
+Putting `4 ms` beside `servicenow.getIncident(INC0010005)` makes an *existing* ambiguity
 acute: that call hit a fixture and nothing on screen says so.
 
 ⛔ **Two chips, never one.** A single `connectors: mock (no network)` label would be

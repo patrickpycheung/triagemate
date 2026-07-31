@@ -11,7 +11,7 @@ What the running Spring Boot app does, end to end, and how to run it.
 
 ```bash
 mvn spring-boot:run            # from the repo root; needs JDK 21 (a compiler, not just a JRE)
-# open http://localhost:8080 → the incident number INC0012345 is pre-filled → Diagnose
+# open http://localhost:8080 → the incident number INC0010005 is pre-filled → Diagnose
 ```
 
 Verified in-session: `mvn test` → **46/46 pass**, `mvn -Padk test` → **62/62 pass**, app
@@ -46,7 +46,7 @@ trace proving it really consulted each source.
 ## The worked example
 
 The mock dataset (`src/main/java/.../gateway/mock/`, reusing the S3′ Sumo fixture
-and `seed-repo`) models incident **INC0012345 / order INC-ORD-4471**: discounted
+and `seed-repo`) models incident **INC0010005 / order INC-ORD-4471**: discounted
 orders fail at checkout because a percentage discount is applied *after* tax in the
 gateway while the expected total discounts *before* tax — surfaced as
 `PAYMENT_RECONCILE_MISMATCH expected=11.50 charged=11.25`, tied back to

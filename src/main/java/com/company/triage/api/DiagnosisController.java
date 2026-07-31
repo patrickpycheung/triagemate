@@ -38,7 +38,7 @@ public class DiagnosisController {
 
     // FND-58: previously unconstrained — any string reached the gateway, becoming part of
     // a raw ServiceNow query under real connectors. The mock's FND-54 fix makes this safe
-    // in the demo config (any non-INC0012345 number is a clean 404), but the real-connector
+    // in the demo config (any non-INC0010005 number is a clean 404), but the real-connector
     // contract gap was real. Anchors the K3 shape (INC + a flexible digit count — every
     // incident number in code/tests/docs is INC followed by 6-10 digits).
     @PostMapping("/{incidentNumber}")

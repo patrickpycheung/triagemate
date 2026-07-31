@@ -10,7 +10,7 @@ UI (J7) mere renderings of it. This is the demo's spine.
 ## Schema
 ```json
 {
-  "incidentNumber": "INC0012345",
+  "incidentNumber": "INC0010005",
   "generatedAt": "2026-07-23T14:30:00+10:00",
   "reportedSymptom": "User receives HTTP 403 when submitting an order",
   "affectedFunction": "Order submission",

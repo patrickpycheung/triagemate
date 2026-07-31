@@ -91,11 +91,11 @@ fi
 # --- 4: tool calling (the actual spike) --------------------------------------
 echo
 echo "[4/4] POST /chat/completions (TOOL CALLING — the one that matters)"
-TOOLS='[{"type":"function","function":{"name":"get_incident","description":"Fetch a ServiceNow incident by number","parameters":{"type":"object","properties":{"number":{"type":"string","description":"e.g. INC0012345"}},"required":["number"]}}}]'
+TOOLS='[{"type":"function","function":{"name":"get_incident","description":"Fetch a ServiceNow incident by number","parameters":{"type":"object","properties":{"number":{"type":"string","description":"e.g. INC0010005"}},"required":["number"]}}}]'
 TOOLCALL="$(curl -sS --max-time 60 "$BASE/chat/completions" \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer dummy' \
-  -d "{\"model\":\"$MODEL\",\"temperature\":0,\"tools\":$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Look up incident INC0012345. Use the tool.\"}]}" 2>&1)"
+  -d "{\"model\":\"$MODEL\",\"temperature\":0,\"tools\":$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Look up incident INC0010005. Use the tool.\"}]}" 2>&1)"
 if echo "$TOOLCALL" | grep -q '"tool_calls"'; then
   ok "proxy returned tool_calls — the ADK agent loop (D1) will work"
 elif echo "$TOOLCALL" | grep -q '"content"'; then

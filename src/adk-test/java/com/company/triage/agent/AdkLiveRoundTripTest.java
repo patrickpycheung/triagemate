@@ -48,10 +48,10 @@ class AdkLiveRoundTripTest {
                     props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
                             List.of("order-payments/payment-service")));
 
-            DiagnosisResult result = engine.diagnose("INC0012345");
+            DiagnosisResult result = engine.diagnose("INC0010005");
 
             // Final JSON parsed into the J4 contract
-            assertThat(result.report().incidentNumber()).isEqualTo("INC0012345");
+            assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
             assertThat(result.report().advisory()).isTrue();
             assertThat(result.report().suggestedAssignment().group()).isEqualTo("Payments Platform Support");
 
@@ -73,11 +73,11 @@ class AdkLiveRoundTripTest {
                     props(List.of("prod/payment"), 20, 30, 0,   // zero budget → deny every tool
                             List.of("order-payments/payment-service")));
 
-            DiagnosisResult result = engine.diagnose("INC0012345");
+            DiagnosisResult result = engine.diagnose("INC0010005");
 
             assertThat(result.trace()).anyMatch(s -> s.contains("DENIED get_incident"));
             // Even with tools denied, the agent still returns a parseable report.
-            assertThat(result.report().incidentNumber()).isEqualTo("INC0012345");
+            assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
         }
     }
 
@@ -101,9 +101,9 @@ class AdkLiveRoundTripTest {
                     props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
                             List.of("order-payments/payment-service")));
 
-            DiagnosisResult result = engine.diagnose("INC0012345");
+            DiagnosisResult result = engine.diagnose("INC0010005");
 
-            assertThat(result.report().incidentNumber()).isEqualTo("INC0012345");
+            assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
             assertThat(result.trace()).anyMatch(s -> s.contains("one repair retry (FND-42)"));
         }
     }

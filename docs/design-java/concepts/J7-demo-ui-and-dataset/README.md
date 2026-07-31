@@ -85,7 +85,7 @@ another. Now: read as text, parse defensively, guard on `res.ok` first.
 **FND-54**: `MockServiceNowGateway` used to fabricate a context for *any* number, so a stage
 typo returned a confident diagnosis of a nonexistent incident — worse than the TypeError it
 replaced, and it made the 404 unreachable in the demo config (only the *real* gateway threw).
-The mock now rejects anything but its one modelled incident, `INC0012345`.
+The mock now rejects anything but its one modelled incident, `INC0010005`.
 
 ## Verification
 - Fresh checkout + `mvn spring-boot:run` → open page → diagnose the demo incident →

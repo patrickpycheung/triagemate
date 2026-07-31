@@ -119,7 +119,7 @@ final class FakeOpenAiServer implements AutoCloseable {
     /** A valid J4 DiagnosisReport payload the agent "produces" on turn 2. */
     private static final String J4_JSON = """
         {
-          "incidentNumber": "INC0012345",
+          "incidentNumber": "INC0010005",
           "generatedAt": "2026-07-23T20:00:00+10:00",
           "reportedSymptom": "Checkout order submission intermittently fails with a server error.",
           "affectedFunction": "Order submission (checkout)",

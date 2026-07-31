@@ -55,14 +55,14 @@ class DiagnosisApiExceptionHandlerTest {
         // as a propagating exception rather than a status. That IS the desired behaviour —
         // the point is that a credential error must never be dressed up as 404 not-found.
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> mvc.perform(post("/api/diagnose/INC0012345")))
+                        () -> mvc.perform(post("/api/diagnose/INC0010005")))
                 .hasRootCauseInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("LLM_API_KEY");
     }
 
     /** FND-53: {@code Map.of} NPEs on a null value, and a bare exception message can be null. */
     static class NullMessageTimeout extends DiagnosisTimeoutException {
-        NullMessageTimeout() { super("INC0012345", 90000); }
+        NullMessageTimeout() { super("INC0010005", 90000); }
         @Override public String getMessage() { return null; }
     }
 
@@ -70,7 +70,7 @@ class DiagnosisApiExceptionHandlerTest {
     void nullExceptionMessageDoesNotBreakTheHandler() throws Exception {
         when(orchestrator.run(anyString())).thenThrow(new NullMessageTimeout());
 
-        mvc.perform(post("/api/diagnose/INC0012345"))
+        mvc.perform(post("/api/diagnose/INC0010005"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("NullMessageTimeout")));
     }
@@ -78,9 +78,9 @@ class DiagnosisApiExceptionHandlerTest {
     @Test
     void timeoutMapsTo504() throws Exception {
         when(orchestrator.run(anyString()))
-                .thenThrow(new DiagnosisTimeoutException("INC0012345", 90000));
+                .thenThrow(new DiagnosisTimeoutException("INC0010005", 90000));
 
-        mvc.perform(post("/api/diagnose/INC0012345"))
+        mvc.perform(post("/api/diagnose/INC0010005"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("did not complete within")));
     }
@@ -88,9 +88,9 @@ class DiagnosisApiExceptionHandlerTest {
     @Test
     void invalidReportMapsTo500() throws Exception {
         when(orchestrator.run(anyString()))
-                .thenThrow(new DiagnosisReportInvalidException("INC0012345", List.of("empty candidateSystems")));
+                .thenThrow(new DiagnosisReportInvalidException("INC0010005", List.of("empty candidateSystems")));
 
-        mvc.perform(post("/api/diagnose/INC0012345"))
+        mvc.perform(post("/api/diagnose/INC0010005"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("empty candidateSystems")));
     }
@@ -111,7 +111,7 @@ class DiagnosisApiExceptionHandlerTest {
                 .thenThrow(new org.springframework.web.client.ResourceAccessException(
                         "I/O error on POST request: Read timed out"));
 
-        mvc.perform(post("/api/diagnose/INC0012345"))
+        mvc.perform(post("/api/diagnose/INC0010005"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Read timed out")));
     }

@@ -17,7 +17,7 @@ import java.util.Optional;
 
 /**
  * Ground-truth demo dataset (J7) for the offline demo. Models one deliberately
- * vague incident — INC0012345 / order INC-ORD-4471 — whose real cause is the seeded
+ * vague incident — INC0010005 / order INC-ORD-4471 — whose real cause is the seeded
  * payment reconcile bug (discount applied after tax). Reuses the S3′ fixture universe
  * so the log↔code citation lands on payment_service.py:44.
  */
@@ -33,7 +33,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
             new java.util.concurrent.atomic.AtomicBoolean(true);
 
     /** The one incident this ground-truth dataset actually models (J7). */
-    static final String KNOWN_INCIDENT = "INC0012345";
+    static final String KNOWN_INCIDENT = "INC0010005";
 
     @Override
     public IncidentContext getIncident(String number) {
@@ -77,7 +77,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
      * <p>The fixture incident's {@code openedAt} is a fixed date in the past, so comparing
      * it against the poller's "started just now" cursor would return empty forever and the
      * K1 poller could never be exercised offline. Instead the first call reports
-     * {@code INC0012345} as new and every later call reports nothing — which is precisely
+     * {@code INC0010005} as new and every later call reports nothing — which is precisely
      * the behaviour that matters to verify: the poller triages a new incident <b>once</b>
      * and then goes quiet, even though the run posts work notes (FND-1).
      */
@@ -86,9 +86,9 @@ public class MockServiceNowGateway implements ServiceNowGateway {
         if (limit <= 0 || !newIncidentAvailable.compareAndSet(true, false)) {
             return List.of();
         }
-        log.info("mock: reporting INC0012345 as newly created (one-shot, offline poller demo)");
+        log.info("mock: reporting INC0010005 as newly created (one-shot, offline poller demo)");
         // createdAt just after the cursor: what a genuinely-new incident looks like.
-        return List.of(new NewIncident("INC0012345", since.plusSeconds(1)));
+        return List.of(new NewIncident("INC0010005", since.plusSeconds(1)));
     }
 
     @Override

@@ -104,7 +104,7 @@ class PromptInjectionGuardrailTest {
             DiagnosisEngine engine = incident -> new DiagnosisResult(poisoned, new ArrayList<>(List.of("diagnose")));
             DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-            new DiagnosisOrchestrator(engine, unusedFallback, snow, TriagePropertiesFixture.deterministic()).run("INC0012345");
+            new DiagnosisOrchestrator(engine, unusedFallback, snow, TriagePropertiesFixture.deterministic()).run("INC0010005");
 
             assertThat(snow.notes).as("payload %s (%s) must not change note count", p.id(), p.category())
                     .hasSize(2);
@@ -127,7 +127,7 @@ class PromptInjectionGuardrailTest {
 
     private DiagnosisReport poisonedReport(String payload) {
         return new DiagnosisReport(
-                "INC0012345", OffsetDateTime.now(),
+                "INC0010005", OffsetDateTime.now(),
                 payload,                                    // reportedSymptom — attacker-controlled text
                 "Order submission", "Production",
                 new Identifiers("INC-ORD-4471", null, "INC-ORD-4471"),

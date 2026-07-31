@@ -224,10 +224,10 @@ whereas failing to produce a report is not.
 
 ## Worked example — the demo incident
 
-`POST /api/diagnose/INC0012345`, all connectors `mock`, no network. Real trace:
+`POST /api/diagnose/INC0010005`, all connectors `mock`, no network. Real trace:
 
 ```
-servicenow.getIncident(INC0012345) → CI=Order Portal, env=Production
+servicenow.getIncident(INC0010005) → CI=Order Portal, env=Production
 understand: id=INC-ORD-4471, keywords=[orders, through, checkout, customers,
             submit, order, fails, error], app=Order Portal
 servicenow.findSimilarIncidents → 2 hits

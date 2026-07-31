@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class IncidentSignalsTest {
 
     private static IncidentContext incident(String shortDesc, String desc, String ci) {
-        return new IncidentContext("INC0012345", shortDesc, desc, "caller", "Software",
+        return new IncidentContext("INC0010005", shortDesc, desc, "caller", "Software",
                 "Application error", OffsetDateTime.parse("2026-07-23T09:20:00+10:00"),
                 "Production", "Service Desk", List.of(), List.of(), ci, List.of());
     }
@@ -38,9 +38,9 @@ class IncidentSignalsTest {
     /** The ticket's own number identifies the ticket, not the failing transaction. */
     @Test
     void doesNotTreatTheIncidentNumberItselfAsATransactionIdentifier() {
-        var signals = IncidentSignals.from(incident("INC0012345 broke", "see INC0012345", "App"));
+        var signals = IncidentSignals.from(incident("INC0010005 broke", "see INC0010005", "App"));
         assertThat(signals.primaryIdentifier()).isNull();
-        assertThat(signals.logQuery()).doesNotContain("INC0012345");
+        assertThat(signals.logQuery()).doesNotContain("INC0010005");
     }
 
     @Test

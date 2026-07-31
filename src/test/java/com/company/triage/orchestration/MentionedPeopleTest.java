@@ -58,7 +58,7 @@ class MentionedPeopleTest {
     @Test
     void incidentContactsCoverBothJournalAuthorsAndPeopleTheyName() {
         List<Contact> contacts = MentionedPeople.fromIncident(
-                "INC0012345", "Orders failing at checkout", "Checkout broken",
+                "INC0010005", "Orders failing at checkout", "Checkout broken",
                 List.of("jane.customer: it worked yesterday"),
                 List.of("m.chen: Escalated after speaking with Priya Nair in Payments."),
                 KNOWN_SYSTEMS);

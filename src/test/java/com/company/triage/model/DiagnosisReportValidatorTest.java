@@ -21,7 +21,7 @@ class DiagnosisReportValidatorTest {
 
     private DiagnosisReport report(List<CandidateSystem> candidates, List<Evidence> evidence,
                                     SuggestedAssignment assignment) {
-        return new DiagnosisReport("INC0012345", OffsetDateTime.now(), "symptom", "function",
+        return new DiagnosisReport("INC0010005", OffsetDateTime.now(), "symptom", "function",
                 "Production", new Identifiers("id", null, "id"), candidates,
                 assignment, evidence, List.of(), List.of(), List.of(),
                 "next action", Confidence.MEDIUM, true);

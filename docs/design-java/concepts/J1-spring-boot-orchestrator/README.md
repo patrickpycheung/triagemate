@@ -178,7 +178,7 @@ class DiagnosisController {
 ```
 
 ## Verification
-- Boots with `mvn spring-boot:run`; `POST /api/diagnose/INC0012345` returns a
+- Boots with `mvn spring-boot:run`; `POST /api/diagnose/INC0010005` returns a
   well-formed `DiagnosisResult` end-to-end with the default (`mock`) connector
   config and **no external network** (corrected 2026-07-30: "mock profile" was
   stale wording left over after FND-10 — there is no Spring profile involved, see

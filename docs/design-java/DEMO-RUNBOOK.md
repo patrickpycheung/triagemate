@@ -98,7 +98,7 @@ curl -s http://localhost:4000/v1/chat/completions \
 
 # app + high model, one incident, live agent path:
 ./run-adk.sh &
-curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
+curl -s -X POST http://localhost:8080/api/diagnose/INC0010005 | jq '.report.suggestedAssignment, .trace'
 ```
 
 You should see advisory output **and** a `trace` proving bounded, real tool calls.
@@ -112,7 +112,7 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
 | T2 | **Primary (D1)** — our loop + high model | `./run-adk.sh` | 8080 |
 | T3 | **Fallback (D2)** — deterministic, offline | `./run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
-| T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0012345: <paste the summary>. Diagnose it."` | — |
+| T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0010005: <paste the summary>. Diagnose it."` | — |
 | — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
 
 Start T1 → T2 → T3 **before** you present, so both instances are warm. T3 needs **no
@@ -123,7 +123,7 @@ network** (default deterministic engine), so it is your guaranteed floor.
 ## 2. Running the demo
 
 1. **Lead with the value + evidence trail (D4).** Open `http://localhost:8080`, trigger
-   `INC0012345`, and narrate: sources consulted → first-pass diagnosis → the **log↔code
+   `INC0010005`, and narrate: sources consulted → first-pass diagnosis → the **log↔code
    citation** (`payment_service.py:44`) → "who to talk to" → the **trace** showing it
    really called ServiceNow/Sumo/Confluence/GitLab. Emphasise **advisory-only + bounded**.
 2. **This is a high Copilot model reasoning, on rails.** Same quality ceiling as a fully
@@ -161,7 +161,7 @@ stage — flip and continue.
       field. A proxy that drops `tools` silently degrades D1 to a single-shot answer with
       **no evidence trail** — which is the whole demo. Run it before anything else.
 - [ ] JDK + Maven present (`mvn -v`) — a JRE alone cannot build `-Padk`.
-- [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0012345` with a real `trace`.
+- [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0010005` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
 - [ ] Decide **now** whether D3 runs — network ok? If unsure, **skip it**. (No MCP
       setup needed: D3 is tool-less by design — have the incident summary on the clipboard.)

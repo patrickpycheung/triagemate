@@ -37,7 +37,7 @@ class RealServiceNowGatewayTest {
 
     private void expectSysIdLookup(MockRestServiceServer server) {
         // requestTo(containsString(...)) rather than an exact queryParam() match: the
-        // "number=INC0012345" value gets percent-encoded inside sysparm_query, and the
+        // "number=INC0010005" value gets percent-encoded inside sysparm_query, and the
         // encoding is an implementation detail, not part of what this test verifies.
         server.expect(requestTo(containsString("/api/now/table/incident?")))
                 .andExpect(requestTo(not(containsString("sys_journal_field"))))
@@ -91,7 +91,7 @@ class RealServiceNowGatewayTest {
                 })
                 .andRespond(withSuccess());
 
-        f.gateway().addWorkNote("INC0012345", "line one\r\nline\ttwo");
+        f.gateway().addWorkNote("INC0010005", "line one\r\nline\ttwo");
 
         f.server().verify();
     }
@@ -117,12 +117,12 @@ class RealServiceNowGatewayTest {
                 .andExpect(requestTo(containsString("u_environment")))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(
-                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0012345\","
+                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0010005\","
                                 + "\"u_environment\":\"Production\"}]}",
                         MediaType.APPLICATION_JSON));
         expectEmptyJournals(f.server());
 
-        var incident = f.gateway().getIncident("INC0012345");
+        var incident = f.gateway().getIncident("INC0010005");
 
         org.assertj.core.api.Assertions.assertThat(incident.environment()).isEqualTo("Production");
         f.server().verify();
@@ -142,7 +142,7 @@ class RealServiceNowGatewayTest {
         f.server().expect(requestTo(containsString("/api/now/table/incident?")))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(
-                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0012345\"}]}",
+                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0010005\"}]}",
                         MediaType.APPLICATION_JSON));
         f.server().expect(requestTo(containsString("element%3Dcomments")))
                 .andExpect(method(HttpMethod.GET))
@@ -155,7 +155,7 @@ class RealServiceNowGatewayTest {
                         "{\"result\":[{\"value\":\"escalated to payments\",\"sys_created_by\":\"ops\"}]}",
                         MediaType.APPLICATION_JSON));
 
-        var incident = f.gateway().getIncident("INC0012345");
+        var incident = f.gateway().getIncident("INC0010005");
 
         org.assertj.core.api.Assertions.assertThat(incident.comments())
                 .containsExactly("jane: it worked yesterday");
@@ -176,7 +176,7 @@ class RealServiceNowGatewayTest {
                 .andExpect(content().string(containsString("first note")))
                 .andRespond(withSuccess());
 
-        f.gateway().addWorkNote("INC0012345", "first note");
+        f.gateway().addWorkNote("INC0010005", "first note");
 
         f.server().verify();   // the PATCH expectation must actually have fired
     }
@@ -197,7 +197,7 @@ class RealServiceNowGatewayTest {
         // Deliberately NO expectation for a PATCH request — MockRestServiceServer fails
         // the test if an unexpected request is made, so this proves no PATCH happened.
 
-        f.gateway().addWorkNote("INC0012345", "duplicate note");
+        f.gateway().addWorkNote("INC0010005", "duplicate note");
 
         f.server().verify();
     }
@@ -214,7 +214,7 @@ class RealServiceNowGatewayTest {
                 .andExpect(method(HttpMethod.PATCH))
                 .andRespond(withSuccess());
 
-        f.gateway().addWorkNote("INC0012345", "note (longer)");   // not an exact match
+        f.gateway().addWorkNote("INC0010005", "note (longer)");   // not an exact match
 
         f.server().verify();
     }

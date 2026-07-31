@@ -42,7 +42,7 @@ class DiagnosisOrchestratorTest {
     }
 
     private DiagnosisReport sampleReport() {
-        return new DiagnosisReport("INC0012345", OffsetDateTime.now(),
+        return new DiagnosisReport("INC0010005", OffsetDateTime.now(),
                 "Checkout order submission fails", "Order submission", "Production",
                 new Identifiers("INC-ORD-4471", null, "INC-ORD-4471"),
                 List.of(new CandidateSystem("Payment Service", 0.86, List.of("e-log"))),
@@ -60,7 +60,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0010005");
 
         assertThat(snow.notes).hasSize(2);
         assertThat(snow.notes.get(0)).contains("Sources consulted").contains("prod/payment");   // sources first
@@ -109,9 +109,9 @@ class DiagnosisOrchestratorTest {
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<DiagnosisResult> first = pool.submit(() -> orchestrator.run(" inc0012345 "));
+            Future<DiagnosisResult> first = pool.submit(() -> orchestrator.run(" inc0010005 "));
             Thread.sleep(100);   // let the first caller register in the coalescing map
-            Future<DiagnosisResult> second = pool.submit(() -> orchestrator.run("INC0012345"));
+            Future<DiagnosisResult> second = pool.submit(() -> orchestrator.run("INC0010005"));
             latch.countDown();
 
             first.get(3, TimeUnit.SECONDS);
@@ -129,7 +129,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
 
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0010005");
 
         assertThat(snow.notes).hasSize(2);   // first write landed, second was attempted and failed
         assertThat(r.report()).isSameAs(report);   // diagnosis itself is not lost
@@ -142,7 +142,7 @@ class DiagnosisOrchestratorTest {
         var snow = new RecordingServiceNow();
         DiagnosisEngine engine = incident -> new DiagnosisResult(sampleReport(), new ArrayList<>());
         DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
-        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(false, 5000)).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(false, 5000)).run("INC0010005");
         assertThat(snow.notes).isEmpty();
         // FND-25: the UI reads this field, not report content, to decide whether to
         // claim comments were posted — must be false when writeback is off.
@@ -161,7 +161,7 @@ class DiagnosisOrchestratorTest {
         DiagnosisEngine fallback = incident ->
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: assembled report")));
 
-        DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, props(true, 5000)).run("INC0012345");
+        DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, props(true, 5000)).run("INC0010005");
 
         assertThat(r.report()).isSameAs(fallbackReport);
         assertThat(r.trace().get(0)).contains("degraded to the deterministic engine")
@@ -180,7 +180,7 @@ class DiagnosisOrchestratorTest {
         var orchestrator = new DiagnosisOrchestrator(onlyEngine, onlyEngine, snow, props(true, 5000));
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> orchestrator.run("INC0012345"));
+                () -> orchestrator.run("INC0010005"));
     }
 
     // --- FND-15: wall-clock timeout ------------------------------------------------
@@ -195,9 +195,9 @@ class DiagnosisOrchestratorTest {
         };
         var orchestrator = new DiagnosisOrchestrator(slow, slow, snow, props(true, 50));   // 50ms << 500ms
 
-        assertThatThrownBy(() -> orchestrator.run("INC0012345"))
+        assertThatThrownBy(() -> orchestrator.run("INC0010005"))
                 .isInstanceOf(DiagnosisTimeoutException.class)
-                .hasMessageContaining("INC0012345");
+                .hasMessageContaining("INC0010005");
     }
 
     /** A hung PRIMARY engine feeds the same FND-7 fallback path as any other failure. */
@@ -213,7 +213,7 @@ class DiagnosisOrchestratorTest {
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: ok")));
         var orchestrator = new DiagnosisOrchestrator(slowPrimary, fallback, snow, props(true, 50));
 
-        DiagnosisResult r = orchestrator.run("INC0012345");
+        DiagnosisResult r = orchestrator.run("INC0010005");
 
         assertThat(r.report()).isSameAs(fallbackReport);
         assertThat(r.engine()).isEqualTo(DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
@@ -257,12 +257,12 @@ class DiagnosisOrchestratorTest {
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<DiagnosisResult> first = pool.submit(() -> orchestrator.run("INC0012345"));
+            Future<DiagnosisResult> first = pool.submit(() -> orchestrator.run("INC0010005"));
             assertThat(started.await(2, TimeUnit.SECONDS))
                     .as("first caller must be inside the engine call before the second starts")
                     .isTrue();
 
-            Future<DiagnosisResult> second = pool.submit(() -> orchestrator.run("INC0012345"));
+            Future<DiagnosisResult> second = pool.submit(() -> orchestrator.run("INC0010005"));
             Thread.sleep(100);   // give the second caller time to reach the "already in flight" branch
             release.countDown();
 
@@ -288,8 +288,8 @@ class DiagnosisOrchestratorTest {
         };
         var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, props(true, 5000));
 
-        orchestrator.run("INC0012345");
-        orchestrator.run("INC0012345");   // fully separate, deliberate re-trigger
+        orchestrator.run("INC0010005");
+        orchestrator.run("INC0010005");   // fully separate, deliberate re-trigger
 
         assertThat(engineCalls.get()).isEqualTo(2);
         assertThat(snow.notes).hasSize(4);   // two diagnoses' worth

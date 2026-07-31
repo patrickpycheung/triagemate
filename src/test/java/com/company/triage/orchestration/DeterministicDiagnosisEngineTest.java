@@ -38,7 +38,7 @@ class DeterministicDiagnosisEngineTest {
 
     @Test
     void diagnosesTheSeededIncidentEndToEnd() {
-        DiagnosisResult result = engine.diagnose("INC0012345");
+        DiagnosisResult result = engine.diagnose("INC0010005");
         DiagnosisReport r = result.report();
 
         // Advisory, never mutating
@@ -117,7 +117,7 @@ class DeterministicDiagnosisEngineTest {
                 new MockSumoGateway(), new MockGitLabGateway(),
                 TriagePropertiesFixture.deterministic());
 
-        engineWithSpy.diagnose("INC0012345");
+        engineWithSpy.diagnose("INC0010005");
 
         // Derived from the seeded incident's own shortDescription + configurationItem —
         // not the old hardcoded literal, which contained none of these terms.

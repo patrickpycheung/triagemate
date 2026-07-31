@@ -15,7 +15,7 @@ class DiagnosisReportNoteTest {
 
     private DiagnosisReport reportWithContacts() {
         return new DiagnosisReport(
-                "INC0012345", OffsetDateTime.now(),
+                "INC0010005", OffsetDateTime.now(),
                 "Checkout order submission fails", "Order submission", "Production",
                 new Identifiers("INC-ORD-4471", null, "INC-ORD-4471"),
                 List.of(new CandidateSystem("Payment Service", 0.86, List.of("e-log"))),
