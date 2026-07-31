@@ -16,6 +16,37 @@ Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
 7 code fixes + 2 already-archived closures); backlog empty again. A second
 `/doc-test cds` pass the same day raised FND-55..58; FND-57/58 fixed
 (TriageProperties refactor); FND-55/56 remain open (`FOUND-ISSUES.md`).
+FND-59 raised and fixed the same day, found by a code-review walkthrough of
+the ServiceNow→Confluence data flow, not by `/doc-test`.
+
+---
+
+## FND-59 — DeterministicDiagnosisEngine's Confluence query was a hardcoded literal, not derived from the incident · **MEDIUM**
+
+**Where**: `DeterministicDiagnosisEngine.diagnose()`, the Confluence knowledge-search step.
+**What**: `confluence.search("checkout order payment reconcile 500")` — a fixed string, sent
+for every incident regardless of its actual symptom text. It only ever looked correct because
+it happens to match `MockConfluenceGateway`'s keyword check for the one seeded demo incident
+(J7). `IncidentContext.shortDescription()`/`.description()` are already extracted earlier in
+the same method (for the order-ID regex) but never reached the Confluence call. Under
+`connectors.confluence=real` against any incident that isn't the exact demo one, this would
+have silently searched the demo's keywords instead of the real symptom — wrong knowledge-search
+results, no error, nothing in the trace to suggest it.
+- **Resolution**: fixed:18a4df9 — the query is now built from the incident's own
+  `shortDescription` + `configurationItem` (`buildConfluenceQuery`), matching how the engine
+  already derives `orderId`/Sumo `scope`/`window` from real incident fields rather than
+  literals. The trace line now logs the actual query sent
+  (`confluence.search(query="...")`), closing the "nothing to suggest it" part too. Regression
+  test `DeterministicDiagnosisEngineTest#confluenceQueryIsDerivedFromTheIncidentNotHardcoded`
+  uses a spy gateway (delegating to `MockConfluenceGateway` for the return value, so downstream
+  evidence/justification wiring stays intact) to assert the captured query contains
+  incident-derived terms and none of the old literal's ("reconcile", "discount", "500").
+  Verified live against a running app: trace shows `confluence.search(query="Orders sometimes
+  don't go through at checkout Order Portal")`.
+- **Escape**: code review — any string literal passed as a *search query* argument (as opposed
+  to a config value or a label) should prompt "where should this actually come from?" at write
+  time; a literal that happens to satisfy the one demo fixture is exactly the shape that passes
+  every existing test while being wrong for anything else.
 
 ---
 
