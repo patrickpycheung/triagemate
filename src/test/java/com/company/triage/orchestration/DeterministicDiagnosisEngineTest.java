@@ -64,11 +64,28 @@ class DeterministicDiagnosisEngineTest {
                 .anyMatch(s -> s.contains("confluence"))
                 .anyMatch(s -> s.contains("gitlab"));
 
-        // Someone in BOTH the runbook history and the file's git history is merged and
-        // ranked first (Priya edited KB001234 and committed payment_service.py).
+        // FND-64: corroboration across ALL THREE name-bearing sources ranks first. Priya is
+        // named in a ticket work note, edited KB001234, and committed payment_service.py.
+        // Was "confluence+gitlab" before ServiceNow contributed names at all.
         Contact top = r.suggestedContacts().get(0);
         assertThat(top.name()).isEqualTo("Priya Nair");
-        assertThat(top.source()).isEqualTo("confluence+gitlab");
+        assertThat(top.source()).isEqualTo("servicenow+confluence+gitlab");
+        // Merged from a prose mention (no handle) plus API records — the handle must survive.
+        assertThat(top.handle()).isEqualTo("priya.nair@example.com");
+
+        // All three sources contribute; Sumo deliberately contributes none (no identity in logs).
+        assertThat(r.suggestedContacts()).extracting(Contact::source)
+                .anyMatch(s -> s.contains("servicenow"))
+                .anyMatch(s -> s.contains("confluence"))
+                .anyMatch(s -> s.contains("gitlab"));
+        assertThat(r.suggestedContacts()).extracting(Contact::source)
+                .noneMatch(s -> s.contains("sumo"));
+
+        // Names extracted from FREE TEXT, not just API metadata: Priya from a ticket work
+        // note, Marcus from the runbook's "Escalation contact:" prose.
+        assertThat(r.suggestedContacts()).extracting(Contact::name).contains("Marcus Chen");
+        // The ticket's own commenters, from the journal author prefix.
+        assertThat(r.suggestedContacts()).extracting(Contact::name).contains("jane.customer", "m.chen");
 
         // Trace shows the tools were actually consulted
         assertThat(result.trace()).anyMatch(s -> s.startsWith("sumo.search"));

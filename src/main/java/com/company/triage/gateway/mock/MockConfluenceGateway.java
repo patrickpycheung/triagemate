@@ -25,7 +25,10 @@ public class MockConfluenceGateway implements ConfluenceGateway {
                     "PAYMENT_RECONCILE_MISMATCH means the expected total and the charged "
                             + "amount diverged. Common cause: a percentage discount applied AFTER "
                             + "tax in the gateway while the expected total discounts BEFORE tax. "
-                            + "Owned by Payments Platform Support. See payment_service reconcile()."));
+                            + "Owned by Payments Platform Support. See payment_service reconcile(). "
+                            // FND-64: runbooks routinely name an escalation contact in prose;
+                            // the page's author/editor metadata never captures it.
+                            + "Escalation contact: Marcus Chen."));
         }
         return List.of();
     }

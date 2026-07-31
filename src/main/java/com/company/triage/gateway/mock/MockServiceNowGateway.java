@@ -59,8 +59,13 @@ public class MockServiceNowGateway implements ServiceNowGateway {
                 OffsetDateTime.parse("2026-07-23T09:20:00+10:00"),
                 "Production",
                 "Service Desk",
-                List.of("Caller: 'it worked yesterday, now some checkouts error out'"),
-                List.of(),
+                // FND-64: journal entries carry their author (as RealServiceNowGateway now
+                // renders them, "sys_created_by: text"), and the work note names a person —
+                // so the J9 name extraction has real ServiceNow signal to find, matching what
+                // a real ticket looks like.
+                List.of("jane.customer: it worked yesterday, now some checkouts error out"),
+                List.of("m.chen: Escalated after speaking with Priya Nair in Payments — "
+                        + "she owns the reconcile path."),
                 "Order Portal",
                 List.of("Service Desk (initial)")
         );

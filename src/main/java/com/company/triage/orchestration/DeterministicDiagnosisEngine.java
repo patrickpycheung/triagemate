@@ -187,7 +187,14 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // ---- Step 7: who to talk to (J9) --------------------------------------
         // Derived from the SAME evidence already gathered: authors/editors of the
         // runbooks the triage cited, plus recent committers to the implicated file.
-        List<Contact> contacts = gatherContacts(docs, codeHits);
+        // Known system/team names for THIS incident — the highest-value denylist for name
+        // extraction, since "Order Portal"/"Payment Service" have person-name shape.
+        java.util.Set<String> knownSystemNames = new java.util.LinkedHashSet<>();
+        if (inc.configurationItem() != null) knownSystemNames.add(inc.configurationItem());
+        if (inc.currentAssignment() != null) knownSystemNames.add(inc.currentAssignment());
+        ownership.ifPresent(o -> { knownSystemNames.add(o.application()); knownSystemNames.add(o.supportGroup()); });
+        logs.forEach(l -> knownSystemNames.add(prettifySystem(l.logger())));
+        List<Contact> contacts = gatherContacts(inc, docs, codeHits, knownSystemNames);
         trace.add("contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
                 .formatted(contacts.size(), docs.size(), codeHits.size()));
 
@@ -311,36 +318,84 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      * the implicated file is the strongest signal, so their two entries collapse into
      * one {@code confluence+gitlab} contact, ordered first.
      */
-    private List<Contact> gatherContacts(List<KnowledgeDoc> docs, List<CodeSearchResult> codeHits) {
+    private List<Contact> gatherContacts(IncidentContext inc, List<KnowledgeDoc> docs,
+                                         List<CodeSearchResult> codeHits,
+                                         java.util.Set<String> knownSystemNames) {
         List<Contact> raw = new ArrayList<>();
+        // FND-64: ServiceNow was contributing NO names at all, though the ticket is where a
+        // human already wrote down who else is involved — whoever left each comment, and
+        // anyone they named in it. Listed first because "already engaged with this incident"
+        // outranks "edited the runbook months ago".
+        raw.addAll(MentionedPeople.fromIncident(inc.number(), inc.description(),
+                inc.shortDescription(), inc.comments(), inc.workNotes(), knownSystemNames));
         for (KnowledgeDoc d : docs) {
-            raw.addAll(confluence.contributors(d));
+            raw.addAll(confluence.contributors(d));      // page author / last editor (metadata)
+            // FND-64: ...and anyone the page NAMES. A runbook's escalation contact is often
+            // more relevant than whoever last fixed a typo on it.
+            raw.addAll(MentionedPeople.fromPageBody(d.title(), d.url(), d.snippet(), knownSystemNames));
         }
         for (CodeSearchResult h : codeHits) {
             raw.addAll(gitLab.recentCommitters(h.project(), h.filePath()));
         }
 
-        // Merge by handle (fall back to name); preserve first-seen order.
+        // Merge, preserving first-seen order.
+        //
+        // FND-64: the key used to be handle-else-name, which silently failed the moment the
+        // same person arrived from two sources with different identifier completeness — and
+        // that is now the NORMAL case, because a name extracted from ticket or page prose has
+        // no handle while the same person from the Confluence/GitLab APIs does. The demo showed
+        // it immediately: "Priya Nair [confluence+gitlab]" listed separately from "Priya Nair
+        // [servicenow]", and Marcus Chen split across two rows. Key on the normalised full name
+        // when we have one (that is the identity humans actually match on), falling back to the
+        // handle only for handle-only records like a bare username or email.
         Map<String, Contact> merged = new LinkedHashMap<>();
         for (Contact c : raw) {
-            String key = (c.handle() == null || c.handle().isBlank() ? c.name() : c.handle())
-                    .toLowerCase();
+            String key = mergeKey(c);
             Contact existing = merged.get(key);
             if (existing == null) {
                 merged.put(key, c);
             } else {
                 String source = existing.source().contains(c.source())
                         ? existing.source() : existing.source() + "+" + c.source();
-                merged.put(key, new Contact(existing.name(), existing.handle(), source,
-                        existing.reason() + "; " + c.reason(), existing.link(),
+                // Keep whichever record actually carries a handle/link — a prose mention has
+                // neither, so a later API-sourced duplicate is what makes the contact actionable.
+                String handle = (existing.handle() == null || existing.handle().isBlank())
+                        ? c.handle() : existing.handle();
+                String link = (existing.link() == null || existing.link().isBlank())
+                        ? c.link() : existing.link();
+                merged.put(key, new Contact(existing.name(), handle, source,
+                        existing.reason() + "; " + c.reason(), link,
                         existing.signal() + " · " + c.signal()));
             }
         }
 
-        // Cross-source contacts (strongest) first, then the rest in discovery order.
+        // Corroboration is the ranking signal: someone independently surfaced by servicenow
+        // AND confluence AND gitlab is a better person to talk to than someone seen once.
+        // FND-64: was a boolean "contains a +", which couldn't tell 2 sources from 3 — now
+        // that ServiceNow contributes names too, three-way corroboration is reachable and
+        // worth ranking above two. Stable, so equal counts keep discovery order.
         List<Contact> out = new ArrayList<>(merged.values());
-        out.sort((a, b) -> Boolean.compare(b.source().contains("+"), a.source().contains("+")));
+        out.sort(Comparator.comparingInt((Contact c) -> -sourceCount(c)));
         return out;
+    }
+
+    /**
+     * Identity for merging. A full name ("Priya Nair") is what the same human looks like
+     * across ServiceNow prose, a Confluence page and a git history, so it wins; a handle-only
+     * record (a bare username like {@code m.chen}, or an email) keys on itself.
+     */
+    private static String mergeKey(Contact c) {
+        String name = c.name() == null ? "" : c.name().trim();
+        if (name.contains(" ")) {
+            return name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ");
+        }
+        String handle = c.handle() == null || c.handle().isBlank() ? name : c.handle();
+        return handle.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** How many distinct sources independently surfaced this contact (source is "a+b+c"). */
+    private static int sourceCount(Contact c) {
+        return c.source() == null || c.source().isBlank() ? 0 : c.source().split("\\+").length;
     }
 
     private static String firstMatch(Pattern p, String text) {

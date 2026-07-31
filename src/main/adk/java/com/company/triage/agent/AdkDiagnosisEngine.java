@@ -101,6 +101,26 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
              already cited (step 4) and the file you already tied (step 6): who to talk
              to about the issue. Never a broad people-search.
 
+        WHO TO TALK TO (suggestedContacts) — gather names from all three name-bearing
+        sources, not just the two tools above. The tools return page authors/editors and
+        recent committers; the other names are already in text you have read, and cost no
+        extra tool call:
+          - ServiceNow (get_incident): whoever wrote each comment / work note, and anyone
+            they NAME in one ("escalated after speaking with Priya Nair"). Someone already
+            engaged with this specific incident usually beats someone who edited a runbook
+            months ago, so rank them accordingly.
+          - Confluence (search_confluence): people NAMED IN THE PAGE TEXT — a runbook's
+            "escalation contact" or owner. That is different from, and often more relevant
+            than, whoever last edited the page.
+          - GitLab: the committers from find_recent_committers.
+          - Sumo: nothing. Log lines carry no identity; do not invent one from a logger name.
+        Merge the same person across sources into ONE contact and say so in `source`
+        (e.g. "servicenow+confluence+gitlab") — corroboration across sources is the
+        strongest signal you have, and a reader seeing one name three times learns more
+        than seeing three rows. Only list people actually named in something you read; a
+        wrong name sends an engineer to bother an uninvolved colleague. Never list a team,
+        service or system as a contact.
+
         ALLOWLISTED VALUES — these are the ONLY accepted values; any other value is
         rejected by the app and wastes one of your limited tool calls. Do not invent,
         abbreviate, or derive them from the incident text; use them verbatim.
