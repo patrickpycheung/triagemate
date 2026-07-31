@@ -80,12 +80,24 @@ public class DiagnosisOrchestrator {
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  @Value("${triage.writeback.enabled:true}") boolean writebackEnabled,
-                                 @Value("${triage.orchestrator.timeout-ms:90000}") long timeoutMs) {
+                                 @Value("${triage.orchestrator.timeout-ms:90000}") long timeoutMs,
+                                 @Value("${triage.engine:deterministic}") String configuredEngine) {
         this.engine = engine;
         this.fallbackEngine = fallbackEngine;
         this.serviceNow = serviceNow;
         this.writebackEnabled = writebackEnabled;
         this.timeoutMs = timeoutMs;
+        // FND-49: triage.engine=adk without -Padk matches no ADK bean, so the app silently
+        // falls back to `engine == fallbackEngine` (deterministic) with nothing announcing
+        // it — the FND-8 failure class (narrating a live model over a scripted run) via a
+        // misconfiguration path rather than a runtime one. Log the mismatch loudly at
+        // startup; do NOT fail fast (a hackathon build shouldn't refuse to boot over this).
+        if ("adk".equalsIgnoreCase(configuredEngine) && engine == fallbackEngine) {
+            log.warn("triage.engine=adk but no ADK engine bean is active (missing -Padk build, "
+                    + "or the ADK bean failed to register) — running DETERMINISTIC only. "
+                    + "This is NOT the FND-7 fallback (no failure occurred); the app never had "
+                    + "an ADK engine to try.");
+        }
     }
 
     @PreDestroy
@@ -93,7 +105,12 @@ public class DiagnosisOrchestrator {
         engineExecutor.shutdownNow();
     }
 
-    public DiagnosisResult run(String incidentNumber) {
+    public DiagnosisResult run(String rawIncidentNumber) {
+        // FND-50: normalize here, not just in DiagnosisController — K1 (IncidentPoller)
+        // passes ServiceNow's raw value directly, so normalizing only at the controller
+        // let K1 and K3 fail to coalesce on a case/whitespace difference, defeating
+        // FND-31 for exactly the mixed-trigger case it exists for.
+        String incidentNumber = rawIncidentNumber.trim().toUpperCase();
         CompletableFuture<DiagnosisResult> mine = new CompletableFuture<>();
         CompletableFuture<DiagnosisResult> existing = inFlight.putIfAbsent(incidentNumber, mine);
         if (existing != null) {

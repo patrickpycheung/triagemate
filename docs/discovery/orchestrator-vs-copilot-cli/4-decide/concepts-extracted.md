@@ -19,7 +19,13 @@
   path. Current operating position: proceed at **human-present hackathon scale**; a ruling
   is required before any **unattended** use. If the ruling is "no programmatic use at
   all", D1 falls back to D2 (deterministic) or an authorised enterprise LLM endpoint.
-- **D2 — Guaranteed fallback = deterministic engine.** Offline, can't fail; the stage safety net.
+- **D2 — Guaranteed fallback = deterministic engine.** The stage safety net *as launched by
+  the runbook* (`run-deterministic.sh`, all connectors mock) — offline, can't fail.
+  *(Corrected 2026-07-31, FND-46: "offline, can't fail" is a property of that launcher
+  configuration, not of the engine in general — connector mode is independent of engine
+  choice, so `triage.connectors.*=real` makes the same engine make real HTTP calls; gateway
+  exceptions aren't caught per-tool; and when deterministic is the active engine its
+  failures propagate by design, FND-7. Never run D2's demo slot with a real connector.)*
 - **D3 — Optional contrast segment = Copilot CLI, no tools.** A short segment handing the
   same incident to Copilot CLI *without* access to our four systems — *only if* the
   network is healthy, and under the **same C6 human-present risk acceptance that already

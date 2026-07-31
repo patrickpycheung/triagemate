@@ -70,6 +70,19 @@ Optimize the trace to answer: clearer summary? missing info identified? correct 
 in top-3? correct team in top-3? useful evidence cited? relevant past incident
 found? sensible next action? — not "did it nail root cause."
 
+## Open / risks
+
+- **Accepted limitation (FND-44, closed 2026-07-31, not fixed): some guardrails are
+  prompt-only.** The `INSTRUCTION` asks the model for "ONE bounded Sumo Logic search" and to
+  cite only pages/files already gathered, but nothing structurally enforces either — unlike
+  the Sumo scope/window/GitLab-project allowlists (FND-20/38), which are. A model that
+  ignores the instruction (or is prompt-injected into ignoring it) could over-call
+  `search_logs` or cite something it never fetched. **Decided not to build now**: the actual
+  safety boundary (advisory-only, no destructive tools — `PromptInjectionGuardrailTest`)
+  is unaffected either way; this is about investigation-time efficiency/citation accuracy,
+  not risk to real systems. Revisit if this app processes less-trusted input than an
+  internal ServiceNow queue.
+
 ## Verification
 - **FND-19, fixed 2026-07-30**: `PromptInjectionGuardrailTest` — no real LLM is
   available offline to red-team, so what's actually tested is the architectural

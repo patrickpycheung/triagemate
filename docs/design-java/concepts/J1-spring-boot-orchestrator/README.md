@@ -44,6 +44,12 @@ is the one place their calls meet, which is also why concurrent-call coalescing
   (`BoundsCallback`) — the deterministic engine runs a fixed script, not a
   model-selected loop, so a call-count budget doesn't apply to it the same way; this
   card previously implied a single uniform bound across both engines, which was wrong.
+  **Incident-number normalization (FND-50, fixed 2026-07-31 — moved here from
+  `DiagnosisController`)**: `run()` trims and uppercases the incident number *before*
+  touching the coalescing map. FND-37 originally added this only in the controller, so K1
+  (which passes ServiceNow's raw value) and K3 could still fail to coalesce on a case
+  difference — defeating FND-31 for exactly the mixed-trigger case it exists for. Doing it
+  here means every caller normalizes identically, by construction.
   **Concurrent-diagnosis coalescing (FND-31, fixed 2026-07-30)**: the manual K3 trigger
   (`DiagnosisController`) and the automatic K1 trigger (`IncidentPoller`) both call
   `run(incidentNumber)` — the one place their calls meet. Concurrent calls for the SAME
@@ -53,6 +59,12 @@ is the one place their calls meet, which is also why concurrent-call coalescing
   produced two full diagnoses and up to four advisory comments. Deliberately separate
   from `IncidentPoller`'s own in-flight/completed bookkeeping, which solves a different
   problem (don't re-poll something already handled, across scheduler ticks over time).
+  **Misconfigured-engine warning (FND-49, fixed 2026-07-31)**: `triage.engine=adk` in a
+  build without `-Padk` matches no ADK bean, so `engine == fallbackEngine` and the app runs
+  deterministic-only with nothing announcing it — the FND-8 failure class (narrating a live
+  model over a scripted run) via a misconfiguration path rather than a runtime one. The
+  constructor now logs a WARN naming exactly this at startup. Deliberately not fail-fast: a
+  hackathon build shouldn't refuse to boot over it.
   **Auto-fallback (FND-7, fixed 2026-07-30)**: when the ADK engine is active and fails
   to converge (its own `LlmCallsLimitExceededException` backstop, or any other
   model/proxy/network failure), the orchestrator degrades to the deterministic engine
@@ -74,6 +86,16 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 > shape above stays wire-compatible (additive). J11 also adds a polling endpoint
 > `GET /api/runs/{runId}/steps`; `POST /api/diagnose/{incidentNumber}` is unchanged.
 > See `../J11-live-thinking-trace/README.md`.
+
+**Error contract (FND-48, fixed 2026-07-31)**: `DiagnosisApiExceptionHandler`
+(`@RestControllerAdvice`) maps the three exceptions this API actually throws —
+`IllegalStateException` ("incident not found") → 404, `DiagnosisTimeoutException` → 504,
+`DiagnosisReportInvalidException` → 502 — each to a `{"error": "..."}` JSON body. Previously
+none of these were handled and all three fell through to Spring's default error body, which
+has no `report` field; `index.html`'s `render()` immediately dereferences
+`data.report.candidateSystems`, so the failure mode on stage was a raw
+`TypeError: Cannot read properties of undefined` rather than a readable message. Deliberately
+narrow — this is a demo-quality contract for the three known throw sites, not a general one.
 
 ## Interface sketch
 ```java

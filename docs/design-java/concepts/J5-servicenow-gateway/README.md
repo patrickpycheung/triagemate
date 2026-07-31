@@ -58,6 +58,18 @@ gateway's `findIncidentsCreatedSince` is what J10 polls through (FND-21).
   incidents + a CMDB ownership record.
 - JS-2: real `getIncident` reads one incident; real `addWorkNote` posts one note to
   a test incident and is idempotent on re-run.
+- **FND-47, fixed 2026-07-31**: real `getIncident`'s `sysparm_fields` list omitted
+  `u_environment` while the parser read it anyway, so `IncidentContext.environment` was
+  always null against a real instance — invisible to mock-only tests, since the mock has no
+  field-selection to get wrong. `RealServiceNowGatewayTest#getIncidentRequestsAndParsesEnvironment`
+  asserts the field is both requested and parsed.
+- **FND-51, fixed 2026-07-31**: `triage.servicenow.write-field` was interpolated directly
+  into the PATCH body with no restriction, and the hand-rolled JSON escaping covered only
+  `\`, `"`, `\n` (a `\r` or tab in evidence text produced invalid JSON). Now: construction
+  fails fast on any value outside `{work_notes, comments}`, and note text is serialized via
+  Jackson (already a transitive dependency) rather than re-derived escaping rules.
+  `RealServiceNowGatewayTest#rejectsAnUnrecognisedWriteField`,
+  `#workNoteWithCarriageReturnAndTabIsValidJson`.
 
 ## Open / risks
 - API role / ACL / trigger approval is the main blocker → mock unblocks the demo.

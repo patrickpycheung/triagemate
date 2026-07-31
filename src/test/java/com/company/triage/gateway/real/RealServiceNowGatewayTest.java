@@ -44,6 +44,72 @@ class RealServiceNowGatewayTest {
                         "{\"result\":[{\"sys_id\":\"abc123\"}]}", MediaType.APPLICATION_JSON));
     }
 
+    /**
+     * FND-51: {@code triage.servicenow.write-field} was interpolated into the PATCH body
+     * with no restriction. A misconfigured value must fail construction, not silently write
+     * to an arbitrary incident field.
+     */
+    @Test
+    void rejectsAnUnrecognisedWriteField() {
+        RestClient.Builder builder = RestClient.builder();
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> new RealServiceNowGateway(builder, PROPS, "priority"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("work_notes")
+                .hasMessageContaining("comments");
+    }
+
+    /**
+     * FND-51: hand-rolled JSON escaping covered only {@code \}, {@code "} and {@code \n} — a
+     * {@code \r} or tab in evidence text produced an invalid PATCH body. Now via Jackson.
+     */
+    @Test
+    void workNoteWithCarriageReturnAndTabIsValidJson() {
+        var f = build();
+        expectSysIdLookup(f.server());
+        f.server().expect(requestTo(containsString("/api/now/table/sys_journal_field")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"result\":[]}", MediaType.APPLICATION_JSON));
+        f.server().expect(requestTo(containsString("/api/now/table/incident/abc123")))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(request -> {
+                    String body = new String(
+                            ((org.springframework.mock.http.client.MockClientHttpRequest) request)
+                                    .getBodyAsBytes());
+                    // If this doesn't parse, the escaping regressed.
+                    org.assertj.core.api.Assertions.assertThatCode(
+                            () -> new com.fasterxml.jackson.databind.ObjectMapper().readTree(body))
+                            .doesNotThrowAnyException();
+                })
+                .andRespond(withSuccess());
+
+        f.gateway().addWorkNote("INC0012345", "line one\r\nline\ttwo");
+
+        f.server().verify();
+    }
+
+    /**
+     * FND-47: {@code getIncident} read {@code u_environment} from the response but never
+     * requested it in {@code sysparm_fields} — ServiceNow returns only requested fields, so
+     * {@code IncidentContext.environment} was always null against a real instance.
+     */
+    @Test
+    void getIncidentRequestsAndParsesEnvironment() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                .andExpect(requestTo(containsString("u_environment")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        "{\"result\":[{\"sys_id\":\"abc123\",\"number\":\"INC0012345\","
+                                + "\"u_environment\":\"Production\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        var incident = f.gateway().getIncident("INC0012345");
+
+        org.assertj.core.api.Assertions.assertThat(incident.environment()).isEqualTo("Production");
+        f.server().verify();
+    }
+
     @Test
     void postsWhenNoIdenticalNoteExists() {
         var f = build();

@@ -105,6 +105,15 @@ currently the only place it surfaces on an unattended run.
 
 ## Open / risks
 
+- **Accepted limitation (FND-43, closed 2026-07-31, not fixed): same-second timestamp
+  collision beyond `batch-limit`.** If more than `triage.trigger.poll.batch-limit` (default
+  10) incidents share the exact same `sys_created_on` second, the "unbroken handled prefix"
+  cursor advance could move past ones never actually fetched (they'd be beyond
+  `sysparm_limit`). A strictly-correct fix needs a tie-break key (e.g. `sys_id`) in the
+  query/cursor. **Decided not to build**: K1 is off by default and unused by the demo, and
+  the trigger condition needs K1 enabled *and* a true same-second creation burst — low
+  probability for hackathon-scale traffic. Revisit if K1 is ever turned on against real,
+  bursty traffic.
 - **State is in-process only.** A restart re-seeds the cursor to "now", so incidents created
   while the app was down are skipped rather than re-triaged. Skipping is the safe direction,
   but it is a real gap for anything beyond a demo. Durable options: persist the cursor +

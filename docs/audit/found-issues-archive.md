@@ -4,13 +4,44 @@ Append-only record of resolved `FND-*` entries from `/FOUND-ISSUES.md`, newest f
 
 Each entry keeps its original text plus two lines added at resolution time:
 
-- **Resolution** — `fixed:<sha>` (fixed directly) or `promoted:<card path>` (now tracked
-  by a design card).
+- **Resolution** — `fixed:<sha>` (fixed directly), `promoted:<card path>` (now tracked
+  by a design card), or `accepted:<card path>` (evaluated and deliberately not built —
+  low probability/impact for this app's actual scope; documented as an accepted
+  limitation in the owning card rather than left as an open backlog item).
 - **Escape** — which **process layer** should have caught it. Not what was wrong in the
   code: what was wrong in how we work. A future retrospective clusters on this field, so
   it is written while the context is fresh.
 
-Drained 2026-07-30 by `/found-issues-resolve`.
+Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31.
+
+---
+
+## FND-43 — Poller cursor can skip a batch-limit's worth of same-timestamp incidents · **LOW**
+
+**Where**: `IncidentPoller.pollOnce()`.
+**What**: if more than `triage.trigger.poll.batch-limit` (default 10) incidents share the
+exact same `sys_created_on` second, the cursor's "unbroken handled prefix" advance could
+move past ones never actually fetched. Independently re-discovered by two architecture
+reviews in the 2026-07-31 `/doc-test cds` run without knowing it was already logged,
+raising confidence it is real rather than theoretical.
+- **Resolution**: accepted:docs/design-java/concepts/J10-incident-poller/README.md — K1
+  is off by default and unused by the demo; the trigger needs K1 enabled AND a true
+  same-second creation burst, low probability for hackathon-scale traffic.
+- **Escape**: design review — a correctness invariant depending on an upstream ordering
+  guarantee (query-level tie-breaking) should have been checked against second-resolution
+  timestamps at the time J10 was designed.
+
+## FND-44 — Several ADK guardrails are prompt-only, not code-enforced · **LOW**
+
+**Where**: `AdkDiagnosisEngine`'s `INSTRUCTION` — "ONE bounded Sumo Logic search",
+citation provenance.
+**What**: asked of the model via the system prompt, not structurally enforced the way the
+Sumo/GitLab allowlists are (FND-20/38).
+- **Resolution**: accepted:docs/design-java/concepts/J8-guardrails-observability/README.md
+  — the actual safety boundary (advisory-only, no destructive tools) is unaffected either
+  way; this is investigation-time efficiency, not risk to real systems, for an app that
+  processes only an internal ServiceNow queue.
+- **Escape**: n/a — correctly logged and now correctly closed as accepted, not escaped.
 
 ---
 

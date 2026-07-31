@@ -27,10 +27,8 @@ public class DiagnosisController {
 
     @PostMapping("/{incidentNumber}")
     public DiagnosisResult diagnose(@PathVariable String incidentNumber) {
-        // FND-37: normalize before it reaches FND-31's coalescing map — "INC0012345",
-        // "inc0012345", and " INC0012345 " previously coalesced as three DIFFERENT keys
-        // (missing the whole point of coalescing) and could rack up separate diagnoses
-        // for what a human would recognize as the same ticket.
-        return orchestrator.run(incidentNumber.trim().toUpperCase());
+        // FND-37/FND-50: normalization now lives in DiagnosisOrchestrator.run() itself,
+        // so every trigger (K1 and K3) normalizes identically for FND-31's coalescing map.
+        return orchestrator.run(incidentNumber);
     }
 }

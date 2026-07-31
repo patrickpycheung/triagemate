@@ -70,6 +70,12 @@ performed."
 Take resolved historical incidents, hide assignment + resolution, and check whether
 the copilot reconstructs them (correct app + team in top-3).
 
+**Error display (FND-48, fixed 2026-07-31)**: `run()` now checks `res.ok` before calling
+`render()` and shows `data.error` (from J1's `DiagnosisApiExceptionHandler`) on failure.
+Previously `render(await res.json())` ran unconditionally, and a non-2xx body has no
+`report` field — `render()`'s first line dereferences `r.candidateSystems`, so the failure
+mode on stage was a raw `TypeError`, not a message.
+
 ## Verification
 - Fresh checkout + `mvn spring-boot:run` → open page → diagnose the demo incident →
   full report with the log↔code citation, no network.

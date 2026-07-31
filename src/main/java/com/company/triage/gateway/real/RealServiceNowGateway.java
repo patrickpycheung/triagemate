@@ -7,6 +7,7 @@ import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,14 +57,28 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
                 .build();
+        // FND-51: writeField was interpolated directly into the PATCH body with no
+        // restriction — a typo'd or hostile config value could write to an arbitrary
+        // incident field, violating J8's "only comment, never reassign/close/re-prioritise"
+        // invariant at the config layer rather than the model layer. Fail fast instead.
+        if (!WRITE_FIELDS.contains(writeField)) {
+            throw new IllegalArgumentException(
+                    "triage.servicenow.write-field must be one of " + WRITE_FIELDS
+                            + ", got: " + writeField);
+        }
         this.writeField = writeField;
     }
 
+    private static final java.util.Set<String> WRITE_FIELDS = java.util.Set.of("work_notes", "comments");
+
     @Override
     public IncidentContext getIncident(String number) {
+        // FND-47: u_environment was read below but never requested here — ServiceNow
+        // returns only requested fields, so IncidentContext.environment was always null
+        // against a real instance. Mock-only testing hid this completely.
         JsonNode row = firstRow("/api/now/table/incident",
                 "number=" + number, "sys_id,number,short_description,description,caller_id,"
-                        + "category,subcategory,opened_at,cmdb_ci,assignment_group");
+                        + "category,subcategory,opened_at,cmdb_ci,assignment_group,u_environment");
         if (row == null) throw new IllegalStateException("incident not found: " + number);
         return new IncidentContext(
                 text(row, "number"),
@@ -237,7 +252,17 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         catch (Exception e) { return null; }
     }
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    // FND-51: the hand-rolled escaping here only covered \, ", \n — a \r or tab in an
+    // evidence summary (plausible: pasted log text) produced invalid JSON on a real PATCH.
+    // Jackson is already a transitive dependency; use it instead of re-deriving the
+    // escaping rules.
     private static String jsonString(String s) {
-        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+        try {
+            return JSON.writeValueAsString(s);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize work note text", e);
+        }
     }
 }

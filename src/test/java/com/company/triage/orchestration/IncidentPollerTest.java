@@ -54,7 +54,7 @@ class IncidentPollerTest {
         CountingOrchestrator(ServiceNowGateway snow, DiagnosisResult.Engine engine) {
             super(i -> new DiagnosisResult(null, new ArrayList<>(), engine),
                   i -> new DiagnosisResult(null, new ArrayList<>(), engine),
-                  snow, false, 5000);
+                  snow, false, 5000, "deterministic");
             this.engine = engine;
         }
 

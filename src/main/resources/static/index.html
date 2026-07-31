@@ -50,7 +50,17 @@ async function run() {
   btn.disabled = true; out.innerHTML = '<div class="card">Investigating…</div>';
   try {
     const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, { method:'POST' });
-    render(await res.json());
+    const body = await res.json();
+    // FND-48: previously this always called render(body), which immediately dereferences
+    // data.report.candidateSystems — on a non-2xx response (bad incident number, J4
+    // validation failure, FND-15 timeout) that field doesn't exist, and the failure showed
+    // as a raw "TypeError: Cannot read properties of undefined" instead of the server's
+    // actual message (now available via DiagnosisApiExceptionHandler's {error: "..."} body).
+    if (!res.ok) {
+      out.innerHTML = `<div class="card">Error (${res.status}): ${esc(body.error || res.statusText)}</div>`;
+      return;
+    }
+    render(body);
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${e}</div>`;
   } finally { btn.disabled = false; }
