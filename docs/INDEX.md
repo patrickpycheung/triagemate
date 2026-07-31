@@ -50,7 +50,7 @@
 - [**J11 — Live Thinking Trace (animated per-step agent trace)**](design-java/concepts/J11-live-thinking-trace/README.md) — Show the copilot's *process*, not a spinner. A per-step trace where each row carries the  · 2 docs  `2026-07-31`
 - [**J2 — ADK Agent Loop**](design-java/concepts/J2-adk-agent-loop/README.md) — Gates on Spike JS-1  `2026-07-30`
 - [**J3 — Connector Tools (gateways + FunctionTool adapters)**](design-java/concepts/J3-connector-tools/README.md) — Each enterprise system is a Spring `@Service` behind a narrow interface, with a  `2026-07-30`
-- [**J4 — Diagnosis Report (JSON contract)**](design-java/concepts/J4-diagnosis-report/README.md) — The strict JSON contract every run produces. Building the report **before** the  `2026-07-30`
+- [**J4 — Diagnosis Report (JSON contract)**](design-java/concepts/J4-diagnosis-report/README.md) — The strict JSON contract every run produces. Building the report **before** the  `2026-07-31`
 - [**J5 — ServiceNow Gateway (the primary source)**](design-java/concepts/J5-servicenow-gateway/README.md) — wording was superseded 2026-07-23, see below)  `2026-07-31`
 - [**J6 — Knowledge Tools (Confluence · Sumo · GitLab)**](design-java/concepts/J6-knowledge-tools/README.md) — The three "arms" the investigator reaches for **after** it has a hypothesis. Ordered  `2026-07-30`
 - [**J7 — Demo UI & Ground-Truth Dataset**](design-java/concepts/J7-demo-ui-and-dataset/README.md) — What the audience sees, and the curated data that makes it work offline and  `2026-07-31`
