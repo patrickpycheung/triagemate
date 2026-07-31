@@ -13,9 +13,50 @@ Each entry keeps its original text plus two lines added at resolution time:
   it is written while the context is fresh.
 
 Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
-7 code fixes + 2 already-archived closures); backlog empty again.
+7 code fixes + 2 already-archived closures); backlog empty again. A second
+`/doc-test cds` pass the same day raised FND-55..58; FND-57/58 fixed
+(TriageProperties refactor); FND-55/56 remain open (`FOUND-ISSUES.md`).
 
 ---
+
+## FND-57 — Config validation is fragmented across three constructors · **LOW**
+
+**Where**: `DiagnosisOrchestrator`, `IncidentPoller`, `RealServiceNowGateway` constructors.
+**What**: three components each re-read raw config and validate independently; each check only
+runs if its own bean happens to exist. A typo'd `write-field` boots clean all week in mock and
+throws for the first time on stage under `snow-live`. `triage.engine` is never validated as an
+enum at all, so `agent`/`llm`/`Adk ` (trailing space) silently yield deterministic with **no**
+warning — reopening the exact FND-49 class it was added to close. Found by all three
+architecture perspectives.
+- **Resolution**: fixed:075d893 — consolidated every `triage.*` `@Value` binding (across
+  `DiagnosisOrchestrator`, `IncidentPoller`, `RealServiceNowGateway`,
+  `DeterministicDiagnosisEngine`, `AdkDiagnosisEngine`) into one `@Validated
+  @ConfigurationProperties(prefix = "triage")` record, `TriageProperties`. `triage.engine`
+  now binds to a real enum (fails startup on an unrecognised value); `servicenow.writeField`
+  is a `@Pattern` validated unconditionally at boot via Spring Bean Validation, regardless of
+  which connector mode is active — closing the "boots clean in mock" gap specifically.
+  FND-49's own WARN is unchanged (still catches its own, complementary case). See J1's
+  README for the full shape and the `interval-ms`/`.enabled` scoping decision.
+- **Escape**: architecture review — config validation scattered across N constructors, each
+  gated by its own bean's conditional activation, is a shape that should be caught the moment
+  a second `@Value`-with-a-manual-check constructor appears next to a first; the fix (one
+  `@ConfigurationProperties` type) is the standard Spring Boot answer and should have been the
+  first design, not a later consolidation.
+
+## FND-58 — No format validation on the incident-number path variable · **LOW**
+
+**Where**: `DiagnosisController`.
+**What**: no `@Pattern`; `run()` only trims/uppercases. `POST /api/diagnose/banana` is
+accepted and reaches the gateway, where it becomes part of a ServiceNow encoded query. FND-54
+now makes the mock reject it cleanly, so the demo path is safe, but the contract gap is real
+for `connectors=real`. Found by two reviews.
+- **Resolution**: fixed:075d893 — `DiagnosisController` is now `@Validated` with
+  `@Pattern(regexp = "INC\\d{6,10}")` on the `incidentNumber` path variable, and
+  `DiagnosisApiExceptionHandler` gained a `HandlerMethodValidationException` → 400 mapping
+  with the same `{"error": "..."}` shape as the other three types.
+- **Escape**: API contract review — any `@PathVariable` that becomes part of a downstream
+  query string against a real system needs a format constraint checked in the same pass as
+  the route is added, not deferred until a connector-mode-specific review finds the gap.
 
 ## FND-45 — The C6 unattended-use gate was documented but not enforced in code · **MEDIUM**
 

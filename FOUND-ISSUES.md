@@ -1,8 +1,8 @@
 # Found issues
 
-**Backlog: 4 open** (FND-55…58), all raised by the second `/doc-test cds` pass on
-2026-07-31 — which reviewed the 7 fixes from the *first* pass and found 3 of them
-incomplete. FND-52/53/54 were fixed in that same pass; FND-1…FND-54 resolved.
+**Backlog: 2 open** (FND-55, FND-56). FND-57/58 (also from the second `/doc-test cds`
+pass on 2026-07-31) were fixed the same day via the `TriageProperties` refactor.
+FND-52/53/54 were fixed in the pass itself; FND-1…FND-54, FND-57, FND-58 resolved.
 Full detail in `docs/audit/found-issues-archive.md`.
 
 Queue of findings that need a decision or a fix and are not yet tracked elsewhere.
@@ -50,29 +50,6 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
 **Why deferred**: now documented in J10 as expected-and-explained. The code fix wants the same
 engine-identity check FND-49 uses, which is really an argument for FND-57's single validator
 rather than a second ad-hoc check.
-
-## FND-57 — Config validation is fragmented across three constructors · **LOW**
-
-**Where**: `DiagnosisOrchestrator`, `IncidentPoller`, `RealServiceNowGateway` constructors.
-**What**: three components each re-read raw config and validate independently; each check only
-runs if its own bean happens to exist. A typo'd `write-field` boots clean all week in mock and
-throws for the first time on stage under `snow-live`. `triage.engine` is never validated as an
-enum at all, so `agent`/`llm`/`Adk ` (trailing space) silently yield deterministic with **no**
-warning — reopening the exact FND-49 class it was added to close. Found by all three
-architecture perspectives.
-**Why deferred**: the right fix is one `@Validated @ConfigurationProperties` type owning all
-of it (`spring-boot-starter-validation` is already a declared dependency and used nowhere).
-That's a coherent refactor, not a patch, and it touches every config read in the app.
-
-## FND-58 — No format validation on the incident-number path variable · **LOW**
-
-**Where**: `DiagnosisController`.
-**What**: no `@Pattern`; `run()` only trims/uppercases. `POST /api/diagnose/banana` is
-accepted and reaches the gateway, where it becomes part of a ServiceNow encoded query. FND-54
-now makes the mock reject it cleanly, so the demo path is safe, but the contract gap is real
-for `connectors=real`. Found by two reviews.
-**Why deferred**: wants the same `@Validated` treatment as FND-57; doing them together is one
-change instead of two.
 
 ## History
 
