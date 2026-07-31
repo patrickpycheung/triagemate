@@ -96,6 +96,18 @@ public class DiagnosisOrchestrator {
         }
     }
 
+    /**
+     * FND-56: whether the ADK engine bean is actually wired as primary, not just whether
+     * {@code triage.engine=adk} is configured. {@code IncidentPoller}'s C6 unattended-LLM-use
+     * WARN used to check the config value alone, so a non-{@code -Padk} build with
+     * {@code engine=adk} claimed "unattended, programmatic LLM use" for a run that will never
+     * contact a model — the exact opposite of what the FND-49 WARN above says at the same
+     * moment. Same identity comparison FND-49 uses, exposed so K1 doesn't need its own.
+     */
+    public boolean isAdkActuallyActive() {
+        return engine != fallbackEngine;
+    }
+
     @PreDestroy
     void shutdown() {
         engineExecutor.shutdownNow();

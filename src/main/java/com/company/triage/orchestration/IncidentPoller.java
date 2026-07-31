@@ -102,12 +102,21 @@ public class IncidentPoller {
         log.info("K1 poller enabled — polling incidents created after {} (batch limit {})",
                 cursor, props.trigger().poll().batchLimit());
         // FND-45: this bean existing at all means poll.enabled=true (its @ConditionalOnProperty
-        // gate). Combined with triage.engine=adk, that is exactly the unattended, programmatic
-        // LLM use the C6 ToS ruling gates — previously documented in J10's prose but not
-        // enforced anywhere. WARN, don't refuse (matches FND-49's precedent: a hackathon build
-        // shouldn't fail to boot over this) — but an explicit ack property means someone had to
-        // actually set it, turning a silent gap into a decision on record.
-        if (props.engine() == TriageProperties.Engine.ADK && !props.trigger().poll().unattendedLlmAck()) {
+        // gate). Combined with a REAL, active ADK engine, that is exactly the unattended,
+        // programmatic LLM use the C6 ToS ruling gates — previously documented in J10's prose
+        // but not enforced anywhere. WARN, don't refuse (matches FND-49's precedent: a
+        // hackathon build shouldn't fail to boot over this) — but an explicit ack property
+        // means someone had to actually set it, turning a silent gap into a decision on record.
+        //
+        // FND-56: this used to check `props.engine() == ADK` — config alone — so a
+        // non--Padk build with triage.engine=adk claimed "unattended, programmatic LLM use"
+        // for a run that will never contact a model, directly contradicting FND-49's WARN in
+        // DiagnosisOrchestrator's constructor (which fires in exactly that situation and says
+        // the opposite: DETERMINISTIC only, no LLM involved). Both warnings could never
+        // simultaneously be true; only one class of run exists at a time. Now asks the
+        // orchestrator whether the ADK bean is actually wired as primary — the same
+        // engine-identity check FND-49 already does — so this warns only when it's true.
+        if (orchestrator.isAdkActuallyActive() && !props.trigger().poll().unattendedLlmAck()) {
             log.warn("K1 poller is running WITH triage.engine=adk — this is unattended, "
                     + "programmatic LLM use, which the C6 ToS ruling gates (see "
                     + "docs/discovery/copilot-cli-runtime). Set "

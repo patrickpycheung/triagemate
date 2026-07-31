@@ -6,6 +6,7 @@ import com.company.triage.orchestration.DiagnosisTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -26,8 +27,9 @@ import java.util.Objects;
  * IllegalStateException}→404 mapping that meant an unrelated internal error could be served
  * to the client as "incident not found", with its internal message echoed out.
  *
- * <p>Deliberately narrow: four types, four statuses. Anything else still falls through to
- * Spring's default handling — a demo-quality error contract, not a general-purpose one.
+ * <p>Deliberately narrow: five types, four statuses (two timeout-shaped exceptions share
+ * 504 — see FND-55 below). Anything else still falls through to Spring's default handling —
+ * a demo-quality error contract, not a general-purpose one.
  */
 @RestControllerAdvice(basePackages = "com.company.triage.api")
 class DiagnosisApiExceptionHandler {
@@ -45,6 +47,26 @@ class DiagnosisApiExceptionHandler {
 
     @ExceptionHandler(DiagnosisTimeoutException.class)
     ResponseEntity<Map<String, String>> timedOut(DiagnosisTimeoutException e) {
+        return error(HttpStatus.GATEWAY_TIMEOUT, e);
+    }
+
+    /**
+     * FND-55: the documented 504 above only bounds {@code engine.diagnose()} as a whole
+     * (FND-15's wall-clock timeout, {@code triage.orchestrator.timeout-ms}, default 90s). The
+     * two write-back {@code addWorkNote} calls in {@code DiagnosisOrchestrator.runOnce()} and
+     * {@code RealServiceNowGateway.getIncident()} inside {@code engine.diagnose()} itself run
+     * under Spring's autoconfigured HTTP client timeouts instead ({@code
+     * spring.http.client.read-timeout}, 20s — FND-34) — shorter than the 90s wall clock, so it
+     * always fires first for a hung real ServiceNow call, as {@code ResourceAccessException},
+     * which this advice didn't map until now. That's a bare 500 for exactly the "the app
+     * waited too long for an upstream" case 504 exists to describe. Mapped here rather than by
+     * raising/lowering either timeout number: this is a status-code correctness fix
+     * independent of what the actual right timeout values are (that's a separate, still-open
+     * tuning question the J11 spike's real ADK-latency data will inform — see J1's FND-55
+     * note — but it doesn't gate fixing which status code a timeout returns today).
+     */
+    @ExceptionHandler(ResourceAccessException.class)
+    ResponseEntity<Map<String, String>> upstreamUnreachable(ResourceAccessException e) {
         return error(HttpStatus.GATEWAY_TIMEOUT, e);
     }
 

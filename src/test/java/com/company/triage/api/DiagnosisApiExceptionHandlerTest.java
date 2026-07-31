@@ -96,6 +96,27 @@ class DiagnosisApiExceptionHandlerTest {
     }
 
     /**
+     * FND-55: {@code spring.http.client.read-timeout} (20s, FND-34) bounds
+     * {@code RealServiceNowGateway}'s calls INSIDE {@code engine.diagnose()} — shorter than
+     * the 90s wall-clock timeout above, so it always fires first for a hung real ServiceNow
+     * call, surfacing as {@code ResourceAccessException}. That type wasn't mapped, so the
+     * documented 504 was reachable only via Confluence/Sumo/GitLab or a genuinely slow ADK
+     * run — a real ServiceNow-side timeout, the most likely one on stage, fell through to a
+     * bare 500. Now mapped to the same 504 as {@code DiagnosisTimeoutException}: both mean
+     * "the app waited too long for an upstream."
+     */
+    @Test
+    void serviceNowConnectionTimeoutMapsTo504NotBare500() throws Exception {
+        when(orchestrator.run(anyString()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException(
+                        "I/O error on POST request: Read timed out"));
+
+        mvc.perform(post("/api/diagnose/INC0012345"))
+                .andExpect(status().isGatewayTimeout())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Read timed out")));
+    }
+
+    /**
      * FND-58 — and the regression test its first cut was missing.
      *
      * <p>The original fix put {@code @Validated} on {@code DiagnosisController} and mapped

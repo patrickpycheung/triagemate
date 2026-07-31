@@ -51,15 +51,30 @@ class IncidentPollerTest {
         public void addWorkNote(String number, String note) { notes.add(note); written = true; }
     }
 
-    /** Counts diagnoses per incident; optionally runs a hook mid-diagnosis. */
+    /**
+     * Counts diagnoses per incident; optionally runs a hook mid-diagnosis.
+     *
+     * <p>The {@code engine} tag also drives {@link DiagnosisOrchestrator#isAdkActuallyActive()}
+     * (FND-56), which compares the primary/fallback engine beans by <b>identity</b> — real
+     * Spring wiring gives ADK a distinct {@code @Primary} bean, or (no {@code -Padk} build)
+     * resolves the same sole {@code DeterministicDiagnosisEngine} bean for both. Mirrored here:
+     * {@code ADK} passes two distinct lambda instances (primary != fallback →
+     * {@code isAdkActuallyActive() == true}); {@code DETERMINISTIC} passes the SAME stub
+     * instance for both (primary == fallback → {@code isAdkActuallyActive() == false}).
+     */
     static class CountingOrchestrator extends DiagnosisOrchestrator {
+        private static final DiagnosisEngine DETERMINISTIC_STUB =
+                i -> new DiagnosisResult(null, new ArrayList<>(), DiagnosisResult.Engine.DETERMINISTIC);
+
         final List<String> diagnosed = new ArrayList<>();
         private final DiagnosisResult.Engine engine;
         Runnable duringRun = () -> {};
 
         CountingOrchestrator(ServiceNowGateway snow, DiagnosisResult.Engine engine) {
-            super(i -> new DiagnosisResult(null, new ArrayList<>(), engine),
-                  i -> new DiagnosisResult(null, new ArrayList<>(), engine),
+            super(engine == DiagnosisResult.Engine.ADK
+                        ? (i -> new DiagnosisResult(null, new ArrayList<>(), engine))
+                        : DETERMINISTIC_STUB,
+                  DETERMINISTIC_STUB,
                   snow, orchestratorProps());
             this.engine = engine;
         }
@@ -122,6 +137,35 @@ class IncidentPollerTest {
                     pollerProps(TriageProperties.Engine.ADK, true));   // acked
             new IncidentPoller(new FakeSnow(), new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.DETERMINISTIC),
                     pollerProps(TriageProperties.Engine.DETERMINISTIC, false));   // not adk
+
+            assertThat(appender.list).noneMatch(e -> e.getFormattedMessage().contains("C6"));
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    /**
+     * FND-56: the C6 warning used to check {@code props.engine() == ADK} — the CONFIGURED
+     * value — instead of whether an ADK bean is actually active. A non-{@code -Padk} build
+     * with {@code triage.engine=adk} configured therefore claimed "unattended, programmatic
+     * LLM use" for a run that will never contact a model — directly contradicting FND-49's
+     * WARN in {@code DiagnosisOrchestrator}'s own constructor, which fires in exactly that
+     * situation and says the opposite (DETERMINISTIC only, no LLM). Both could never
+     * simultaneously be true. Pins the fix: {@code pollerProps} configures {@code triage.engine
+     * = ADK} (what the old, buggy check looked at), but the {@code CountingOrchestrator} is
+     * built with {@code Engine.DETERMINISTIC} — mirroring "config says adk, no ADK bean
+     * actually wired" — so the C6 warning must NOT fire.
+     */
+    @Test
+    void noC6WarningWhenConfigSaysAdkButNoAdkBeanIsActuallyActive() {
+        Logger logger = (Logger) LoggerFactory.getLogger(IncidentPoller.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            new IncidentPoller(new FakeSnow(),
+                    new CountingOrchestrator(new FakeSnow(), DiagnosisResult.Engine.DETERMINISTIC),
+                    pollerProps(TriageProperties.Engine.ADK, false));   // config says adk, not acked
 
             assertThat(appender.list).noneMatch(e -> e.getFormattedMessage().contains("C6"));
         } finally {
