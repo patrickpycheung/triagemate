@@ -106,8 +106,9 @@
       width:38px; height:38px; padding:0; display:grid; place-items:center;
       border-radius:50%; background:var(--card); color:var(--ink);
       border:1px solid var(--border); cursor:pointer;
+      -webkit-appearance:none; appearance:none;
     }
-    .theme-btn:hover { border-color:var(--acc); color:var(--acc); }
+    .theme-btn:hover { border-color:var(--acc); color:var(--acc); background:var(--card); }
     .theme-menu {
       position:fixed; top:60px; right:14px; z-index:20; width:232px;
       background:var(--card); border:1px solid var(--border); border-radius:12px;
@@ -122,9 +123,17 @@
       display:flex; align-items:center; gap:9px; width:100%; padding:7px 8px;
       background:none; border:0; border-radius:8px; cursor:pointer;
       color:var(--ink); font:inherit; font-size:13.5px; text-align:left;
+      -webkit-appearance:none; appearance:none;
     }
-    .theme-opt:hover { background:var(--inset); }
+    /* Explicit color on every state, not just the base rule: a bare <button> picks up the
+       browser/OS's own hover/active darkening (most visible on Safari/WebKit) unless
+       appearance is reset AND color is re-asserted — otherwise the label text visibly
+       dims on hover even though nothing here intends that. */
+    .theme-opt:hover { background:var(--inset); color:var(--ink); }
+    .theme-opt:active { background:var(--inset); color:var(--ink); }
     .theme-opt[aria-checked="true"] { background:var(--chip); color:var(--acc); font-weight:600; }
+    .theme-opt[aria-checked="true"]:hover,
+    .theme-opt[aria-checked="true"]:active { background:var(--chip); color:var(--acc); }
     .sw { width:15px; height:15px; border-radius:50%; flex:none; border:1px solid rgba(128,128,128,.45); }
     .theme-note { color:var(--muted); font-size:11.5px; margin:8px 8px 4px; line-height:1.45; }
     @media print { .theme-btn, .theme-menu { display:none; } }
