@@ -12,7 +12,96 @@ Each entry keeps its original text plus two lines added at resolution time:
   code: what was wrong in how we work. A future retrospective clusters on this field, so
   it is written while the context is fresh.
 
-Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31.
+Drained 2026-07-30 by `/found-issues-resolve`. Re-run 2026-07-31 (FND-45..51,
+7 code fixes + 2 already-archived closures); backlog empty again.
+
+---
+
+## FND-45 — The C6 unattended-use gate was documented but not enforced in code · **MEDIUM**
+
+**Where**: `application.yml`, `IncidentPoller.java`.
+**What**: `poll.enabled=true` + `triage.engine=adk` is unattended, programmatic LLM use,
+which the C6 ToS ruling gates — previously stated only in J10's prose.
+- **Resolution**: fixed:4a956e5 — `IncidentPoller` now WARNs at startup unless
+  `triage.trigger.poll.unattended-llm-ack=true` is explicitly set. Deliberately a warning,
+  not a hard failure. `IncidentPollerTest#warnsWhenPollingWithAdkEngineAndNoAck`,
+  `#noWarningWhenAckIsSetOrEngineIsDeterministic`.
+- **Escape**: implementation review — a documented safety gate should always be checked
+  for a code-level enforcement point at the time it's written, not left as prose alone;
+  this is the same pattern as FND-8/16/25/38.
+
+## FND-46 — D2's "offline, cannot fail" safety claim was broader than the code supports · **LOW**
+
+**Where**: `orchestrator-vs-copilot-cli/4-decide/concepts-extracted.md` (D2).
+**What**: the claim is true of the launcher configuration the runbook actually uses, not
+of the engine in general (connector mode is independent of engine choice).
+- **Resolution**: fixed:54f0d1b — narrowed the DDS decision doc's wording;
+  `DEMO-RUNBOOK.md` already had this scoped correctly.
+- **Escape**: doc review — a "the fallback can't fail" claim should always be traced to
+  exactly which launch configuration makes that true, not stated as an engine property.
+
+## FND-47 — `RealServiceNowGateway` read `u_environment` but never requested it · **MEDIUM**
+
+**Where**: `RealServiceNowGateway.java` (`sysparm_fields`).
+**What**: `IncidentContext.environment` was always null against a real instance; invisible
+to mock-only tests.
+- **Resolution**: fixed:54f0d1b — added `u_environment` to the field list.
+  `RealServiceNowGatewayTest#getIncidentRequestsAndParsesEnvironment`.
+- **Escape**: test coverage — the mock gateway has no field-selection to get wrong, so this
+  class of bug is structurally invisible to mock-only tests; needs a real-instance smoke
+  test or a field-list-completeness check as a standing practice for any `Real*Gateway`.
+
+## FND-48 — No API error contract; a bad incident number showed a JS TypeError on stage · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/api/`, `index.html`.
+**What**: the three exceptions the API throws all fell through to Spring's default error
+body (no `report` field), and `render()` dereferenced it unconditionally — live demo risk.
+- **Resolution**: fixed:54f0d1b — `DiagnosisApiExceptionHandler`
+  (`@RestControllerAdvice`) maps `IllegalStateException`/`DiagnosisTimeoutException`/
+  `DiagnosisReportInvalidException` to 404/504/502 with a JSON body; `index.html` checks
+  `res.ok` before rendering. `DiagnosisApiExceptionHandlerTest` (3 cases).
+- **Escape**: implementation review — an API with no `@ControllerAdvice` at all should have
+  been caught by a basic "does every exception path have a test" check before this reached
+  demo-readiness.
+
+## FND-49 — `triage.engine=adk` without `-Padk` silently ran deterministic, unannounced · **MEDIUM**
+
+**Where**: `DiagnosisOrchestrator.java`.
+**What**: the misconfiguration path was uncovered while the FND-7 runtime-failure path was
+covered — the same failure class (narrating a live model over a scripted run) via a
+different route.
+- **Resolution**: fixed:54f0d1b — logs a WARN naming the mismatch at startup.
+  Deliberately not fail-fast.
+- **Escape**: implementation review — FND-8's fix covered the *runtime* failure but not the
+  *configuration* failure of the same shape; a fix for one instance of a failure class
+  should prompt checking for sibling instances, not just the one reported.
+
+## FND-50 — FND-37's normalization was incomplete: K1 bypassed it · **LOW**
+
+**Where**: `DiagnosisController.java` vs `IncidentPoller.java`.
+**What**: FND-37 (2026-07-30) normalized the incident number in the controller only, so K1
+and K3 could still fail to coalesce on a case difference — a gap in my own fix from the
+day before.
+- **Resolution**: fixed:54f0d1b — moved normalization into `DiagnosisOrchestrator.run()`
+  itself, so every trigger normalizes identically.
+  `DiagnosisOrchestratorTest#differentlyCasedIncidentNumbersStillCoalesce`.
+- **Escape**: implementation review — a cross-cutting fix (normalize before the coalescing
+  map) should be applied at the single rendezvous point, not at each caller; FND-31's own
+  card already states K3/K1 "both call run() — the one place their calls meet", which
+  should have been the tell.
+
+## FND-51 — `triage.servicenow.write-field` was interpolated into PATCH JSON unvalidated · **LOW**
+
+**Where**: `RealServiceNowGateway.java`.
+**What**: no restriction to `work_notes`/`comments`; hand-rolled JSON escaping missed `\r`
+and tab.
+- **Resolution**: fixed:54f0d1b — construction fails fast outside the two-value set;
+  escaping now via Jackson. `RealServiceNowGatewayTest#rejectsAnUnrecognisedWriteField`,
+  `#workNoteWithCarriageReturnAndTabIsValidJson`.
+- **Escape**: implementation review — any config value interpolated into a request body
+  should be validated against its known-good set at construction, not trusted; and
+  hand-rolled escaping of anything JSON should be flagged in review when a JSON library is
+  already a dependency.
 
 ---
 
