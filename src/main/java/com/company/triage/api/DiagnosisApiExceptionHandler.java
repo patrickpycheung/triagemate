@@ -52,11 +52,11 @@ class DiagnosisApiExceptionHandler {
 
     /**
      * FND-55: the documented 504 above only bounds {@code engine.diagnose()} as a whole
-     * (FND-15's wall-clock timeout, {@code triage.orchestrator.timeout-ms}, default 90s). The
+     * (FND-15's wall-clock timeout, {@code triage.orchestrator.timeout-ms}, default 120s — FND-69). The
      * two write-back {@code addWorkNote} calls in {@code DiagnosisOrchestrator.runOnce()} and
      * {@code RealServiceNowGateway.getIncident()} inside {@code engine.diagnose()} itself run
      * under Spring's autoconfigured HTTP client timeouts instead ({@code
-     * spring.http.client.read-timeout}, 20s — FND-34) — shorter than the 90s wall clock, so it
+     * spring.http.client.read-timeout}, 20s — FND-34) — shorter than the 120s wall clock, so it
      * always fires first for a hung real ServiceNow call, as {@code ResourceAccessException},
      * which this advice didn't map until now. That's a bare 500 for exactly the "the app
      * waited too long for an upstream" case 504 exists to describe. Mapped here rather than by

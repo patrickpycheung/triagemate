@@ -20,7 +20,10 @@ code-review walkthrough of the ServiceNow→Confluence data flow, not by
 `/doc-test`. FND-60/61 likewise, from validating the ADK agent's tool-context
 design (does the agent get what it needs to construct good queries?), and
 FND-62/63 from asking the same question of the DETERMINISTIC path; FND-64 from
-reviewing name extraction across all four providers. `/found-issues-resolve` run the same day tested the "deferred
+reviewing name extraction across all four providers. **FND-66..69 (2026-08-01) came
+from the first runs against REAL ServiceNow + Confluence** — none were reachable
+offline, and three of them had to be fixed before the J11 latency spike could
+measure anything at all. `/found-issues-resolve` run the same day tested the "deferred
 pending design decision" premise on FND-55/56 and found both decidable now
 (see their Resolution notes) — backlog empty again.
 
@@ -66,6 +69,100 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
   question ("is ADK actually the active engine?") from two different signals (config vs bean
   identity) will eventually disagree; the fix should share one source of truth, not duplicate
   the check.
+
+## FND-69 — `max-tool-calls` permitted a run that `timeout-ms` would kill · **MEDIUM**
+
+**Where**: `application.yml` — `triage.agent.max-tool-calls: 10` vs
+`triage.orchestrator.timeout-ms: 90000`.
+**What**: the 90s wall clock was self-documented as "a safer guess, not a measurement". The
+LT4 spike measured it: ~8.4s per tool call and ~14.6s for the final report, i.e.
+`N × 8.4 + 14.6`. A full 10-call run — which the tool budget explicitly allows — lands at
+**~99s**, so the agent could be killed by its own timeout and degrade to deterministic
+mid-run. On stage that is indistinguishable from the model failing, which is exactly the
+FND-8 confusion the degraded-run banner exists to prevent. The two bounds contradicted each
+other and nothing had ever checked them against one another.
+- **Resolution**: fixed:HEAD — `timeout-ms` 90000 → **120000** (~99s worst case + ~20%
+  headroom). Raised the clock rather than cutting the tool budget to ~7: the budget is a J8
+  **safety** bound (how much the model may do) and the timeout a **liveness** bound (how long
+  we wait); trading away investigation depth — the documented flow uses up to 8 of the 8
+  registered tools — to fix a liveness number is the wrong lever. Note the squeeze is
+  real-connector-only: on the mock path used for the stage demo, tool execution is ~0 and
+  10 calls ≈ 74s, comfortably inside even the old 90s.
+- **Escape**: measurement — two numeric bounds on the same operation (budget × per-unit cost
+  vs total wall clock) should be checked against each other the moment either is set. Both
+  were plausible in isolation; the product was never computed until real latency existed.
+
+## FND-68 — Six ADK schema WARNs per run, right before the agent starts · **LOW**
+
+**Where**: startup/agent-build logging, `com.google.adk.tools.FunctionCallingUtils`.
+**What**: ADK logs `Type java.time.ZoneOffset is recursive. Omitting from schema.` once per
+recursive type per tool while building tool schemas — six WARN lines every run, caused by
+`OffsetDateTime` in our tool signatures. Genuinely harmless (only the JSON-schema *hint* is
+omitted; arguments still serialize, and `AdkLiveRoundTripTest` proves the round trip), but
+they scroll past immediately before the agent starts — precisely when a human is watching the
+console for a real problem.
+- **Resolution**: fixed:HEAD — logger set to `ERROR`. Verified against the second real run:
+  the app log went from 79 lines with six WARNs to 16 clean lines, zero WARN, zero ERROR.
+- **Escape**: demo review — third-party log noise on the happy path is a stage liability even
+  when it is technically harmless; the time to silence a known-benign WARN is before someone
+  is squinting at it live.
+
+## FND-67 — Name extraction on a real ticket: three non-people, and the caller missed · **MEDIUM**
+
+**Where**: `MentionedPeople`, `IncidentSignals`, `DeterministicDiagnosisEngine`.
+**What**: the first real ServiceNow ticket (`INC0010005`, "Delivery Hazards") produced four
+defects at once in J9's contact list:
+- **"AI Triage"** suggested as a person — read out of **our own work-note header**. Once
+  FND-61 made the gateway read the journal, the app began feeding on itself: a re-diagnosis
+  saw the previous run's notes as ordinary ticket conversation, so keywords, identifiers and
+  names were partly drawn from its own prior output, drifting further from the human's actual
+  words on every re-run.
+- **"Delivery Hazards"** — the ticket's own subject line, i.e. the thing that is broken.
+- **"Option Selected"** — a ServiceNow form label. Real tickets are full of Title Case form
+  vocabulary with person-name shape.
+- **`caller_id` ignored entirely** — the human who raised the ticket, the single most reliable
+  contact on it, while far weaker prose matches were surfaced.
+- **Resolution**: fixed:HEAD — (1) own notes filtered structurally in both consumers via
+  `DiagnosisReport.AI_NOTE_PREFIX`/`isAiAuthoredNote`; (2) the shortDescription is passed as a
+  known system name, since the TITLE names what broke — deliberately NOT a denylist of
+  domain words, which only ever fixes the ticket in front of you; (3) generic ticket-form
+  vocabulary added to the denylist, which does generalise; (4) the caller is always a contact,
+  plus a `Steve Taylor (taylors)` cue tier, since ServiceNow renders people that way constantly
+  and a parenthesised username is near-proof of a person. Regression tests use the real
+  ticket's exact prose.
+  Same run also fixed: `cmdb_ci` was **empty rather than null**, so the report shipped a
+  candidateSystem with a **blank name** at 0.30 (a blank row on stage) and `IncidentSignals`
+  put a whole sentence in `app`, which went verbatim into the Confluence query and the
+  allowlist ranking. Blank-checked; the subject-line fallback is capped to a leading phrase.
+- **Escape**: fixture realism — every name-extraction test used curated mock prose written to
+  exercise the happy path. One real ticket produced three false positives and one false
+  negative immediately. A self-referential feedback loop in particular is invisible to any
+  test whose fixture the app did not previously write to.
+
+## FND-66 — The agent could not return a parseable report against a real model · **HIGH**
+
+**Where**: `AdkDiagnosisEngine` — the instruction's schema block and JSON parsing.
+**What**: the first genuine agentic run against a real Copilot-served model failed twice and
+degraded to deterministic, so the LT4 latency spike measured nothing:
+1. The model wrapped its JSON in a ```` ```json ```` fence →
+   `JsonParseException: Unexpected character ('`')`. The instruction already said "no prose"
+   and the FND-42 repair prompt already said "no markdown code fences". It fenced anyway.
+2. The repair retry then died on
+   `Cannot deserialize value of type double from String "HIGH"` — **our** bug. The schema
+   block showed `suggestedAssignment.confidence` as `"LOW|MEDIUM|HIGH"` while
+   `candidateSystems[].confidence` directly above it carried no type hint at all, so the model
+   reasonably assumed two identically-named sibling fields held the same kind of value. One is
+   a 0.0–1.0 double.
+- **Resolution**: fixed:HEAD — `unfence()` strips a code fence before parsing (a prompt is a
+  request; this is the enforcement, and it saves burning the single repair retry — ~8s of
+  stage time and a Copilot call — on something fixable locally in microseconds), and the
+  instruction now states both `confidence` kinds explicitly. Both pinned by tests
+  (`AdkUnfenceTest`, plus instruction assertions in `AdkAllowlistVisibilityTest`). The very
+  next real run succeeded: `engine=ADK`, valid J4 report, 44s.
+- **Escape**: contract review — an output schema shown to a model must be unambiguous about
+  TYPES, not just field names, and two same-named fields of different types side by side is a
+  trap we set ourselves. `FakeOpenAiServer` returns well-formed unfenced JSON by construction,
+  so no offline test could ever have caught either half of this.
 
 ## FND-64 — J9 read names only from API metadata; ServiceNow contributed none at all · **MEDIUM**
 

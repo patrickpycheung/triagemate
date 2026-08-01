@@ -75,15 +75,29 @@ triage:
     # thread. A timeout on the ADK engine degrades via the normal FND-7 fallback; on the
     # deterministic engine it propagates (nothing left to fall back to).
     #
-    # 90s, not 45s (re-verification correction, 2026-07-30): this wraps the WHOLE
-    # engine.diagnose() call, and the ADK path can make up to triage.agent.max-tool-calls
-    # (10) LLM round trips against a real frontier model before it's done. A too-tight
-    # timeout doesn't just fail slow runs — it makes FND-15's own fallback fire on every
-    # normal-but-unhurried real run, which looks identical on stage to the model actually
-    # failing and defeats D1's whole point. Not yet measured against a real Copilot-served
-    # model (that needs spike C2, see copilot-cli-runtime DDS) — revisit this number once
-    # real latency is known; 90s is a safer guess, not a measurement.
-    timeout-ms: 90000
+    # This wraps the WHOLE engine.diagnose() call, and the ADK path can make up to
+    # triage.agent.max-tool-calls (10) LLM round trips against a real frontier model before
+    # it's done. A too-tight timeout doesn't just fail slow runs — it makes FND-15's own
+    # fallback fire on every normal-but-unhurried real run, which looks identical on stage to
+    # the model actually failing and defeats D1's whole point.
+    #
+    # 120s — MEASURED, not guessed (FND-69, 2026-08-01). The LT4 spike ran the real agent
+    # against a Copilot-served model with real ServiceNow + Confluence:
+    #   3 tool calls → 44s wall clock; mean ~8.4s per tool call; ~14.6s for the final report.
+    #   ⇒ N calls ≈ N × 8.4s + 14.6s, so a full 10-call run ≈ 99s.
+    # The previous 90s (itself self-documented as "a safer guess, not a measurement") was
+    # therefore SHORTER than a run its own tool budget permits: max-tool-calls=10 allowed a
+    # diagnosis that timeout-ms=90000 would kill at ~99s, degrading to deterministic mid-demo
+    # — indistinguishable on stage from the agent failing.
+    #
+    # Fixed by raising the clock rather than cutting the budget to ~7: the tool budget is a
+    # J8 SAFETY bound (how much the model may do), the timeout is a LIVENESS bound (how long
+    # we wait). Tightening the safety bound to paper over a liveness number would cost real
+    # investigation depth — the documented flow uses up to 8 of the 8 registered tools, so 7
+    # would cut into legitimate work — to fix something that isn't a safety problem.
+    # 120s ≈ the 99s worst case + ~20% headroom for one slow call.
+    # Full measurement: concepts/J11-live-thinking-trace/verification-lt4-latency/findings.md
+    timeout-ms: 120000
 
   servicenow:
     # Which incident journal the two comments append to:

@@ -36,16 +36,20 @@ import java.util.List;
  * (LlmAgent.builder().model().tools()), and {@code AdkLiveRoundTripTest} proves a live
  * round trip against a <b>fake</b> OpenAI-compatible server.
  *
- * <p><b>Not yet proven against a real model.</b> Corrected 2026-07-30 (second pass): an
- * earlier version of this javadoc claimed spike C2 "proved one against a real
- * Copilot-served model". It did not. C2 proved the <i>proxy</i> serves tool calls
- * ({@code bin/spike-output.log}: "proxy returned tool_calls"), which is a
- * <i>prerequisite</i>; the application run in that same log <b>degraded before invoking
- * the agent loop</b> — "primary engine did not converge (IllegalStateException: Missing
- * required config: LLM_API_KEY) — degraded to the deterministic engine". So this path has
- * never completed end-to-end against a real Copilot-served model. Overstating it here was
- * the same class of defect as FND-8/16/25 (asserting something that did not happen), which
- * is why it is spelled out rather than quietly reworded.
+ * <p><b>PROVEN end-to-end against a real Copilot-served model — 2026-08-01.</b> First
+ * successful live agentic run (real ServiceNow + Confluence, mock Sumo/GitLab):
+ * {@code engine=ADK}, 3 tool calls, 44s wall clock, valid J4 report. Recorded in
+ * {@code concepts/J11-live-thinking-trace/verification-lt4-latency/findings.md}.
+ *
+ * <p>The history matters, because this javadoc has over-claimed before. It once said spike
+ * C2 proved a real round trip; it had not — C2 proved only that the <i>proxy</i> serves tool
+ * calls, while the application run in that same log degraded before the agent loop even
+ * started (missing {@code LLM_API_KEY}). That over-claim was corrected 2026-07-30 and the
+ * correction is kept here deliberately. The <i>first</i> genuine attempt (2026-08-01,
+ * {@code spike-run-1.json}) then also degraded — the model fenced its JSON and our own
+ * schema described {@code confidence} two different ways (FND-66) — and only the second run
+ * succeeded. Three defects (FND-66/67/68) stood between "wired correctly" and "works against
+ * real data", none of which any offline test could have surfaced.
  */
 @Component
 @ConditionalOnProperty(name = "triage.engine", havingValue = "adk")

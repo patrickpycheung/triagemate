@@ -41,7 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟠 Evolving (CDS R4 — only a doc-freshness fix this round, zero design changes. STUCK on design analysis: everything reachable from a desk is decided/spiked/fixed. Blocked on 2 EXTERNAL spikes — real ADK per-step latency [corp laptop + Copilot proxy] and projector legibility [an actual projector] — neither answerable from here) | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟠 Evolving — **LT4 latency spike RETURNED 2026-08-01** (first real end-to-end agentic run: 3 tool calls → 44s, ~8.4s/call, 14.6s final report). Settles LT4 (live streaming required) and reveal cadence; corrected `timeout-ms` 90s→120s (FND-69). **1 external blocker left**: projector legibility. Ready for CDS Round 5 | J1, J2, J4, J7, J8 |
 
 ## Spikes
 
@@ -75,9 +75,14 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
   legibility of the glow-pulse badge (needs an actual projector). No further CDS round can
   produce signal on either — they need the operator to run the physical spike, not more
   analysis.
-  **Disposition (2026-07-31): operator will run both spikes and report back.** Re-enter CDS
-  Round 5 once either result lands — record it in `verification-lt4-latency/` (real per-step
-  ADK timing against a live Copilot proxy — also settles whether `timeout-ms: 90000` was
-  the right guess) or `verification-lt5-projector/` (badge legibility at distance), whichever
-  arrives first. Until then, treat J11 as **parked, not abandoned** — do not restart CDS
-  rounds on it speculatively; wait for the spike data.
+  **Disposition (2026-07-31): operator will run both spikes and report back.**
+  **UPDATE 2026-08-01 — the LT4 latency spike has returned.** Recorded in
+  `concepts/J11-live-thinking-trace/verification-lt4-latency/findings.md`: the first
+  end-to-end agentic run against a real Copilot-served model (real ServiceNow + Confluence)
+  took **44s for 3 tool calls** — mean **~8.4s per tool call**, **14.6s** for the final
+  report. That answers J11's core question decisively (**LT4 live streaming is required**: a
+  3-call run is already 40s of blank screen), settles the reveal-cadence fork, and showed
+  `timeout-ms: 90000` was *shorter than a run its own 10-call tool budget permits* (~99s) —
+  corrected to 120s as FND-69. Getting there also required fixing FND-66/67/68, which only
+  surfaced against real data. **J11 is now unblocked for CDS Round 5**; the sole remaining
+  external blocker is `verification-lt5-projector/` (badge legibility at distance).

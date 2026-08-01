@@ -30,12 +30,16 @@ is the one place their calls meet, which is also why concurrent-call coalescing
   **Wall-clock timeout (FND-15, fixed 2026-07-30)**: every engine call — on **either**
   engine, since deterministic also makes real HTTP calls once `triage.connectors.*=real`
   — runs on a virtual thread bounded by `triage.orchestrator.timeout-ms` (default
-  90000 — raised from an initial 45000 during re-verification: 10 tool calls
-  [`triage.agent.max-tool-calls`] against a real frontier model can plausibly take
-  longer than 45s, and a timeout that's too tight makes the FND-15 fallback fire on
-  every normal-but-unhurried real run, indistinguishable on stage from the model
-  actually failing — not yet measured against a real Copilot-served model, revisit
-  once spike C2 runs). Previously enforced nowhere: a hung gateway hung the request
+  **120000 — MEASURED (FND-69, 2026-08-01)**, was 90000, itself self-documented as a
+  guess. The LT4 spike ran the real agent against a Copilot-served model with real
+  ServiceNow + Confluence: 3 tool calls → 44s, mean ~8.4s per call, ~14.6s for the final
+  report, so `N × 8.4 + 14.6` puts a full 10-call run at ~99s. The old 90s was therefore
+  SHORTER than a run its own `max-tool-calls: 10` budget permits — the agent could be
+  killed by the timeout at ~99s and degrade mid-demo, which on stage is
+  indistinguishable from the model failing. Raised the clock rather than cutting the
+  budget: the tool budget is a J8 *safety* bound, the timeout a *liveness* one, and
+  trading away investigation depth to fix a liveness number is the wrong lever.
+  `verification-lt4-latency/findings.md`.) Previously enforced nowhere: a hung gateway hung the request
   forever, including on the K1 poller's single scheduler thread, where nobody would
   notice. A timeout on the ADK engine feeds the ordinary FND-7 fallback below; a
   timeout when deterministic is already the active engine propagates (nothing left
@@ -157,11 +161,12 @@ types → **400**, `{"error": "invalid incident number"}`.
 These two bounds overlap and the HTTP one usually wins. `spring.http.client.read-timeout`
 (20s) applies to `RealServiceNowGateway`'s *injected* builder — including `getIncident`
 **inside** `engine.diagnose()`. So a hung real ServiceNow fails at ~20s with a
-`ResourceAccessException`, **not** at 90s with `DiagnosisTimeoutException` — a genuinely
+`ResourceAccessException`, **not** at 120s with `DiagnosisTimeoutException` — a genuinely
 different exception type, now also mapped to **504** (same status as the timeout above, both
 meaning "the app waited too long for an upstream"). Previously unmapped, surfacing as a bare
 500. This is a status-code correctness fix only — it does NOT resolve the separate, still-open
-question of whether 20s/90s are the *right* timeout values; that's real-latency tuning the J11
+question of whether 20s/120s are the *right* timeout values; the wall clock is now measured
+(FND-69) but the 20s HTTP read timeout still isn't — that's the remaining real-latency tuning the J11
 spike's real ADK-latency data will inform, orthogonal to which status a timeout returns today.
 `DiagnosisApiExceptionHandler` is now five exception types mapped to four distinct statuses
 (`ResourceAccessException` and `DiagnosisTimeoutException` share 504).
