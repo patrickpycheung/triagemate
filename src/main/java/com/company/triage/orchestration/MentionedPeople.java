@@ -61,6 +61,14 @@ final class MentionedPeople {
                     + "assigned to|handed (?:to|over to)|confirmed (?:by|with)|reported by|contacted|"
                     + "asked|per|from|cc:?|contact|owner|owned by|reach out to|ping)\\s+)(" + NAME + ")");
 
+    /**
+     * FND-67: {@code Steve Taylor (taylors)} — a display name followed by its parenthesised
+     * username. ServiceNow renders people this way constantly, and it is about as unambiguous
+     * as prose gets, so it is treated as a cue rather than left to the filtered bare tier.
+     */
+    private static final Pattern NAME_WITH_USERNAME =
+            Pattern.compile("\\b(" + NAME + ")\\s*\\(([A-Za-z][\\w.-]{1,30})\\)");
+
     /** Loosest tier: any capitalised pair. Only survives if it clears {@link #NOT_A_PERSON}. */
     private static final Pattern BARE_NAME = Pattern.compile("\\b(" + NAME + ")\\b");
 
@@ -78,7 +86,23 @@ final class MentionedPeople {
             "environment", "release", "version", "build", "customer", "customers", "user",
             "users", "caller", "monday", "tuesday", "wednesday", "thursday", "friday",
             "saturday", "sunday", "january", "february", "march", "april", "june", "july",
-            "august", "september", "october", "november", "december");
+            "august", "september", "october", "november", "december",
+            // FND-67: ticket-form and UI vocabulary. A real ServiceNow ticket is full of
+            // Title Case form labels ("Option Selected", "Best contact hours") that have
+            // person-name shape; the first real run surfaced "Option Selected" as a contact.
+            "option", "options", "selected", "select", "best", "hours", "ticket", "tickets",
+            "raised", "below", "above", "applications", "category", "subcategory", "priority",
+            "status", "state", "assignment", "assigned", "opened", "closed", "resolution",
+            "resolved", "description", "summary", "subject", "attachment", "attachments",
+            "comment", "comments", "note", "notes", "field", "fields", "form", "page",
+            "site", "link", "url", "email", "phone", "number",
+            "triage", "advisory", "sources", "consulted", "diagnosis",
+            "first", "pass", "next", "action", "evidence", "missing", "information");
+    // Deliberately NOT listed: the incident's own domain words ("Delivery Hazards" on the
+    // first real run). Enumerating those is whack-a-mole that only ever fixes the ticket in
+    // front of you — the ticket TITLE names the thing that is broken, so callers pass the
+    // shortDescription in as a known system name and the check below rejects any bare pair
+    // drawn from it. That generalises; a word list does not.
 
     /**
      * Names in one blob of text.
@@ -92,9 +116,16 @@ final class MentionedPeople {
         if (text == null || text.isBlank()) return List.of();
         Set<String> out = new LinkedHashSet<>();
 
+        // Tier 1 — "Steve Taylor (taylors)". A parenthesised username is near-proof of a
+        // person, so this bypasses the system-name filter the bare tier is subject to.
+        Matcher withUsername = NAME_WITH_USERNAME.matcher(text);
+        while (withUsername.find()) out.add(withUsername.group(1).trim());
+
+        // Tier 2 — introduced by a phrase that only makes sense about a person.
         Matcher cued = CUED_NAME.matcher(text);
         while (cued.find()) addIfPerson(out, cued.group(1), knownSystemNames);
 
+        // Tier 3 — bare capitalised pair, only if it clears every filter.
         Matcher bare = BARE_NAME.matcher(text);
         while (bare.find()) addIfPerson(out, bare.group(1), knownSystemNames);
 
@@ -136,10 +167,34 @@ final class MentionedPeople {
     static List<Contact> fromIncident(String number, String description, String shortDescription,
                                       List<String> comments, List<String> workNotes,
                                       Set<String> knownSystemNames) {
+        return fromIncident(number, description, shortDescription, comments, workNotes,
+                knownSystemNames, null);
+    }
+
+    /**
+     * @param caller the ticket's {@code caller_id}. FND-67: the single most reliable person on
+     *               any incident — the human who raised it — and it was being ignored entirely
+     *               while far weaker prose matches were surfaced.
+     */
+    static List<Contact> fromIncident(String number, String description, String shortDescription,
+                                      List<String> comments, List<String> workNotes,
+                                      Set<String> knownSystemNames, String caller) {
         Map<String, Contact> byKey = new LinkedHashMap<>();
+
+        if (caller != null && !caller.isBlank()) {
+            String who = caller.trim();
+            byKey.put(who.toLowerCase(Locale.ROOT), new Contact(who, who, "servicenow",
+                    "raised this incident", number, "the caller"));
+        }
+
         List<String> journal = new ArrayList<>();
         if (comments != null) journal.addAll(comments);
         if (workNotes != null) journal.addAll(workNotes);
+        // FND-67: never mine our OWN advisory notes. They are on the ticket because we put
+        // them there, so treating them as ticket conversation makes the app feed on itself —
+        // the first real run suggested "AI Triage" as a person, read straight out of our own
+        // note header.
+        journal.removeIf(com.company.triage.model.DiagnosisReport::isAiAuthoredNote);
 
         for (String entry : journal) {
             if (entry == null || entry.isBlank()) continue;

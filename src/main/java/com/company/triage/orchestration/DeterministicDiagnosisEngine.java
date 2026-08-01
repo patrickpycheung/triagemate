@@ -194,6 +194,14 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         if (inc.currentAssignment() != null) knownSystemNames.add(inc.currentAssignment());
         ownership.ifPresent(o -> { knownSystemNames.add(o.application()); knownSystemNames.add(o.supportGroup()); });
         logs.forEach(l -> knownSystemNames.add(prettifySystem(l.logger())));
+        // FND-67: the TITLE names the thing that is broken, so its Title Case phrases are
+        // system names, not people. The first real ServiceNow run suggested "Delivery
+        // Hazards" as someone to talk to — straight out of its own subject line. This is the
+        // general form of that fix; a denylist of domain words would only ever have fixed
+        // the one ticket in front of us. A person named ONLY in the subject line is
+        // suppressed as a consequence — an accepted precision-over-recall trade, and the
+        // caller is captured structurally below regardless.
+        if (inc.shortDescription() != null) knownSystemNames.add(inc.shortDescription());
         List<Contact> contacts = gatherContacts(inc, docs, codeHits, knownSystemNames);
         trace.add("contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
                 .formatted(contacts.size(), docs.size(), codeHits.size()));
@@ -224,13 +232,28 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             byName.merge(name, new CandidateSystem(name, confidence, refs),
                     (a, b) -> a.confidence() >= b.confidence() ? a : b);
         }
-        ownership.ifPresent(o -> byName.putIfAbsent(o.application(),
-                new CandidateSystem(o.application(), 0.55, refsThatExist(gathered, List.of("e-cmdb")))));
-        if (byName.isEmpty() && inc.configurationItem() != null) {
-            // Nothing observed — name the CI so the report still says what was looked at,
-            // at a confidence that admits we found nothing to back it.
-            byName.put(inc.configurationItem(),
-                    new CandidateSystem(inc.configurationItem(), 0.30, List.of("e-incident")));
+        ownership.ifPresent(o -> {
+            if (notBlank(o.application())) {
+                byName.putIfAbsent(o.application(), new CandidateSystem(o.application(), 0.55,
+                        refsThatExist(gathered, List.of("e-cmdb"))));
+            }
+        });
+        if (byName.isEmpty()) {
+            // Nothing observed — name the best thing we know was looked at, at a confidence
+            // that admits nothing backs it.
+            //
+            // FND-67: this used to test `configurationItem != null` and then use it directly.
+            // The first real ServiceNow ticket had cmdb_ci = "" (empty, not null), so the
+            // report shipped a candidate system with an EMPTY NAME at 0.30 — a blank row on
+            // stage. Blank-check, and fall back to the subject line's leading phrase when the
+            // CMDB has nothing, so the candidate always names something a human can read.
+            String fallbackName = notBlank(inc.configurationItem())
+                    ? inc.configurationItem().trim()
+                    : signals.app();
+            if (notBlank(fallbackName)) {
+                byName.put(fallbackName,
+                        new CandidateSystem(fallbackName, 0.30, List.of("e-incident")));
+            }
         }
         List<CandidateSystem> candidates = byName.values().stream()
                 .sorted(Comparator.comparingDouble(CandidateSystem::confidence).reversed())
@@ -327,7 +350,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // anyone they named in it. Listed first because "already engaged with this incident"
         // outranks "edited the runbook months ago".
         raw.addAll(MentionedPeople.fromIncident(inc.number(), inc.description(),
-                inc.shortDescription(), inc.comments(), inc.workNotes(), knownSystemNames));
+                inc.shortDescription(), inc.comments(), inc.workNotes(), knownSystemNames,
+                inc.caller()));
         for (KnowledgeDoc d : docs) {
             raw.addAll(confluence.contributors(d));      // page author / last editor (metadata)
             // FND-64: ...and anyone the page NAMES. A runbook's escalation contact is often
@@ -439,5 +463,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     }
 
     private static String text(String s) { return s == null ? "" : s; }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 
 }

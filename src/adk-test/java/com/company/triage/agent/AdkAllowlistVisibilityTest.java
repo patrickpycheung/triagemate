@@ -79,6 +79,29 @@ class AdkAllowlistVisibilityTest {
         assertThat(instruction).doesNotContain("prod/order-api");
     }
 
+    /**
+     * FND-66: the first real Copilot-served run's repair retry died on
+     * {@code Cannot deserialize value of type double from String "HIGH"} — and that was our
+     * fault, not the model's. The schema block showed {@code suggestedAssignment.confidence}
+     * as {@code "LOW|MEDIUM|HIGH"} while the {@code candidateSystems[].confidence} right
+     * above it had no type hint at all, so the model reasonably assumed the two identically
+     * named fields held the same kind of value. One is a 0.0–1.0 double, the other an enum.
+     */
+    @Test
+    void instructionDisambiguatesTheTwoDifferentConfidenceFields() {
+        String instruction = engine().instruction();
+
+        assertThat(instruction).contains("candidateSystems[].confidence  is a NUMBER");
+        assertThat(instruction).contains("\"confidence\":<NUMBER 0.0-1.0>");
+        assertThat(instruction).contains("confidenceOverall are the STRING");
+    }
+
+    /** FND-66: fencing is so deeply trained that the instruction must say so outright. */
+    @Test
+    void instructionForbidsMarkdownCodeFences() {
+        assertThat(engine().instruction()).contains("NO markdown code fence");
+    }
+
     @Test
     void rejectionMessagesNameTheValidValuesSoTheModelCanSelfCorrect() {
         engine();   // wires TriageMateTools with the allowlists above

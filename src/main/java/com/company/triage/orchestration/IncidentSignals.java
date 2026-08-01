@@ -74,14 +74,28 @@ record IncidentSignals(
     static IncidentSignals from(IncidentContext inc) {
         String symptom = text(inc.shortDescription());
         String detail = text(inc.description());
-        String rawText = (symptom + " " + detail).trim();
+        // FND-67: exclude this app's own advisory notes. Once the real gateway started
+        // reading the journal (FND-61), a re-diagnosis of the same incident would otherwise
+        // draw keywords and identifiers out of its OWN previous diagnosis — each run drifting
+        // further from what the human actually wrote.
+        String conversation = java.util.stream.Stream
+                .concat(safe(inc.comments()).stream(), safe(inc.workNotes()).stream())
+                .filter(e -> !com.company.triage.model.DiagnosisReport.isAiAuthoredNote(e))
+                .collect(java.util.stream.Collectors.joining(" "));
+        String rawText = (symptom + " " + detail + " " + conversation).trim();
 
         List<String> ids = extractIdentifiers(rawText, inc.number());
 
         // The affected application, best available signal. configurationItem is the CMDB's
         // answer and the most structured thing we have; fall back to the symptom line so a
         // ticket with no CI still targets something rather than defaulting blindly.
-        String app = notBlank(inc.configurationItem()) ? inc.configurationItem().trim() : symptom;
+        //
+        // FND-67: the first real ServiceNow ticket had an EMPTY cmdb_ci, so the fallback put
+        // a whole sentence in `app` — which then got appended verbatim to the Confluence
+        // query and fed to allowlist ranking as if it were a system name. Cap the fallback at
+        // a name-sized leading fragment: enough to target with, not a paragraph.
+        String app = notBlank(inc.configurationItem()) ? inc.configurationItem().trim()
+                                                       : leadingPhrase(symptom);
 
         return new IncidentSignals(app, extractKeywords(rawText),
                 ids.isEmpty() ? null : ids.get(0), ids);
@@ -160,6 +174,21 @@ record IncidentSignals(
     }
 
     private static String text(String s) { return s == null ? "" : s; }
+
+    private static List<String> safe(List<String> l) { return l == null ? List.of() : l; }
+
+    /**
+     * FND-67: the leading name-like fragment of a subject line — up to the first separator
+     * ({@code -}, {@code :}, {@code |}) and at most 4 words. "Delivery Hazards - All hazards
+     * are no longer present" → "Delivery Hazards". Used only when {@code cmdb_ci} is empty,
+     * which real tickets frequently are.
+     */
+    private static String leadingPhrase(String symptom) {
+        if (symptom == null || symptom.isBlank()) return "";
+        String head = symptom.split("[-:|\\u2014]", 2)[0].trim();
+        String[] words = head.split("\\s+");
+        return words.length <= 4 ? head : String.join(" ", java.util.Arrays.copyOf(words, 4));
+    }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 }

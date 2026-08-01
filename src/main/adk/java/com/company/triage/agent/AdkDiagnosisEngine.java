@@ -134,17 +134,26 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 String.join(", ", sumoScopes), String.join(", ", gitLabProjects)) + """
 
 
-        Output ONLY a JSON object matching this shape (no prose):
+        Output ONLY a raw JSON object. No prose, and NO markdown code fence — do not wrap
+        the JSON in ```json or ``` of any kind; the response must begin with { and end with }.
+
         {
           "incidentNumber","generatedAt","reportedSymptom","affectedFunction",
           "environment","identifiers":{"correlationId","errorCode","orderId"},
-          "candidateSystems":[{"name","confidence","evidenceRefs":[]}],
+          "candidateSystems":[{"name","confidence":<NUMBER 0.0-1.0>,"evidenceRefs":[]}],
           "suggestedAssignment":{"group","confidence":"LOW|MEDIUM|HIGH","evidenceRefs":[]},
           "evidence":[{"id","source","summary","link"}],
           "suggestedContacts":[{"name","handle","source","reason","link","signal"}],
           "contradictingEvidence":[],"missingInformation":[],
           "recommendedNextAction","confidenceOverall":"LOW|MEDIUM|HIGH","advisory":true
         }
+
+        NOTE the two DIFFERENT kinds of "confidence" above — getting this wrong fails the
+        whole report:
+          - candidateSystems[].confidence  is a NUMBER between 0.0 and 1.0 (e.g. 0.86)
+          - suggestedAssignment.confidence and confidenceOverall are the STRING
+            "LOW", "MEDIUM" or "HIGH"
+
         Every candidate/assignment must reference evidence ids you actually gathered.
         """;
     }
@@ -283,7 +292,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 "Diagnose ServiceNow incident " + incidentNumber
                         + ". Investigate with the tools, then return ONLY the JSON report.");
         try {
-            return JSON.readValue(finalJson, DiagnosisReport.class);
+            return JSON.readValue(unfence(finalJson), DiagnosisReport.class);
         } catch (Exception firstError) {
             log.warn("agent returned unparseable JSON for {} — one repair retry (FND-42)",
                     incidentNumber, firstError);
@@ -293,13 +302,38 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                             + firstError.getMessage() + "). Return ONLY the corrected JSON object — "
                             + "no prose, no markdown code fences.");
             try {
-                return JSON.readValue(repaired, DiagnosisReport.class);
+                return JSON.readValue(unfence(repaired), DiagnosisReport.class);
             } catch (Exception secondError) {
                 log.warn("repair retry also failed to parse for {} — degrading", incidentNumber, secondError);
                 throw new IllegalStateException(
                         "agent JSON did not match the J4 contract after one repair retry", secondError);
             }
         }
+    }
+
+    /**
+     * FND-66: strip a markdown code fence around the JSON, if the model wrapped it in one.
+     *
+     * <p>The first real Copilot-served run failed here — {@code JsonParseException: Unexpected
+     * character (backtick)} — because the model wrapped the object in a json code fence. The
+     * instruction already said "no prose" and the repair prompt already said "no markdown
+     * code fences", and it still happened: fencing JSON is so deeply trained that asking
+     * nicely is not a control. The instruction is now explicit about it too, but a prompt is
+     * a request and this is the enforcement — a fence is unambiguous, trivially removable,
+     * and burning the one FND-42 repair retry on it wastes ~8s of stage time and a Copilot
+     * call to fix something we can fix locally in microseconds.
+     */
+    static String unfence(String raw) {
+        if (raw == null) return "";
+        String s = raw.strip();
+        if (!s.startsWith("`")) return s;
+        // Handles both a language-tagged fence and a bare one: the first line is the
+        // opening fence (with or without "json"), the last one closes it.
+        int firstNewline = s.indexOf('\n');
+        if (firstNewline < 0) return s;
+        String body = s.substring(firstNewline + 1);
+        int closing = body.lastIndexOf("```");
+        return (closing >= 0 ? body.substring(0, closing) : body).strip();
     }
 
     private static String send(InMemoryRunner runner, Session session, RunConfig runConfig, String text) {

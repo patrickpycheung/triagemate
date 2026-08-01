@@ -131,6 +131,13 @@ triage:
 logging:
   level:
     com.company.triage: INFO
+    # FND-68: ADK logs a WARN per recursive type per tool while building the tool schemas —
+    # six lines of "Type java.time.ZoneOffset is recursive. Omitting from schema." every run,
+    # from OffsetDateTime inside our tool signatures. Harmless (the omitted part is only the
+    # JSON-schema hint; arguments still serialize fine and AdkLiveRoundTripTest proves the
+    # round trip), but on stage it is six red-herring WARNs scrolling past right before the
+    # agent starts, which is exactly when someone is watching the console for a real problem.
+    com.google.adk.tools.FunctionCallingUtils: ERROR
 
 ---
 # Convenience profile: write the two comments to a REAL ServiceNow dev ticket while

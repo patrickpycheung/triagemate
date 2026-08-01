@@ -86,6 +86,68 @@ class MentionedPeopleTest {
         });
     }
 
+    /**
+     * FND-67 — the three false positives from the first real ServiceNow run (INC0010005,
+     * "Delivery Hazards"). All three were Title Case pairs that are not people:
+     * <ul>
+     *   <li>"Delivery Hazards" — the ticket's own subject, i.e. the broken system</li>
+     *   <li>"Option Selected" — a ServiceNow form label</li>
+     *   <li>"AI Triage" — <b>our own work-note header</b>, read back off the ticket</li>
+     * </ul>
+     * "Steve Taylor (taylors)" from the same text is a real person and must survive.
+     */
+    @Test
+    void realTicketProseYieldsThePersonAndNoneOfTheFormLabelsOrSystemNames() {
+        String shortDescription = "Delivery Hazards - All hazards are no longer present";
+        String description = shortDescription + "\r\n"
+                + "Delivery Hazards - all hazards are no longer present and appear to have been "
+                + "cleared from site. Is there any way to retrieve hazards that were entered "
+                + "into the portal.\r\n\r\n"
+                + "Steve Taylor (taylors) has raised the below ticket for - ~I can't find what "
+                + "I'm looking for (Applications and Software)\r\n"
+                + "Option Selected: ~I can't find what I'm looking for\r\n"
+                + "Best contact hours: 0400 - 1200";
+
+        // The subject line is passed as a known system name — the ticket titles what broke.
+        var names = MentionedPeople.namesIn(description, Set.of(shortDescription));
+
+        assertThat(names).contains("Steve Taylor");
+        assertThat(names).doesNotContain("Delivery Hazards", "Option Selected", "Best contact");
+    }
+
+    /**
+     * FND-67: the app must not mine its OWN advisory notes. Once the real gateway began
+     * reading the journal, a re-run saw the previous run's notes as ticket conversation —
+     * the first real run suggested "AI Triage" as a person, straight out of our note header.
+     */
+    @Test
+    void doesNotHarvestNamesFromThisAppsOwnWorkNotes() {
+        List<Contact> contacts = MentionedPeople.fromIncident(
+                "INC0010005", "Hazards cleared from site", "Delivery Hazards",
+                List.of("[AI Triage · Sources consulted]\nEvidence gathered for this incident"),
+                List.of("[AI Triage · First-pass diagnosis — advisory only]\n\nSpoke with Priya Nair"),
+                Set.of("Delivery Hazards"), null);
+
+        assertThat(contacts).extracting(Contact::name).doesNotContain("AI Triage");
+        // Even a person-shaped name inside our own note is ours, not the ticket's.
+        assertThat(contacts).extracting(Contact::name).doesNotContain("Priya Nair");
+        assertThat(contacts).isEmpty();
+    }
+
+    /** FND-67: caller_id is the most reliable person on any ticket and was ignored entirely. */
+    @Test
+    void theCallerIsAlwaysAContact() {
+        List<Contact> contacts = MentionedPeople.fromIncident(
+                "INC0010005", "something broke", "Delivery Hazards",
+                List.of(), List.of(), Set.of(), "taylors");
+
+        assertThat(contacts).first().satisfies(c -> {
+            assertThat(c.name()).isEqualTo("taylors");
+            assertThat(c.reason()).isEqualTo("raised this incident");
+            assertThat(c.source()).isEqualTo("servicenow");
+        });
+    }
+
     @Test
     void emptyAndNullInputAreSafe() {
         assertThat(MentionedPeople.namesIn(null, KNOWN_SYSTEMS)).isEmpty();
