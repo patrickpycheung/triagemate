@@ -1,6 +1,6 @@
 # J11 — Live Thinking Trace (animated per-step agent trace)
 
-**State**: 🟠 Evolving — STUCK (CDS Round 4, 2026-07-31; blocked on 2 external spikes) · **Complexity**: Complex ·
+**State**: 🟡 Stable (CDS Round 8, 2026-08-01 — **no open design forks**; one quiet round from 🟢) · **Complexity**: Complex ·
 **Depends on**: J1, J2, J4, J7, J8 · **Amends**: J1 (response shape), J7 (UI), J8 (observability)
 **Source**: DDS `docs/discovery/live-thinking-trace-ui/` (Phase 4, concepts LT1–LT7)
 
@@ -139,6 +139,24 @@ in `src/main/java/` (J8's layer, e.g. `guardrails/ToolRegistry`), have *both*
 `registry ⊆ catalog` in a `src/test/` test. The catalog must *cover* the permitted set; it
 must not *define* it.
 
+**Model-think rows bypass the catalog entirely (Round 6).** LT4's model edges produce rows
+with **no tool at all**, so there is no key to look up: they carry `tool = null`,
+`platform = TRIAGEMATE`, and the fixed label `Thinking…`. Worth stating explicitly because
+the catalog is otherwise keyed by tool name and a `null` key would otherwise look like a bug.
+
+⚠️ **`TRIAGEMATE` stops being an edge case on the ADK path.** It was introduced for the two
+or three `understand:` / `contacts:` steps. With model edges the measured 3-call run is
+**3 platform rows and 4 model rows — 57 % `TRIAGEMATE`**. Two consequences:
+- **It needs a visual treatment, and LT6 does not give it one** (LT6 ships four *vendor*
+  marks; the pseudo-platform has no badge).
+- **Decision (Round 6): render model-think rows as visually subordinate connective rows** —
+  no badge, dimmer, slightly indented — not as peer rows with equal weight. Rationale is the
+  honesty contract, not aesthetics: badging them as peers would make the trace read as seven
+  equal steps when **only three touched a real system**, overstating the evidence trail the
+  step log exists to prove. Subordinate rows say "the agent thought here" without implying a
+  source was consulted. *Watch item: if the connective rows read as clutter on a projector,
+  collapse consecutive ones rather than re-badging them.*
+
 ⚠️ **The catalog cannot label a hallucinated tool** — and that is the main `DENIED` case.
 `BoundsCallback` denies names *outside* the allowlist, which are by construction absent from
 the catalog. Specify a fallback: unknown tool → `Platform.TRIAGEMATE`, label
@@ -166,16 +184,69 @@ deterministic path, so pre-rendering it would assert work that may never happen.
 **Ruled out**: unlabelled synthetic dwell + spinners + present tense (that is FND-8 in a
 costume); fabricated reasoning copy; ETA bars; `Step N of 8` on the bounded ADK loop.
 
+**The pacing floor is a REPLAY concern only (clarified Round 5).** An earlier note said the
+LT4 measurement "settled the reveal cadence — reveal each step as it lands", which read as a
+blanket rule and contradicted the ~250–400 ms floor above. Both are right, for different
+paths, and the distinction is the point:
+
+| | real step duration | cadence |
+|---|---|---|
+| **Replay** (LT3; deterministic, 2–19 ms) | far below perception | **pace it** — `max(realDuration, ~0.4 s)` |
+| **Live** (LT4; ADK, measured 8.0 s ± 2.6) | far above perception | **no pacing at all** — render on arrival |
+
+So the open "fixed floor vs proportional-with-floor" fork resolves as
+**proportional-with-floor, and only in replay**: reveal step N after
+`max(realDuration, floor)`. That single rule covers both engines *and* the awkward middle
+case neither branch named — a **deterministic run against real connectors** (F-3), whose
+steps are genuinely slow, where a fixed 0.4 s floor would understate real work and a pure
+proportional rule would flash the fast steps. Live streaming never paces because it cannot:
+the step arrives when it arrives, and the 8 s gap *is* the cadence.
+
 ### LT4 — Live streaming (**mandatory**, ADK path)
 
-Not optional polish: `DEMO-RUNBOOK.md` **locks D1 as the primary path**, so replay-only would
-leave the screen blank for the whole live model run (up to the 90 s `timeout-ms`).
+Not optional polish, and no longer a judgement call — **measured 2026-08-01**
+(`verification-lt4-latency/`): a 3-tool-call run takes **37 s**, an 8-call run ~77 s. `DEMO-RUNBOOK.md`
+**locks D1 as the primary path**, so replay-only leaves the screen blank for that entire
+window (bounded by the 120 s `timeout-ms` — FND-69, itself corrected by the same spike).
 
-Wire **all three** verified ADK 1.7.0 edges — `beforeToolCallbackSync` → `ACTIVE`,
-`afterToolCallbackSync(…, Object result)` → `DONE`, `onToolErrorCallbackSync` → `FAILED`
-(`onToolError` is required; `after` is **not** a `finally` hook). Correlate edges with
-**`ToolContext.functionCallId()`**, not a counter — ADK may run several calls from one
-`Event` in parallel.
+Wire **all six** verified ADK 1.7.0 edges — three tool, three model.
+
+**Tool edges**: `beforeToolCallbackSync` → `ACTIVE`, `afterToolCallbackSync(…, Object result)`
+→ `DONE`, `onToolErrorCallbackSync` → `FAILED` (`onToolError` is required; `after` is **not**
+a `finally` hook). Correlate with **`ToolContext.functionCallId()`**, not a counter — ADK may
+run several calls from one `Event` in parallel.
+
+**Model edges — added Round 5, and they are the majority of the timeline.**
+⚠️ The latency spike made a hole in this very section countable: **~75 % of the run is the
+model thinking, and the three tool edges emit nothing during any of it** (measured: ~28 s of
+LLM time vs ~10 s of tool execution, per run). Two dead windows — between tools
+(`after(N)`→`before(N+1)`), and, worst, **after the last tool while the model composes the
+final JSON: 13.1 s ± 1.3, consistently the single longest gap in every run.** Left unwired,
+the live view resolves every step to `DONE` and then **freezes for 13 s at the exact moment
+the audience is waiting for the answer** — the blank screen LT4 exists to prevent, surviving
+inside LT4's own design. Invisible from the code; only 4 LLM calls against 3 tool callbacks
+in the proxy log made it countable.
+
+`beforeModelCallbackSync` → open a `TRIAGEMATE` row `ACTIVE`; `afterModelCallbackSync` →
+resolve `DONE` with its real duration; `onModelErrorCallbackSync` → `FAILED` (which is also
+how a proxy/model failure becomes *visible* rather than the run just stopping). Correlate on
+**`CallbackContext.eventId()`** — the model-side analogue of `functionCallId()`.
+🔬 All three verified present by `javap` against the 1.7.0 jar
+(`verification-lt4-model-edges/findings.md`).
+
+⛔ **`beforeModelCallback` has the same short-circuit hazard as `beforeTool`, and worse
+consequences.** Returning a non-empty `Optional<LlmResponse>` **replaces the model's
+response** — an observer that returned anything but `Optional.empty()` would make the UI show
+words the model never produced, a direct FND-8 breach with no `DENIED` row to betray it.
+**A trace observer on these edges MUST return `Optional.empty()` unconditionally.**
+
+**Label the row retrospectively, not predictively.** "Composing the diagnosis" vs "deciding
+what to check next" is only knowable *after* the fact (did a tool call follow?). So: label
+every model window **`Thinking…`** while `ACTIVE`, and on resolve set `result` to what it
+actually produced — *"chose search_confluence"* / *"produced the report"*. Truthful at every
+instant without predicting the future — the same discipline the honesty contract imposes
+everywhere else on this card. Free side-effect: an FND-42 repair retry is a model call with
+no tool call, so it too becomes visible instead of silent.
 
 ⛔ **The `before` edge must keep returning a non-empty `Optional` to deny.** That is how
 `BoundsCallback` enforces J8's allowlist + budget. A trace observer that forced it to return
@@ -199,13 +270,20 @@ here. What remains is stage risk, and there polling wins decisively:
 
 SSE's three extra failure modes are all live on the demo path: **`spring.mvc.async.request-timeout`
 has no Boot default → embedded Tomcat's 30 s, which would tear the stream down mid-run against
-a 90 s engine deadline**; `SseEmitter.send()` is not thread-safe under concurrent emission
+a 120 s engine deadline** — and the LT4 measurement turns that from a hazard into a
+certainty: **every** real run measured (33–40 s, and ~77 s projected for the full 8-tool
+flow) exceeds Tomcat's 30 s, so an unconfigured SSE stream would be severed mid-run on the
+demo path, every time; `SseEmitter.send()` is not thread-safe under concurrent emission
 (and ADK callbacks arrive on RxJava threads); and emitting after `future.cancel(true)` on an
 FND-15 timeout throws. Each is fixable, none is free, and a hackathon demo should not be
 paying for a durability property it will never use.
 
-**Watch item (reopens this):** if the poll interval visibly lags the agent — steps appearing
-in bursts rather than as they happen — drop the interval to ~500 ms before reconsidering SSE.
+~~**Watch item (reopens this):** if the poll interval visibly lags the agent…~~ ✅ **CLOSED by
+the LT4 measurement (Round 5).** Real steps land **8.0 s ± 2.6** apart, so a 1 s poll adds at
+most ~12 % to a step's time-to-appear and cannot produce the "bursts" this watch item feared
+— that failure mode needs steps faster than the poll, which is the *deterministic* path, and
+that path replays from a completed run rather than polling. Polling is not a compromise here;
+it is comfortably the right tool. The 500 ms fallback stays available but is not expected.
 
 Binding on the chosen option:
 #### The `runId` protocol (added Round 3 — **3 independent reviews found it missing**)
@@ -315,6 +393,13 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
   nothing — live streaming is required, not a nice-to-have.** It also settles the reveal
   cadence below (real gaps dwarf any artificial floor) and exposed FND-69 (the old 90s timeout
   was shorter than a run its own tool budget permits).
+- 🔬 **LT4 model-callback edges ✅ DONE** (2026-08-01, Round 5, `verification-lt4-model-edges/`):
+  `javap` against the 1.7.0 jar confirms `beforeModelCallbackSync` /
+  `afterModelCallbackSync` / `onModelErrorCallbackSync` all exist, mirroring the tool edges,
+  with `CallbackContext.eventId()` as the correlation key. Triggered by the latency spike
+  exposing that **~75% of the run is model-think time with zero events** under the
+  three-tool-edge design. LT4 is now six edges. Same ⛔ short-circuit hazard as `beforeTool`,
+  with worse consequences — see LT4.
 - ⏳ Pending: LT2 registry/catalog subset test, LT3 replay-frame wording review,
   projector legibility. *(Transport is DECIDED — polling; the
   `spring.mvc.async.request-timeout` item was withdrawn as SSE-only.)*
@@ -324,7 +409,18 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
   call, 13.1s for the final report, 37s for a 3-call run. LT4 confirmed necessary;
   `timeout-ms` corrected 90s → 120s (FND-69). `verification-lt4-latency/findings.md`.
 - **Projector legibility** of glow-pulse vs spinner — reasoned, not measured. One dry run.
-  Now the *only* remaining external blocker on J11.
-- ~~**Reveal cadence**: fixed floor vs proportional-with-floor~~ — settled by the LT4
-  measurement: with ~8s between real steps, an artificial pacing floor is pointless. Reveal
-  each step as it lands.
+  **Re-classified Round 8: implementation-time visual QA, NOT a design blocker.** Testing the
+  premise that made it one — both candidate treatments are already specified, the fallback if
+  neither reads is higher contrast (the `projector` theme exists for exactly this), and *no
+  branch changes a contract, a type, or a transport*. It selects a CSS treatment. That is an
+  ADM-1 call to make at the projector with the app running, not a fork this card must resolve
+  first. J11 is therefore **not blocked on it**.
+  The latency measurement did raise its stakes, which is why it stays listed: with ~8 s
+  between steps and a 13 s composing window, the in-progress affordance is on screen **20–30×
+  longer** than the ~0.4 s replay cadence assumed when this risk was written. Get it wrong and
+  the audience stares at it; the *design* survives either way.
+- ~~**Reveal cadence**: fixed floor vs proportional-with-floor~~ ✅ **RESOLVED Round 5** —
+  **proportional-with-floor, replay only**: reveal step N after `max(realDuration, ~0.4 s)`;
+  live never paces (the ~8 s gap *is* the cadence). One rule covering both engines and the
+  slow-deterministic F-3 middle case. See LT3. *(An intermediate note said "reveal as it
+  lands" globally, which contradicted LT3's floor — corrected here.)*

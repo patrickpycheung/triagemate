@@ -41,7 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟠 Evolving — **LT4 latency spike RETURNED 2026-08-01** (3 successful runs: 3 tool calls → 37s mean, **8.0s ± 2.6s per call**, 13.1s final report). Settles LT4 (live streaming required) and reveal cadence; corrected `timeout-ms` 90s→120s (FND-69). **1 external blocker left**: projector legibility. Ready for CDS Round 5 | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟡 **Stable** (CDS R5–R8, 2026-08-01) — LT4 latency spike returned and was folded in; it exposed that **~75% of the run is model-think time with zero events**, so LT4 grew from 3 tool edges to **6** (model edges verified by `javap`). Reveal-cadence fork RESOLVED. **No open design forks**; projector legibility re-classified as implementation-time visual QA, not a blocker. One quiet round from 🟢 | J1, J2, J4, J7, J8 |
 
 ## Spikes
 
@@ -67,8 +67,9 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 ## Next round triggers
 - **J1–J10**: when JS-2 returns (connectivity), or when a real connector replaces a mock
   and its interface shifts.
-- **J11**: STUCK at Round 4 (2026-07-31) — every design question reachable through
-  analysis is now decided, spiked, or fixed (Round 3's `/doc-test cds` found 5 real design
+- **J11**: ~~STUCK at Round 4~~ → **🟡 Stable after Rounds 5–8 (2026-08-01)**. Historical
+  note follows; the current state is the row above. At Round 4 every design question reachable
+  through analysis was decided, spiked, or fixed (Round 3's `/doc-test cds` found 5 real design
   holes across 9 perspectives; all fixed and re-verified; Round 4 found only a one-line
   doc-freshness drift, no design change). Remaining blockers are **empirical, not design**:
   real ADK per-step latency (needs the corp laptop + Copilot proxy running) and projector

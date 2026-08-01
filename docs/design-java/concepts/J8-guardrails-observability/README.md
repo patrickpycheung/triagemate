@@ -47,6 +47,17 @@ tools, within these limits").
     call, on either engine.
   A tool *existing* ≠ the model may call it anywhere — but "anywhere" is bounded at
   the layer that actually owns each limit, not uniformly by one callback.
+  **Fourth callback surface, observation-only (added 2026-08-01, J11 Round 5).** ADK 1.7.0
+  also exposes `beforeModelCallback` / `afterModelCallback` / `onModelErrorCallback`
+  (verified by `javap`; see J11's `verification-lt4-model-edges/`). J11 attaches its live
+  trace to them, and **nothing enforces a bound there** — deliberately. Recorded in this
+  inventory so the surface is not invisible to whoever adds the next guardrail.
+  ⛔ `beforeModelCallback` returning a non-empty `Optional<LlmResponse>` **replaces the
+  model's response** — the model-level twin of the `beforeTool` denial short-circuit, but
+  without a `DENIED` row to betray it, so a buggy observer there would show the audience
+  words the model never produced (a direct FND-8 breach). Any callback registered on these
+  edges must return `Optional.empty()` unconditionally unless it is *intentionally* a
+  control, in which case it belongs in this list as a fifth layer.
   **Scope note (2026-07-31):** these three are the *model-facing* bounds — what the agent
   can do at runtime. `triage.servicenow.write-field` (FND-51) is a fourth enforcement point
   but a different kind: it constrains an **operator** config value, not model behaviour, and
