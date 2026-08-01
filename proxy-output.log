@@ -1,28 +1,15 @@
 ➜ Listening on: http://localhost:4000/ (all interfaces)
 <-- GET /v1/models
 --> GET /v1/models 200 2ms
-<-- GET /v1/models
---> GET /v1/models 200 1ms
 <-- POST /v1/chat/completions
-ℹ Current token count: { input: 15, output: 0 }                                                                                                                   2:29:33 pm
---> POST /v1/chat/completions 200 5s
-<-- POST /v1/chat/completions
-ℹ Current token count: { input: 71, output: 0 }                                                                                                                   2:29:37 pm
---> POST /v1/chat/completions 200 3s
-<-- GET /v1/models
---> GET /v1/models 200 1ms
-<-- POST /v1/chat/completions
-ℹ Current token count: { input: 1475, output: 0 }                                                                                                                 2:39:49 pm
+ℹ Current token count: { input: 1592, output: 0 }                                                                                                                 3:25:03 pm
 --> POST /v1/chat/completions 200 6s
 <-- POST /v1/chat/completions
-ℹ Current token count: { input: 2455, output: 62 }                                                                                                                2:40:03 pm
---> POST /v1/chat/completions 200 7s
+ℹ Current token count: { input: 2573, output: 63 }                                                                                                                3:25:15 pm
+--> POST /v1/chat/completions 200 6s
 <-- POST /v1/chat/completions
-ℹ Current token count: { input: 2482, output: 126 }                                                                                                               2:40:13 pm
---> POST /v1/chat/completions 200 4s
+ℹ Current token count: { input: 2598, output: 125 }                                                                                                               3:25:24 pm
+--> POST /v1/chat/completions 200 3s
 <-- POST /v1/chat/completions
-ℹ Current token count: { input: 2506, output: 196 }                                                                                                               2:40:19 pm
---> POST /v1/chat/completions 200 15s
-<-- POST /v1/chat/completions
-ℹ Current token count: { input: 2601, output: 793 }                                                                                                               2:40:34 pm
---> POST /v1/chat/completions 200 8s
+ℹ Current token count: { input: 2625, output: 198 }                                                                                                               3:25:29 pm
+--> POST /v1/chat/completions 200 13s

@@ -1,79 +1,16 @@
-2026-08-01T14:31:59.725+10:00  INFO 25915 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Starting TriageMateApplication using Java 21.0.11 with PID 25915 (/home/auspost/work/triagemate/target/classes started by auspost in /home/auspost/work/triagemate)
-2026-08-01T14:31:59.729+10:00  INFO 25915 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : No active profile set, falling back to 1 default profile: "default"
-2026-08-01T14:32:00.678+10:00  INFO 25915 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
-2026-08-01T14:32:00.688+10:00  INFO 25915 --- [triage-copilot] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
-2026-08-01T14:32:00.689+10:00  INFO 25915 --- [triage-copilot] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.36]
-2026-08-01T14:32:00.738+10:00  INFO 25915 --- [triage-copilot] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
-2026-08-01T14:32:00.739+10:00  INFO 25915 --- [triage-copilot] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 941 ms
-2026-08-01T14:32:01.316+10:00  INFO 25915 --- [triage-copilot] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
-2026-08-01T14:32:01.666+10:00  INFO 25915 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
-2026-08-01T14:32:01.674+10:00  INFO 25915 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Started TriageMateApplication in 2.444 seconds (process running for 2.806)
-2026-08-01T14:39:48.647+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
-2026-08-01T14:39:48.647+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
-2026-08-01T14:39:48.648+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
-2026-08-01T14:39:48.937+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.ZoneOffset is recursive. Omitting from schema.
-2026-08-01T14:39:48.939+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.ZoneOffset is recursive. Omitting from schema.
-2026-08-01T14:39:48.941+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.Duration is recursive. Omitting from schema.
-2026-08-01T14:39:48.950+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.ZoneOffset is recursive. Omitting from schema.
-2026-08-01T14:39:48.950+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.ZoneOffset is recursive. Omitting from schema.
-2026-08-01T14:39:48.950+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.google.adk.tools.FunctionCallingUtils  : Type java.time.ZoneOffset is recursive. Omitting from schema.
-2026-08-01T14:40:34.069+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.c.triage.agent.AdkDiagnosisEngine      : agent returned unparseable JSON for INC0010005 — one repair retry (FND-42)
-
-com.fasterxml.jackson.core.JsonParseException: Unexpected character ('`' (code 96)): expected a valid value (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
- at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 1]
-        at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2660) ~[jackson-core-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.core.base.ParserMinimalBase._reportUnexpectedChar(ParserMinimalBase.java:741) ~[jackson-core-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._handleOddValue(ReaderBasedJsonParser.java:2054) ~[jackson-core-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.nextToken(ReaderBasedJsonParser.java:780) ~[jackson-core-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper._initForReading(ObjectMapper.java:5004) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper._readMapAndClose(ObjectMapper.java:4910) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper.readValue(ObjectMapper.java:3860) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper.readValue(ObjectMapper.java:3828) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.company.triage.agent.AdkDiagnosisEngine.runAgentAndParse(AdkDiagnosisEngine.java:286) ~[classes/:na]
-        at com.company.triage.agent.AdkDiagnosisEngine.diagnoseBound(AdkDiagnosisEngine.java:254) ~[classes/:na]
-        at com.company.triage.agent.AdkDiagnosisEngine.diagnose(AdkDiagnosisEngine.java:199) ~[classes/:na]
-        at com.company.triage.orchestration.DiagnosisOrchestrator.lambda$callWithTimeout$0(DiagnosisOrchestrator.java:216) ~[classes/:na]
-        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317) ~[na:na]
-        at java.base/java.lang.VirtualThread.run(VirtualThread.java:329) ~[na:na]
-
-2026-08-01T14:40:42.066+10:00  WARN 25915 --- [triage-copilot] [     virtual-48] c.c.triage.agent.AdkDiagnosisEngine      : repair retry also failed to parse for INC0010005 — degrading
-
-com.fasterxml.jackson.databind.exc.InvalidFormatException: Cannot deserialize value of type `double` from String "HIGH": not a valid `double` value (as String to convert)
- at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 538] (through reference chain: com.company.triage.model.DiagnosisReport["candidateSystems"]->java.util.ArrayList[0]->com.company.triage.model.CandidateSystem["confidence"])
-        at com.fasterxml.jackson.databind.exc.InvalidFormatException.from(InvalidFormatException.java:67) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.DeserializationContext.weirdStringException(DeserializationContext.java:1959) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.DeserializationContext.handleWeirdStringValue(DeserializationContext.java:1245) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.StdDeserializer._parseDoublePrimitive(StdDeserializer.java:1223) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.StdDeserializer._parseDoublePrimitive(StdDeserializer.java:1197) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.NumberDeserializers$DoubleDeserializer.deserialize(NumberDeserializers.java:686) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.NumberDeserializers$DoubleDeserializer.deserialize(NumberDeserializers.java:667) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.SettableBeanProperty.deserialize(SettableBeanProperty.java:543) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer._deserializeWithErrorWrapping(BeanDeserializer.java:585) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer._deserializeUsingPropertyBased(BeanDeserializer.java:447) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializerBase.deserializeFromObjectUsingNonDefault(BeanDeserializerBase.java:1497) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer.deserializeFromObject(BeanDeserializer.java:348) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer.deserialize(BeanDeserializer.java:185) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.CollectionDeserializer._deserializeFromArray(CollectionDeserializer.java:361) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.CollectionDeserializer.deserialize(CollectionDeserializer.java:246) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.std.CollectionDeserializer.deserialize(CollectionDeserializer.java:30) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.SettableBeanProperty.deserialize(SettableBeanProperty.java:543) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer._deserializeWithErrorWrapping(BeanDeserializer.java:585) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer._deserializeUsingPropertyBased(BeanDeserializer.java:447) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializerBase.deserializeFromObjectUsingNonDefault(BeanDeserializerBase.java:1497) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer.deserializeFromObject(BeanDeserializer.java:348) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.BeanDeserializer.deserialize(BeanDeserializer.java:185) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:342) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper._readMapAndClose(ObjectMapper.java:4917) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper.readValue(ObjectMapper.java:3860) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.fasterxml.jackson.databind.ObjectMapper.readValue(ObjectMapper.java:3828) ~[jackson-databind-2.18.2.jar:2.18.2]
-        at com.company.triage.agent.AdkDiagnosisEngine.runAgentAndParse(AdkDiagnosisEngine.java:296) ~[classes/:na]
-        at com.company.triage.agent.AdkDiagnosisEngine.diagnoseBound(AdkDiagnosisEngine.java:254) ~[classes/:na]
-        at com.company.triage.agent.AdkDiagnosisEngine.diagnose(AdkDiagnosisEngine.java:199) ~[classes/:na]
-        at com.company.triage.orchestration.DiagnosisOrchestrator.lambda$callWithTimeout$0(DiagnosisOrchestrator.java:216) ~[classes/:na]
-        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317) ~[na:na]
-        at java.base/java.lang.VirtualThread.run(VirtualThread.java:329) ~[na:na]
-
-2026-08-01T14:40:42.069+10:00  WARN 25915 --- [triage-copilot] [nio-8080-exec-1] c.c.t.o.DiagnosisOrchestrator            : primary engine failed for INC0010005 (IllegalStateException: agent JSON did not match the J4 contract after one repair retry) — degrading to the deterministic engine
-2026-08-01T14:40:47.913+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : [ServiceNow] identical AI work note already present on INC0010005 — skipping
-2026-08-01T14:40:49.458+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : [ServiceNow] identical AI work note already present on INC0010005 — skipping
-2026-08-01T14:40:49.458+10:00  INFO 25915 --- [triage-copilot] [nio-8080-exec-1] c.c.t.o.DiagnosisOrchestrator            : diagnosis for INC0010005 completed in 60771 ms (11 steps, writeback=true)
+2026-08-01T15:24:35.236+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Starting TriageMateApplication using Java 21.0.11 with PID 27519 (/home/auspost/work/triagemate/target/classes started by auspost in /home/auspost/work/triagemate)
+2026-08-01T15:24:35.239+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : No active profile set, falling back to 1 default profile: "default"
+2026-08-01T15:24:36.070+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-08-01T15:24:36.080+10:00  INFO 27519 --- [triage-copilot] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-01T15:24:36.081+10:00  INFO 27519 --- [triage-copilot] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.36]
+2026-08-01T15:24:36.160+10:00  INFO 27519 --- [triage-copilot] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-08-01T15:24:36.161+10:00  INFO 27519 --- [triage-copilot] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 872 ms
+2026-08-01T15:24:36.696+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-08-01T15:24:37.017+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-08-01T15:24:37.025+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Started TriageMateApplication in 2.209 seconds (process running for 2.522)
+2026-08-01T15:25:03.134+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-01T15:25:03.134+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-01T15:25:03.135+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-08-01T15:25:45.345+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T15:25:47.289+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T15:25:47.289+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.o.DiagnosisOrchestrator            : diagnosis for INC0010005 completed in 44129 ms (6 steps, writeback=true)
