@@ -41,7 +41,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟡 **Stable** (CDS R5–R8, 2026-08-01) — LT4 latency spike returned and was folded in; it exposed that **~75% of the run is model-think time with zero events**, so LT4 grew from 3 tool edges to **6** (model edges verified by `javap`). Reveal-cadence fork RESOLVED. **No open design forks**; projector legibility re-classified as implementation-time visual QA, not a blocker. One quiet round from 🟢 | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟡 **Stable, design-only** (CDS R5–R9, 2026-08-02) — LT4 latency spike returned and was folded in (LT4 grew from 3 tool edges to **6**, `javap`-verified). LT5 projector risk **closed by operator**: presentation is a big screen off the corp laptop, not a projected image, so the photon-loss caveat doesn't apply. **Zero open design items**, one quiet round from 🟢. **Not yet implemented** — no code exists; needs `cds-implementation-planner` if/when scheduled | J1, J2, J4, J7, J8 |
 
 ## Spikes
 

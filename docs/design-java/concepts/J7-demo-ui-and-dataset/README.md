@@ -14,6 +14,13 @@ convincingly. Scope to **one** demonstration application — do not cover the en
   evidence, missing info, next action, and the tool-call trace (J8) so viewers see
   it "really consulted all four sources."
 - Plain HTML + fetch to `/api/diagnose/{n}`; no framework needed.
+- **Theme picker (corner button, 7 themes) is a developer convenience, not presentation
+  chrome (clarified 2026-08-02).** Each contributor picks the theme that reads best on
+  their own machine while building; it is not intended to be visible or used during the
+  actual demo. Left in the shipped UI as-is — harmless, small, and useful right up until
+  presentation day — rather than adding a build flag to hide it, which would be effort
+  spent on a problem that doesn't block anything. If it needs to disappear for the actual
+  run, that's a one-line CSS `display:none` on `.theme-btn`, not a design change.
 - **"Who to talk to" card (FND-21: not previously cross-referenced here)** — J9's
   suggested contacts, sourced from wiki authors of consulted runbooks and recent
   committers to the implicated file. Advisory, UI-only — see the FND-2 privacy carve-out
