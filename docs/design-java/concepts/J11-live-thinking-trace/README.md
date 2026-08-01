@@ -308,10 +308,11 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
   (states progress, disclosure toggles work); LT6's four real logos render legibly.
 - 🔬 **LT4 real ADK per-step latency ✅ DONE** (2026-08-01, `verification-lt4-latency/`):
   first end-to-end agentic run against a real Copilot-served model (real ServiceNow +
-  Confluence). **3 tool calls → 44s wall clock; mean ~8.4s per tool call; 14.6s for the final
-  report.** ⇒ `N × 8.4 + 14.6`, so 8 calls ≈ 82s and a full 10-call run ≈ 99s. **This settles
-  LT4: a three-call run already leaves the screen blank for 40 seconds, with a 14.6s stretch
-  of nothing — live streaming is required, not a nice-to-have.** It also settles the reveal
+  Confluence). **3 runs, all successful and byte-identical: 3 tool calls → 37s mean;
+  8.0s ± 2.6s per tool call; 13.1s for the final report.** ⇒ `N × 8.0 + 13.1`, so 8 calls
+  ≈ 77s and a full 10-call run ≈ 93s ± 8. **This settles
+  LT4: a three-call run already leaves the screen blank for 37 seconds, with a 13s stretch of
+  nothing — live streaming is required, not a nice-to-have.** It also settles the reveal
   cadence below (real gaps dwarf any artificial floor) and exposed FND-69 (the old 90s timeout
   was shorter than a run its own tool budget permits).
 - ⏳ Pending: LT2 registry/catalog subset test, LT3 replay-frame wording review,
@@ -319,10 +320,9 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
   `spring.mvc.async.request-timeout` item was withdrawn as SSE-only.)*
 
 ## Open / risks
-- ~~**Real ADK per-step latency**~~ ✅ **MEASURED 2026-08-01** — mean ~8.4s per tool call,
-  14.6s for the final report, 44s for a 3-call run. LT4 confirmed necessary; `timeout-ms`
-  corrected 90s → 120s (FND-69). `verification-lt4-latency/findings.md`. **Single sample** —
-  the conclusion is robust to variance but the mean itself isn't yet.
+- ~~**Real ADK per-step latency**~~ ✅ **MEASURED 2026-08-01, 3 runs** — 8.0s ± 2.6s per tool
+  call, 13.1s for the final report, 37s for a 3-call run. LT4 confirmed necessary;
+  `timeout-ms` corrected 90s → 120s (FND-69). `verification-lt4-latency/findings.md`.
 - **Projector legibility** of glow-pulse vs spinner — reasoned, not measured. One dry run.
   Now the *only* remaining external blocker on J11.
 - ~~**Reveal cadence**: fixed floor vs proportional-with-floor~~ — settled by the LT4

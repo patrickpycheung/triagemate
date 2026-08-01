@@ -81,13 +81,13 @@ triage:
     # fallback fire on every normal-but-unhurried real run, which looks identical on stage to
     # the model actually failing and defeats D1's whole point.
     #
-    # 120s — MEASURED, not guessed (FND-69, 2026-08-01). The LT4 spike ran the real agent
-    # against a Copilot-served model with real ServiceNow + Confluence:
-    #   3 tool calls → 44s wall clock; mean ~8.4s per tool call; ~14.6s for the final report.
-    #   ⇒ N calls ≈ N × 8.4s + 14.6s, so a full 10-call run ≈ 99s.
+    # 120s — MEASURED over 3 runs, not guessed (FND-69, 2026-08-01). The LT4 spike ran the
+    # real agent against a Copilot-served model with real ServiceNow + Confluence:
+    #   3 tool calls → 37s mean; 8.0s ± 2.6s per tool call; 13.1s for the final report.
+    #   ⇒ N calls ≈ N × 8.0s + 13.1s, so a full 10-call run ≈ 92.7s ± 8.2 (3.3 sd under 120s).
     # The previous 90s (itself self-documented as "a safer guess, not a measurement") was
     # therefore SHORTER than a run its own tool budget permits: max-tool-calls=10 allowed a
-    # diagnosis that timeout-ms=90000 would kill at ~99s, degrading to deterministic mid-demo
+    # diagnosis that timeout-ms=90000 would kill, degrading to deterministic mid-demo
     # — indistinguishable on stage from the agent failing.
     #
     # Fixed by raising the clock rather than cutting the budget to ~7: the tool budget is a
@@ -95,7 +95,7 @@ triage:
     # we wait). Tightening the safety bound to paper over a liveness number would cost real
     # investigation depth — the documented flow uses up to 8 of the 8 registered tools, so 7
     # would cut into legitimate work — to fix something that isn't a safety problem.
-    # 120s ≈ the 99s worst case + ~20% headroom for one slow call.
+    # 120s puts the 10-call worst case 3.3 sd clear, the realistic 8-call case 5.9 sd clear.
     # Full measurement: concepts/J11-live-thinking-trace/verification-lt4-latency/findings.md
     timeout-ms: 120000
 

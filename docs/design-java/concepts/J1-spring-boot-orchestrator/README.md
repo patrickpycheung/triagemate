@@ -32,11 +32,11 @@ is the one place their calls meet, which is also why concurrent-call coalescing
   — runs on a virtual thread bounded by `triage.orchestrator.timeout-ms` (default
   **120000 — MEASURED (FND-69, 2026-08-01)**, was 90000, itself self-documented as a
   guess. The LT4 spike ran the real agent against a Copilot-served model with real
-  ServiceNow + Confluence: 3 tool calls → 44s, mean ~8.4s per call, ~14.6s for the final
-  report, so `N × 8.4 + 14.6` puts a full 10-call run at ~99s. The old 90s was therefore
-  SHORTER than a run its own `max-tool-calls: 10` budget permits — the agent could be
-  killed by the timeout at ~99s and degrade mid-demo, which on stage is
-  indistinguishable from the model failing. Raised the clock rather than cutting the
+  ServiceNow + Confluence, 3 runs: 3 tool calls → 37s mean, **8.0s ± 2.6s per call**, 13.1s
+  for the final report, so `N × 8.0 + 13.1` puts a full 10-call run at **92.7s ± 8.2**. The
+  old 90s was therefore SHORTER than a run its own `max-tool-calls: 10` budget permits — the
+  agent could be killed by the timeout and degrade mid-demo, which on stage is
+  indistinguishable from the model failing. At 120s that worst case sits 3.3 sd clear. Raised the clock rather than cutting the
   budget: the tool budget is a J8 *safety* bound, the timeout a *liveness* one, and
   trading away investigation depth to fix a liveness number is the wrong lever.
   `verification-lt4-latency/findings.md`.) Previously enforced nowhere: a hung gateway hung the request

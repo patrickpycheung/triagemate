@@ -75,14 +75,14 @@ that will never contact a model — while J1's FND-49 warning simultaneously say
 **Where**: `application.yml` — `triage.agent.max-tool-calls: 10` vs
 `triage.orchestrator.timeout-ms: 90000`.
 **What**: the 90s wall clock was self-documented as "a safer guess, not a measurement". The
-LT4 spike measured it: ~8.4s per tool call and ~14.6s for the final report, i.e.
-`N × 8.4 + 14.6`. A full 10-call run — which the tool budget explicitly allows — lands at
-**~99s**, so the agent could be killed by its own timeout and degrade to deterministic
-mid-run. On stage that is indistinguishable from the model failing, which is exactly the
+LT4 spike measured it over 3 runs: **8.0s ± 2.6s per tool call** and **13.1s** for the final
+report, i.e. `N × 8.0 + 13.1`. A full 10-call run — which the tool budget explicitly allows —
+lands at **92.7s ± 8.2**, so the agent could be killed by its own timeout and degrade to
+deterministic mid-run. On stage that is indistinguishable from the model failing, which is exactly the
 FND-8 confusion the degraded-run banner exists to prevent. The two bounds contradicted each
 other and nothing had ever checked them against one another.
-- **Resolution**: fixed:HEAD — `timeout-ms` 90000 → **120000** (~99s worst case + ~20%
-  headroom). Raised the clock rather than cutting the tool budget to ~7: the budget is a J8
+- **Resolution**: fixed:HEAD — `timeout-ms` 90000 → **120000**, which puts the 10-call worst
+  case 3.3 sd clear and the realistic 8-call case 5.9 sd clear. Raised the clock rather than cutting the tool budget to ~7: the budget is a J8
   **safety** bound (how much the model may do) and the timeout a **liveness** bound (how long
   we wait); trading away investigation depth — the documented flow uses up to 8 of the 8
   registered tools — to fix a liveness number is the wrong lever. Note the squeeze is
