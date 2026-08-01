@@ -1,0 +1,106 @@
+{
+    "report": {
+        "incidentNumber": "INC0010005",
+        "generatedAt": "2026-08-01T14:40:46.282765476+10:00",
+        "reportedSymptom": "Delivery Hazards - All hazards are no longer present \u2014 https://delivery-hazards.ap-cooi-prod-02.prod.aws.auspost/facility/588/hazards\r\nDelivery Hazards - all hazards are no longer present and appear to have been cleared from site. Is there any way to retrieve hazards that were entered into the portal.\r\n\r\nSteve Taylor (taylors) has raised the below ticket for - ~I can't find what I'm looking for (Applications and Software)\r\nOption Selected: ~I can't find what I'm looking for\r\nBest contact hours: 0400 - 1200",
+        "affectedFunction": "Inquiry / Help",
+        "environment": null,
+        "identifiers": {
+            "correlationId": null,
+            "errorCode": null,
+            "orderId": null
+        },
+        "candidateSystems": [
+            {
+                "name": "",
+                "confidence": 0.3,
+                "evidenceRefs": [
+                    "e-incident"
+                ]
+            }
+        ],
+        "suggestedAssignment": {
+            "group": "Unassigned \u2014 no ownership or similar-incident signal",
+            "confidence": "LOW",
+            "evidenceRefs": [
+                "e-incident"
+            ]
+        },
+        "evidence": [
+            {
+                "id": "e-incident",
+                "source": "servicenow-incident",
+                "summary": "Delivery Hazards - All hazards are no longer present \u2014 https://delivery-hazards.ap-cooi-prod-02.prod.aws.auspost/facility/588/hazards\r\nDelivery Hazards - all hazards are no longer present and appear to have been cleared from site. Is there any way to retrieve hazards that were entered into the portal.\r\n\r\nSteve Taylor (taylors) has raised the below ticket for - ~I can't find what I'm looking for (Applications and Software)\r\nOption Selected: ~I can't find what I'm looking for\r\nBest contact hours: 0400 - 1200",
+                "link": "INC0010005"
+            }
+        ],
+        "suggestedContacts": [
+            {
+                "name": "admin",
+                "handle": "admin",
+                "source": "servicenow",
+                "reason": "commented on this incident",
+                "link": "INC0010005",
+                "signal": "wrote on the ticket"
+            },
+            {
+                "name": "Delivery Hazards",
+                "handle": null,
+                "source": "servicenow",
+                "reason": "named in the incident description or comments",
+                "link": "INC0010005",
+                "signal": "mentioned on the ticket"
+            },
+            {
+                "name": "Steve Taylor",
+                "handle": null,
+                "source": "servicenow",
+                "reason": "named in the incident description or comments",
+                "link": "INC0010005",
+                "signal": "mentioned on the ticket"
+            },
+            {
+                "name": "Option Selected",
+                "handle": null,
+                "source": "servicenow",
+                "reason": "named in the incident description or comments",
+                "link": "INC0010005",
+                "signal": "mentioned on the ticket"
+            },
+            {
+                "name": "AI Triage",
+                "handle": null,
+                "source": "servicenow",
+                "reason": "named in the incident description or comments",
+                "link": "INC0010005",
+                "signal": "mentioned on the ticket"
+            }
+        ],
+        "contradictingEvidence": [],
+        "missingInformation": [
+            "No transaction/correlation identifier in the ticket text",
+            "No log lines matched in the \u00b110m window around opened_at",
+            "No runbook or known-error page matched the symptom terms",
+            "Environment not set on the ticket",
+            "No caller follow-up comments to narrow scope/timing"
+        ],
+        "recommendedNextAction": "Reproduce the failure and capture a correlation id; the ticket text carries none.",
+        "confidenceOverall": "MEDIUM",
+        "advisory": true
+    },
+    "trace": [
+        "\u26a0 primary engine did not converge (IllegalStateException: agent JSON did not match the J4 contract after one repair retry) \u2014 degraded to the deterministic engine",
+        "servicenow.getIncident(INC0010005) \u2192 CI=, env=null",
+        "understand: id=null, keywords=[delivery, hazards, longer, present, https, cooi, prod, auspost], app=Delivery Hazards - All hazards are no longer present ",
+        "servicenow.findSimilarIncidents \u2192 0 hits",
+        "servicenow.findOwnership() \u2192 none",
+        "confluence.search(query=\"delivery hazards longer present https cooi prod auspost Delivery Hazards - All hazards are no longer present\") \u2192 0 page(s)",
+        "sumo.search(query=\"delivery hazards longer\", scopes=[prod/payment, prod/order-api] \u2192 prod/payment, window=\u00b110m, max=20) \u2192 0 line(s); errorToken=null",
+        "contacts: 5 suggested (from 0 doc(s) + 0 code file(s), merged across sources)",
+        "report assembled: 1 candidates, 1 evidence items, assignment=Unassigned \u2014 no ownership or similar-incident signal",
+        "servicenow.addWorkNote \u2192 posted 'Sources consulted' comment",
+        "servicenow.addWorkNote \u2192 posted 'First-pass diagnosis' comment (advisory)"
+    ],
+    "engine": "DEGRADED_TO_DETERMINISTIC",
+    "writebackPosted": true
+}
