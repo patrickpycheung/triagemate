@@ -408,7 +408,21 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
 - ~~**Real ADK per-step latency**~~ ✅ **MEASURED 2026-08-01, 3 runs** — 8.0s ± 2.6s per tool
   call, 13.1s for the final report, 37s for a 3-call run. LT4 confirmed necessary;
   `timeout-ms` corrected 90s → 120s (FND-69). `verification-lt4-latency/findings.md`.
-- **Projector legibility** of glow-pulse vs spinner — reasoned, not measured. One dry run.
+- **Projector legibility** — 🟡 **half-answered at the desk, 2026-08-02**
+  (`verification-lt5-projector/`). Contrast maths on the real palettes settles one half
+  *without* a projector: the glow-pulse ring is **1.31–1.69 : 1** in every theme — below
+  WCAG's 3:1 non-text minimum — while the solid-accent border/shimmer/spinner is
+  **4.05–13.58 : 1**. So **the glow-pulse cannot be the only in-progress signal**, measured,
+  no projector required. What maths *cannot* settle is whether it contributes anything at
+  all: motion is detectable at contrast where detail is not, and that needs eyes.
+  **The question is also smaller than it was written.** The active row already carries three
+  signals, and the two full-alpha ones (left border, shimmer bar) already do the work — so
+  the live question is not "glow-pulse *vs* spinner" but "does the glow earn its place, or is
+  it droppable noise?". A 4-candidate test card (`projector-test.html`, all five real themes)
+  and a pass/fail protocol are ready; the run itself is ~2 minutes.
+  ⚠️ Found while building it: `sketch.html` hardcodes the pulse as `rgba(90,169,255,…)` —
+  the midnight blue — instead of `var(--acc)`, so it would pulse blue on the red, purple and
+  yellow themes. **Do not port that rule into J7 as-is.**
   **Re-classified Round 8: implementation-time visual QA, NOT a design blocker.** Testing the
   premise that made it one — both candidate treatments are already specified, the fallback if
   neither reads is higher contrast (the `projector` theme exists for exactly this), and *no
