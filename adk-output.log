@@ -1,16 +1,19 @@
-2026-08-01T15:24:35.236+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Starting TriageMateApplication using Java 21.0.11 with PID 27519 (/home/auspost/work/triagemate/target/classes started by auspost in /home/auspost/work/triagemate)
-2026-08-01T15:24:35.239+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : No active profile set, falling back to 1 default profile: "default"
-2026-08-01T15:24:36.070+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
-2026-08-01T15:24:36.080+10:00  INFO 27519 --- [triage-copilot] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
-2026-08-01T15:24:36.081+10:00  INFO 27519 --- [triage-copilot] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.36]
-2026-08-01T15:24:36.160+10:00  INFO 27519 --- [triage-copilot] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
-2026-08-01T15:24:36.161+10:00  INFO 27519 --- [triage-copilot] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 872 ms
-2026-08-01T15:24:36.696+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
-2026-08-01T15:24:37.017+10:00  INFO 27519 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
-2026-08-01T15:24:37.025+10:00  INFO 27519 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Started TriageMateApplication in 2.209 seconds (process running for 2.522)
-2026-08-01T15:25:03.134+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
-2026-08-01T15:25:03.134+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
-2026-08-01T15:25:03.135+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
-2026-08-01T15:25:45.345+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
-2026-08-01T15:25:47.289+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
-2026-08-01T15:25:47.289+10:00  INFO 27519 --- [triage-copilot] [nio-8080-exec-1] c.c.t.o.DiagnosisOrchestrator            : diagnosis for INC0010005 completed in 44129 ms (6 steps, writeback=true)
+2026-08-01T16:03:44.422+10:00  INFO 28628 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Starting TriageMateApplication using Java 21.0.11 with PID 28628 (/home/auspost/work/triagemate/target/classes started by auspost in /home/auspost/work/triagemate)
+2026-08-01T16:03:44.424+10:00  INFO 28628 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : No active profile set, falling back to 1 default profile: "default"
+2026-08-01T16:03:45.316+10:00  INFO 28628 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-08-01T16:03:45.327+10:00  INFO 28628 --- [triage-copilot] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-01T16:03:45.328+10:00  INFO 28628 --- [triage-copilot] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.36]
+2026-08-01T16:03:45.384+10:00  INFO 28628 --- [triage-copilot] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-08-01T16:03:45.386+10:00  INFO 28628 --- [triage-copilot] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 904 ms
+2026-08-01T16:03:45.895+10:00  INFO 28628 --- [triage-copilot] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-08-01T16:03:46.303+10:00  INFO 28628 --- [triage-copilot] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-08-01T16:03:46.333+10:00  INFO 28628 --- [triage-copilot] [           main] c.company.triage.TriageMateApplication   : Started TriageMateApplication in 2.337 seconds (process running for 2.671)
+2026-08-01T16:04:05.475+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-01T16:04:05.476+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-01T16:04:05.477+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-08-01T16:04:47.371+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T16:04:50.210+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T16:04:50.210+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-1] c.c.t.o.DiagnosisOrchestrator            : diagnosis for INC0010005 completed in 44706 ms (6 steps, writeback=true)
+2026-08-01T16:06:03.745+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-2] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T16:06:06.459+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-2] c.c.t.g.real.RealServiceNowGateway       : posted advisory work_notes to INC0010005
+2026-08-01T16:06:06.459+10:00  INFO 28628 --- [triage-copilot] [nio-8080-exec-2] c.c.t.o.DiagnosisOrchestrator            : diagnosis for INC0010005 completed in 38211 ms (6 steps, writeback=true)
