@@ -203,6 +203,25 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     }
 
     private DiagnosisResult diagnoseBound(String incidentNumber, List<String> trace, BoundsCallback bounds) {
+        // FND-65 / LT4 latency spike: nothing previously timestamped the trace, so there was
+        // no way to see per-tool-call latency anywhere — not the JSON response, not the
+        // console. `[t=…ms, +…ms]` gives elapsed-since-start and elapsed-since-previous-event
+        // on every trace line below, directly in the response the operator's spike run
+        // already captures. `+…ms` on a tool-call line is "time since the previous event",
+        // which for the agent's OWN decision-making conflates model think-time with the prior
+        // tool's execution time — deliberately: that combined gap is what a human watching
+        // J11's live trace would actually perceive between steps, which is the number this
+        // spike needs, not a clean LLM-vs-tool split.
+        long t0 = System.nanoTime();
+        long[] lastNs = {t0};
+        java.util.function.BiConsumer<List<String>, String> timed = (tr, msg) -> {
+            long now = System.nanoTime();
+            long sinceStartMs = (now - t0) / 1_000_000;
+            long sincePrevMs = (now - lastNs[0]) / 1_000_000;
+            lastNs[0] = now;
+            tr.add("%s  [t=%dms, +%dms]".formatted(msg, sinceStartMs, sincePrevMs));
+        };
+
         LlmAgent agent = LlmAgent.builder()
                 .name(AGENT_NAME)
                 .description("Bounded advisory incident triage")
@@ -223,11 +242,11 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 .beforeToolCallbackSync((invocation, tool, args, toolCtx) -> {
                     if (!bounds.allow(tool.name())) {
                         String why = bounds.denialReason(tool.name());
-                        trace.add("adk: DENIED %s — %s".formatted(tool.name(), why));
+                        timed.accept(trace, "adk: DENIED %s — %s".formatted(tool.name(), why));
                         return Optional.of(Map.of("error", why
                                 + "; stop calling that tool and produce the report from what you have"));
                     }
-                    trace.add("adk tool call: " + tool.name());
+                    timed.accept(trace, "adk tool call: " + tool.name());
                     return Optional.empty();
                 })
                 .build();
@@ -237,7 +256,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         // an empty candidate list, or an evidenceRef pointing at no Evidence in this
         // report. Deserialization alone would let the UI render that without complaint.
         com.company.triage.model.DiagnosisReportValidator.validate(report);
-        trace.add("adk agent finished: %d tool call(s) observed".formatted(bounds.used()));
+        timed.accept(trace, "adk agent finished: %d tool call(s) observed".formatted(bounds.used()));
         return new DiagnosisResult(report, trace);
     }
 

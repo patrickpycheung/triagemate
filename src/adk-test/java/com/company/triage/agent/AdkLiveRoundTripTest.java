@@ -57,6 +57,15 @@ class AdkLiveRoundTripTest {
 
             // The bounds callback observed the tool call (get_incident)
             assertThat(result.trace()).anyMatch(s -> s.contains("adk tool call: get_incident"));
+
+            // FND-65 / LT4 latency spike: every tool-call and finish line carries elapsed
+            // timing, so a real run against the corp-laptop Copilot proxy produces per-step
+            // latency in the trace itself — no console-log correlation needed.
+            var timingPattern = java.util.regex.Pattern.compile("\\[t=\\d+ms, \\+\\d+ms]");
+            assertThat(result.trace())
+                    .filteredOn(s -> s.startsWith("adk tool call:") || s.startsWith("adk agent finished:"))
+                    .isNotEmpty()
+                    .allMatch(s -> timingPattern.matcher(s).find());
         }
     }
 
