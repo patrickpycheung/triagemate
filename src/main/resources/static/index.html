@@ -107,6 +107,131 @@
     .advisory { color:var(--warn); font-size:12px; }
     .link { color:var(--acc); text-decoration:underline; }
 
+    /* ---- LT5: trace-row visual vocabulary (J11) ------------------------------
+       CSS-only building blocks for step-row rendering. TASK-014/015 wire real
+       TraceStep data into rows built from these classes via the
+       stepStateToDataState()/traceRowHtml() helpers in the script below —
+       this task only builds and demonstrates the vocabulary (see the
+       <details class="lt5-demo"> block near the bottom of <body>).
+       Reuses the .ev left-rail idiom (accent border-left + inset background)
+       as its structural base. State lives purely in [data-state] on
+       .trace-row; motion (badge glow-pulse + rail shimmer) is layered on top
+       and is NEVER the only signal — border-left color/token conveys state
+       on its own. verification-lt5-projector/findings.md measured the glow
+       ring at 1.31-1.69:1 contrast, below WCAG's 3:1 non-text minimum in
+       EVERY theme — it's the weakest of three signals, decorative not
+       load-bearing, which is also why prefers-reduced-motion can drop it
+       without losing any information. */
+    .trace-row {
+      position:relative; overflow:hidden; display:flex; gap:10px; align-items:center;
+      padding:8px 10px; margin-bottom:7px; border-radius:0 6px 6px 0;
+      border-left:3px solid var(--border); background:var(--inset);
+    }
+    .trace-badge {
+      position:relative; flex:0 0 auto; width:32px; height:32px; border-radius:8px;
+      display:grid; place-items:center; background:var(--chip); color:var(--muted);
+      font-weight:700; font-size:12px;
+    }
+    .trace-body { flex:1; min-width:0; }
+    .trace-label { font-size:13px; color:var(--ink); }
+    .trace-meta { font-size:11px; color:var(--muted); margin-top:1px; }
+
+    /* -- state tokens: StepState -> data-state, NOT a lowercase of the Java
+       enum. queued/active/done/fail/warn are the 5 the design already names;
+       "abandoned" is this task's own extension for the ABANDONED enum value
+       the CDS table doesn't cover (segment-per-attempt / honesty contract —
+       see README.md lines 110-113). Mirrored 1:1 in stepStateToDataState()
+       below; keep the two in sync if either changes. */
+    .trace-row[data-state="queued"] { opacity:.6; }
+    .trace-row[data-state="queued"] .trace-badge { color:var(--muted); }
+
+    .trace-row[data-state="active"] { border-left-color:var(--acc); }
+    .trace-row[data-state="active"] .trace-label { color:var(--acc); }
+    .trace-row[data-state="active"] .trace-badge {
+      color:var(--acc); animation:tt-pulse 1.4s ease-in-out infinite;
+    }
+    .trace-row[data-state="active"]::after {
+      content:""; position:absolute; left:0; bottom:0; height:2px; width:38%;
+      background:linear-gradient(90deg, transparent, var(--acc), transparent);
+      animation:tt-shimmer 1.5s linear infinite;
+    }
+
+    .trace-row[data-state="done"] { border-left-color:var(--ok); }
+    .trace-row[data-state="done"] .trace-badge { color:var(--ok); }
+
+    /* FAILED and DENIED share --warn (the theme system has no dedicated
+       error/red var — see :root token list at the top of this file) and are
+       told apart by border style + icon glyph instead, so state is never
+       carried by color alone here either. */
+    .trace-row[data-state="fail"] { border-left-color:var(--warn); }
+    .trace-row[data-state="fail"] .trace-badge { color:var(--warn); }
+    .trace-row[data-state="fail"] .trace-label::before { content:"\2715 "; }
+
+    .trace-row[data-state="warn"] { border-left-color:var(--warn); border-left-style:dashed; }
+    .trace-row[data-state="warn"] .trace-badge { color:var(--warn); }
+    .trace-row[data-state="warn"] .trace-label::before { content:"\26A0 "; }
+
+    /* ABANDONED (J11 Invariant 1): frozen mid-run by an FND-7 degrade. Kept
+       visible — never deleted, per the honesty contract — but struck through
+       and dimmed so it reads as "this happened, then stopped mattering". */
+    .trace-row[data-state="abandoned"] { opacity:.5; border-left-color:var(--muted); }
+    .trace-row[data-state="abandoned"] .trace-badge { color:var(--muted); }
+    .trace-row[data-state="abandoned"] .trace-label { text-decoration:line-through; }
+
+    /* Glow ring and shimmer both derive their color from var(--acc) via
+       color-mix() — never a hardcoded rgba(), which is the exact LT5 bug
+       (sketch.html hardcoded rgba(90,169,255,…), the midnight blue, so it
+       pulsed blue on every theme including auspost red and projector
+       yellow). color-mix() re-derives on every theme switch automatically,
+       no JS recompute needed — verified by inspection across midnight,
+       auspost, hackathon, paper and projector (all 7 data-theme values
+       reference var(--acc) here; grepped for hex/rgba in this block — none). */
+    @keyframes tt-pulse {
+      0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--acc) 0%, transparent); }
+      50% { box-shadow:0 0 0 5px color-mix(in srgb, var(--acc) 22%, transparent); transform:scale(1.06); }
+    }
+    @keyframes tt-shimmer {
+      0% { transform:translateX(-100%); }
+      100% { transform:translateX(360%); }
+    }
+
+    /* Round-6 TRIAGEMATE decision (README.md lines 145-161): model-think and
+       other non-platform rows render SUBORDINATE — no vendor badge, dimmer,
+       slightly indented, connective rows rather than peers of real platform
+       rows. Badging them as equals would overstate the evidence trail (only
+       3 of 7 rows in the measured run touched a real system). */
+    .trace-row--subordinate {
+      opacity:.6; margin-left:20px; padding-left:10px;
+      border-left-width:2px; border-left-style:dotted;
+    }
+    .trace-row--subordinate .trace-badge { display:none; }
+    .trace-row--subordinate .trace-label { font-size:12.5px; }
+
+    /* Brand-tinted badges (the --sn/--cf/--sl/--gl vars added in TASK-012).
+       Identity only — which system, not what state it's in. State is always
+       carried separately by border-left/icon/animation above. */
+    .trace-row[data-platform="servicenow"] .trace-badge { color:var(--sn); }
+    .trace-row[data-platform="confluence"] .trace-badge { color:var(--cf); }
+    .trace-row[data-platform="sumologic"]  .trace-badge { color:var(--sl); }
+    .trace-row[data-platform="gitlab"]     .trace-badge { color:var(--gl); }
+
+    /* Requirement 3: reduced motion removes ALL animation (glow-pulse AND
+       shimmer) — state is still conveyed, because border-left color/token,
+       the icon glyph and the label text above never depended on motion in
+       the first place. The static ring below is a bonus, not a requirement. */
+    @media (prefers-reduced-motion:reduce) {
+      .trace-row[data-state="active"] .trace-badge,
+      .trace-row[data-state="active"]::after { animation:none !important; }
+      .trace-row[data-state="active"] .trace-badge {
+        box-shadow:0 0 0 3px color-mix(in srgb, var(--acc) 35%, transparent);
+      }
+      .trace-row[data-state="active"]::after { display:none; }
+    }
+
+    .lt5-demo { margin-top:26px; }
+    .lt5-demo summary { cursor:pointer; color:var(--muted); font-size:12px; }
+    .lt5-demo[open] summary { margin-bottom:10px; }
+
     /* ---- Theme picker (corner) ---- */
     .theme-btn {
       position:fixed; top:14px; right:14px; z-index:20;
@@ -181,6 +306,17 @@
   </div>
 
   <div id="out"></div>
+
+  <!-- LT5 dev sample section — NOT live data. Demonstrates the trace-row
+       visual vocabulary (state mapping, glow/shimmer, TRIAGEMATE subordinate
+       treatment) built by this task, for TASK-014/015 to consume. Collapsed
+       by default so it doesn't intrude on the real demo flow; expand to
+       inspect, or switch themes with the picker above while it's open to
+       confirm the glow-pulse re-derives from var(--acc) per theme. -->
+  <details class="lt5-demo">
+    <summary>LT5 visual vocabulary — dev sample rows (not live data)</summary>
+    <div id="lt5Sample"></div>
+  </details>
 </div>
 
 <script>
@@ -267,6 +403,81 @@ async function run() {
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ---- LT5 visual vocabulary building blocks -------------------------------
+   Building blocks only — no live TraceStep wiring here (that's TASK-014/015).
+   This is deliberately a lookup table, not a naive .toLowerCase(): PENDING,
+   FAILED and DENIED all diverge from a lowercase mapping (see README.md
+   lines 341-343 for the original 5; ABANDONED is this task's own extension
+   for the enum value the design doc's table doesn't cover — struck-through
+   per the segment-per-attempt section, README.md lines 110-113).
+*/
+const STEP_STATE_TO_DATA_STATE = {
+  PENDING:   'queued',
+  ACTIVE:    'active',
+  DONE:      'done',
+  FAILED:    'fail',
+  DENIED:    'warn',
+  ABANDONED: 'abandoned',
+};
+function stepStateToDataState(stepState) {
+  return STEP_STATE_TO_DATA_STATE[stepState] || 'queued';
+}
+
+// Explicit self-check of all 6 mappings — no browser test runner exists for
+// this static HTML/JS, so this is the closest thing to "test all five (six)
+// explicitly" that runs automatically on every page load.
+console.assert(stepStateToDataState('PENDING')   === 'queued',    'LT5 state mapping: PENDING');
+console.assert(stepStateToDataState('ACTIVE')    === 'active',    'LT5 state mapping: ACTIVE');
+console.assert(stepStateToDataState('DONE')      === 'done',      'LT5 state mapping: DONE');
+console.assert(stepStateToDataState('FAILED')    === 'fail',      'LT5 state mapping: FAILED');
+console.assert(stepStateToDataState('DENIED')    === 'warn',      'LT5 state mapping: DENIED');
+console.assert(stepStateToDataState('ABANDONED') === 'abandoned', 'LT5 state mapping: ABANDONED');
+
+// Row template — the reusable markup block TASK-014/015 will call per
+// TraceStep to build the live-poll / replay list.
+//   step = {
+//     state:     StepState string ('PENDING'|'ACTIVE'|'DONE'|'FAILED'|'DENIED'|'ABANDONED'),
+//     platform:  'servicenow'|'confluence'|'sumologic'|'gitlab'|'triagemate',
+//     badgeText: short vendor abbreviation (ignored for 'triagemate' — no badge is shown),
+//     label:     the in-progress/result label text,
+//     meta:      small secondary line (platform · duration/status)
+//   }
+function traceRowHtml(step) {
+  const dataState = stepStateToDataState(step.state);
+  const subordinate = step.platform === 'triagemate';
+  const cls = 'trace-row' + (subordinate ? ' trace-row--subordinate' : '');
+  const badge = subordinate ? '' : `<div class="trace-badge">${esc(step.badgeText || '')}</div>`;
+  return `<div class="${cls}" data-state="${esc(dataState)}" data-platform="${esc(step.platform || '')}">
+    ${badge}
+    <div class="trace-body">
+      <div class="trace-label">${esc(step.label)}</div>
+      <div class="trace-meta">${esc(step.meta || '')}</div>
+    </div>
+  </div>`;
+}
+
+// Dev-only demo: one sample row per data-state (plus the two real fail/warn
+// variants and two TRIAGEMATE subordinate rows) so the vocabulary above is
+// inspectable without live data. Lives inside the collapsed <details
+// class="lt5-demo"> — expand it, then use the theme picker to confirm the
+// glow-pulse ring re-derives from var(--acc) across themes.
+function initLt5Demo() {
+  const el = document.getElementById('lt5Sample');
+  if (!el) return;
+  const samples = [
+    { state:'PENDING',   platform:'gitlab',     badgeText:'GL', label:'Searching GitLab for related commits…', meta:'gitlab · queued' },
+    { state:'ACTIVE',    platform:'servicenow', badgeText:'SN', label:'Reading the incident…',                  meta:'servicenow · in progress' },
+    { state:'DONE',      platform:'confluence', badgeText:'CF', label:'Runbook found',                          meta:'confluence · 7.1 s' },
+    { state:'FAILED',    platform:'sumologic',  badgeText:'SL', label:'Log query failed',                       meta:'sumologic · error' },
+    { state:'DENIED',    platform:'gitlab',     badgeText:'GL', label:'Blocked an unrecognised tool call',      meta:'gitlab · denied' },
+    { state:'ABANDONED', platform:'servicenow', badgeText:'SN', label:'Reading the incident…',                  meta:'servicenow · abandoned — fallback started' },
+    { state:'ACTIVE',    platform:'triagemate', badgeText:'',   label:'Thinking…',                              meta:'model · in progress' },
+    { state:'DONE',      platform:'triagemate', badgeText:'',   label:'chose search_confluence',                meta:'model · 2.4 s' },
+  ];
+  el.innerHTML = samples.map(traceRowHtml).join('');
+}
+initLt5Demo();
 
 function render(data) {
   const r = data.report, t = data.trace || [];
