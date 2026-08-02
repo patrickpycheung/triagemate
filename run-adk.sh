@@ -43,16 +43,46 @@ fi
 
 PROXY_PORT="4000"
 PROXY_BASE="http://localhost:${PROXY_PORT}/v1"
+PUBLIC_NPM_REGISTRY="https://registry.npmjs.org/"
+SYSTEM_CAFILE="/etc/ssl/certs/ca-certificates.crt"
 
+STARTED_PROXY=false
 if curl -sS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1; then
   echo "Copilot proxy already up at $PROXY_BASE"
-elif command -v copilot-api >/dev/null 2>&1 || command -v npx >/dev/null 2>&1; then
+elif command -v copilot-api >/dev/null 2>&1; then
   echo "Starting Copilot proxy: copilot-api start --port $PROXY_PORT --proxy-env"
-  PROXY_CMD=$(command -v copilot-api >/dev/null 2>&1 && echo copilot-api || echo "npx copilot-api@latest")
-  nohup $PROXY_CMD start --port "$PROXY_PORT" --proxy-env \
+  nohup copilot-api start --port "$PROXY_PORT" --proxy-env \
     > /tmp/copilot-api.log 2>&1 &
   PROXY_PID=$!
   echo "  proxy pid $PROXY_PID, log: /tmp/copilot-api.log"
+  STARTED_PROXY=true
+elif command -v npx >/dev/null 2>&1; then
+  # Plain `npx copilot-api@latest` fails on a corp laptop whose npm points at
+  # an internal Nexus registry (E401, then a cert-chain error even once
+  # pointed at the public registry) — see bin/setup-copilot-api.sh for the
+  # full story. That script fixes this by installing an npx()/copilot-api
+  # override into ~/.bashrc, but ~/.bashrc is only sourced by interactive
+  # shells — a script invoked as `./run-adk.sh` never sources it, so that
+  # override is NOT active here even on a laptop where it's set up and the
+  # manual command works. Route explicitly through the public registry +
+  # system CA bundle ourselves, matching that script's RUN() helper, so the
+  # proxy starts the same way whether this is run by hand or by the script.
+  NPX_ARGS=(--yes --registry="$PUBLIC_NPM_REGISTRY")
+  if [ -f "$SYSTEM_CAFILE" ]; then
+    NPX_ARGS+=(--cafile="$SYSTEM_CAFILE")
+  fi
+  echo "Starting Copilot proxy: npx ${NPX_ARGS[*]} copilot-api@latest start --port $PROXY_PORT --proxy-env"
+  nohup npx "${NPX_ARGS[@]}" copilot-api@latest start --port "$PROXY_PORT" --proxy-env \
+    > /tmp/copilot-api.log 2>&1 &
+  PROXY_PID=$!
+  echo "  proxy pid $PROXY_PID, log: /tmp/copilot-api.log"
+  STARTED_PROXY=true
+else
+  echo "copilot-api not found and no npx available — install Node.js, or start" >&2
+  echo "the proxy yourself (see ./bin/setup-copilot-api.sh). Continuing anyway." >&2
+fi
+
+if $STARTED_PROXY; then
   for _ in $(seq 1 30); do
     curl -sS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1 && break
     sleep 1
@@ -62,9 +92,6 @@ elif command -v copilot-api >/dev/null 2>&1 || command -v npx >/dev/null 2>&1; t
     echo "(first run needs an interactive GitHub OAuth device-flow login;" >&2
     echo "on a corp-laptop/Nexus-pinned npm see ./bin/setup-copilot-api.sh)" >&2
   fi
-else
-  echo "copilot-api not found and no npx available — install Node.js, or start" >&2
-  echo "the proxy yourself (see ./bin/setup-copilot-api.sh). Continuing anyway." >&2
 fi
 
 echo "=== TriageMate — ADK live agent engine (D1) ==="
