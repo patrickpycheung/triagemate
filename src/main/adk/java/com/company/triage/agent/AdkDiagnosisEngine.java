@@ -2,6 +2,7 @@ package com.company.triage.agent;
 
 import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.*;
+import com.company.triage.guardrails.ToolRegistry;
 import com.company.triage.model.DiagnosisReport;
 import com.company.triage.orchestration.DiagnosisEngine;
 import com.company.triage.orchestration.DiagnosisResult;
@@ -189,23 +190,18 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
      * snake_case — <b>not</b> the Java method names passed to {@code FunctionTool.create}.
      * ADK reports {@code tool.name()} from the schema, so an allowlist built from method
      * names would reject every call.
+     *
+     * <p>The canonical set itself lives in {@link ToolRegistry} (J8's security-owned
+     * registry in {@code src/main/java/}), not here — see the J11 LT2 design note on why
+     * this must not be defined by an observability component, and why it must not be
+     * re-hardcoded per engine either.
      */
-    private static final java.util.Set<String> ALLOWED_TOOLS = java.util.Set.of(
-            "get_incident",
-            "find_similar_incidents",
-            "find_ownership",
-            "search_confluence",
-            "search_logs",
-            "search_code",
-            "find_page_contributors",
-            "find_recent_committers");
-
     @Override
     public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
         // STREAM-003 wires real step emission through `sink`; this task is SPI-shape only,
         // so the sink is accepted but unused here (equivalent to TraceSink.NOOP semantics).
         List<String> trace = new ArrayList<>();
-        BoundsCallback bounds = new BoundsCallback(maxToolCalls, ALLOWED_TOOLS);
+        BoundsCallback bounds = new BoundsCallback(maxToolCalls, ToolRegistry.ALLOWED_TOOLS);
         // FND-33: pin the incident for this run so get_incident/find_similar_incidents
         // can't be pointed at a different one by the model — see TriageMateTools's
         // CURRENT_INCIDENT javadoc.
