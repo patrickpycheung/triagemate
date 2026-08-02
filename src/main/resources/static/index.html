@@ -232,6 +232,17 @@
     .lt5-demo summary { cursor:pointer; color:var(--muted); font-size:12px; }
     .lt5-demo[open] summary { margin-bottom:10px; }
 
+    /* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
+       Frame copy above the row list — the honesty-contract sentence carrying
+       the four load-bearing words (replaying/completed/nothing is running
+       now/real). See lt3FrameText() below; this rule is purely typographic. */
+    .lt3-frame { color:var(--muted); font-size:12.5px; margin:-4px 0 14px; line-height:1.5; }
+    .lt3-step { margin-bottom:2px; }
+    /* Log-scale duration bar per row — reuses the existing .bar/.bar>i idiom
+       (candidate-confidence bars above) rather than inventing a new visual
+       language; only the width math (log-scale, see lt3LogScalePct()) differs. */
+    .lt3-step .bar { margin:-3px 0 7px 42px; }
+
     /* ---- Theme picker (corner) ---- */
     .theme-btn {
       position:fixed; top:14px; right:14px; z-index:20;
@@ -479,6 +490,127 @@ function initLt5Demo() {
 }
 initLt5Demo();
 
+/* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
+   Renders an animated post-hoc REPLAY of an already-complete deterministic
+   run. The deterministic engine (and its DEGRADED_TO_DETERMINISTIC fallback,
+   FND-7) runs synchronously, so `data.steps` (List<TraceStep>, STREAM-001/003)
+   arrives fully resolved in the same POST response — there is never a "live"
+   window to stream for that path (README.md LT3, lines 170-206). This is the
+   ONLY renderer for that path; the live ADK path (data.engine === 'ADK') is
+   TASK-015's job (LT4: no pacing at all, render on arrival) and this code
+   must never run for it.
+
+   Reuses stepStateToDataState()/traceRowHtml() from LT5 (TASK-013) — row
+   markup is built there, not reinvented here. Only new here: mapping the
+   backend Platform enum to the lowercase tokens traceRowHtml()/CSS expect,
+   the log-scale duration bar, the paced sequential reveal, and the frame
+   copy honesty-contract sentence.
+*/
+
+// Platform enum (SERVICENOW/CONFLUENCE/SUMO/GITLAB/TRIAGEMATE, per
+// TraceStep.java) -> the lowercase tokens traceRowHtml()/[data-platform] CSS
+// expect. Note SUMO -> 'sumologic', not a lowercase of the enum name.
+const STEP_PLATFORM_TO_LOWER = {
+  SERVICENOW: 'servicenow', CONFLUENCE: 'confluence',
+  SUMO: 'sumologic', GITLAB: 'gitlab', TRIAGEMATE: 'triagemate',
+};
+const PLATFORM_BADGE_TEXT = {
+  servicenow: 'SN', confluence: 'CF', sumologic: 'SL', gitlab: 'GL', triagemate: '',
+};
+function stepPlatformToLower(platform) {
+  return STEP_PLATFORM_TO_LOWER[platform] || 'triagemate';
+}
+
+// Log-scale width so a 2ms step and a slow one (F-3: deterministic engine
+// against real connectors) both read as visibly nonzero — the deterministic
+// mock run is 2-19ms total, a linear scale would flatten every bar to
+// invisible. Floored at 6% so even a 0ms/unresolved (ABANDONED) duration
+// still shows a sliver rather than literally nothing.
+function lt3LogScalePct(durationMs, maxDurationMs) {
+  const d = Math.max(0, Number(durationMs) || 0);
+  const max = Math.max(1, Number(maxDurationMs) || 1);
+  const pct = Math.log(d + 1) / Math.log(max + 1) * 100;
+  return Math.max(6, Math.min(100, Math.round(pct)));
+}
+
+// One row + its duration bar. `step.state === 'PENDING'` is the pre-render
+// skeleton state (see renderLt3Replay) — real duration/result text is
+// withheld until the row is actually revealed, so the skeleton doesn't spoil
+// the "nothing is running now" framing by showing timings ahead of time.
+function lt3RowHtml(step, maxDurationMs) {
+  const platform = stepPlatformToLower(step.platform);
+  const isQueued = step.state === 'PENDING';
+  const durationMs = (!isQueued && typeof step.durationMs === 'number') ? step.durationMs : null;
+  const label = isQueued
+    ? (step.tool || step.label || '(step)')
+    : (step.result || step.label || step.tool || '(step)');
+  const durationText = durationMs != null ? `${durationMs} ms` : (isQueued ? 'queued' : String(step.state || '').toLowerCase());
+  const row = traceRowHtml({
+    state: step.state,
+    platform,
+    badgeText: PLATFORM_BADGE_TEXT[platform] || '',
+    label,
+    meta: `${platform} · ${durationText}`,
+  });
+  const pct = isQueued ? 6 : lt3LogScalePct(durationMs, maxDurationMs);
+  return `<div class="lt3-step">${row}<div class="bar"><i style="width:${pct}%"></i></div></div>`;
+}
+
+// The honesty-contract frame copy (README.md LT3, lines 177-181): must carry
+// all four load-bearing words verbatim — replaying, completed, "nothing is
+// running now", real — so the UI can never be mistaken for something live.
+function lt3FrameText(steps) {
+  const totalMs = steps.reduce((sum, s) => sum + (typeof s.durationMs === 'number' ? s.durationMs : 0), 0);
+  const n = steps.length;
+  return `↺ Replaying a completed run — ${n} step${n === 1 ? '' : 's'} in ${totalMs} ms total. `
+    + `Nothing is running now; steps are revealed at ~0.4 s each so they're readable. `
+    + `The order and the timings below are real.`;
+}
+
+// Fills an already-inserted empty card element with the LT3 replay:
+// frame copy + a paced, sequential reveal of each step.
+//
+// Pre-render only the unconditional step prefix, and only when engine !=
+// ADK (README.md LT3, line 183): this replay is of an ALREADY-FINISHED run,
+// so the full `steps` array from the response IS the unconditional truth —
+// we never guess at a conditional step (e.g. gitlab.searchCode) that may not
+// have run; we only ever pre-render placeholders for steps that actually
+// happened, straight from real data. Guarded again here (not just by the
+// caller) as defense in depth: this function must never activate the replay
+// path for engine === 'ADK' (that path is TASK-015's, and it never paces).
+function renderLt3Replay(cardEl, data) {
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  const t = data.trace || [];
+  if (data.engine === 'ADK' || !steps.length) {
+    // Not this renderer's path (or no structured steps to replay) — fall
+    // back to the plain trace list so nothing regresses.
+    cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
+    return;
+  }
+
+  const maxDurationMs = steps.reduce((m, s) => Math.max(m, typeof s.durationMs === 'number' ? s.durationMs : 0), 0);
+
+  cardEl.innerHTML = `<h2>Tool-call trace — replay (${steps.length})</h2>
+    <p class="lt3-frame">${esc(lt3FrameText(steps))}</p>
+    <div id="lt3Rows"></div>`;
+  const rowsEl = cardEl.querySelector('#lt3Rows');
+  rowsEl.innerHTML = steps.map(s => lt3RowHtml({ ...s, state: 'PENDING' }, maxDurationMs)).join('');
+
+  // Paced sequential reveal — a REPLAY-ONLY rule (README.md LT3 pacing
+  // table, lines 195-198): reveal step N after max(realDuration, ~0.4s).
+  // Do NOT confuse this with LT4's live path, which never paces at all —
+  // that "no pacing" rule belongs exclusively to TASK-015's live poll.
+  const rowNodes = rowsEl.querySelectorAll('.lt3-step');
+  let cumulativeDelay = 0;
+  steps.forEach((step, i) => {
+    const realDuration = typeof step.durationMs === 'number' ? step.durationMs : 0;
+    cumulativeDelay += Math.max(realDuration, 400);
+    setTimeout(() => {
+      if (rowNodes[i]) rowNodes[i].outerHTML = lt3RowHtml(step, maxDurationMs);
+    }, cumulativeDelay);
+  });
+}
+
 function render(data) {
   const r = data.report, t = data.trace || [];
   const cands = r.candidateSystems.map(c => `
@@ -535,6 +667,15 @@ function render(data) {
       <p style="color:var(--muted);margin:-4px 0 0;font-size:13px"><code>triage.writeback.enabled=false</code> — the diagnosis below is real, but nothing was written to the ticket. This is a config toggle, not a failure.</p>
     </div>`;
 
+  // LT3 (TASK-014): the deterministic engine (and its DEGRADED_TO_DETERMINISTIC
+  // fallback) finishes synchronously with a full `steps` array already in
+  // this response — replay it, paced. The live ADK path (engine === 'ADK')
+  // gets none of this pre-rendering; that's TASK-015 (LT4, no pacing).
+  const isReplay = data.engine !== 'ADK' && Array.isArray(data.steps) && data.steps.length > 0;
+  const traceCardHtml = isReplay
+    ? '<div class="card" id="lt3Card"></div>'
+    : `<div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+
   document.getElementById('out').innerHTML = `
     ${banner}
     <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
@@ -552,7 +693,9 @@ function render(data) {
     <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
     ${writebackCard}
-    <div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+    ${traceCardHtml}`;
+
+  if (isReplay) renderLt3Replay(document.getElementById('lt3Card'), data);
 }
 </script>
 </body>
