@@ -41,11 +41,24 @@ public class DiagnosisController {
     // in the demo config (any non-INC0010005 number is a clean 404), but the real-connector
     // contract gap was real. Anchors the K3 shape (INC + a flexible digit count — every
     // incident number in code/tests/docs is INC followed by 6-10 digits).
+    //
+    // TASK-009 (J11/LT4 runId protocol): X-Triage-Run-Id is OPTIONAL and client-minted (the
+    // client generates a UUID before calling). Streaming is purely additive — this response
+    // body/shape is IDENTICAL whether or not the header is sent; the header only controls
+    // whether the run also gets a live poll-able buffer (docs/design-java/concepts/
+    // J11-live-thinking-trace/README.md §LT4). When absent, we deliberately keep calling the
+    // single-arg orchestrator.run(String) overload rather than passing a null runId through
+    // the two-arg one — no behavioural difference (DiagnosisOrchestrator#run(String) simply
+    // delegates with runId=null), but it keeps K1's identical call in IncidentPoller and this
+    // header-less path provably going through the exact same code path.
     @PostMapping("/{incidentNumber}")
     public DiagnosisResult diagnose(
-            @PathVariable @Pattern(regexp = "INC\\d{6,10}") String incidentNumber) {
+            @PathVariable @Pattern(regexp = "INC\\d{6,10}") String incidentNumber,
+            @RequestHeader(value = "X-Triage-Run-Id", required = false) String runId) {
         // FND-37/FND-50: normalization now lives in DiagnosisOrchestrator.run() itself,
         // so every trigger (K1 and K3) normalizes identically for FND-31's coalescing map.
-        return orchestrator.run(incidentNumber);
+        return (runId == null || runId.isBlank())
+                ? orchestrator.run(incidentNumber)
+                : orchestrator.run(incidentNumber, runId);
     }
 }

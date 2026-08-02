@@ -2,10 +2,13 @@ package com.company.triage.orchestration;
 
 import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
+import com.company.triage.orchestration.trace.InMemoryRunTraceRegistry;
+import com.company.triage.orchestration.trace.RunTraceRegistry;
 import com.company.triage.orchestration.trace.TraceCollector;
 import com.company.triage.orchestration.trace.TraceSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -71,20 +74,37 @@ public class DiagnosisOrchestrator {
     private final DiagnosisEngine fallbackEngine;
     private final ServiceNowGateway serviceNow;
     private final TriageProperties props;
+    private final RunTraceRegistry runTraceRegistry;
     private final ExecutorService engineExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /** FND-31: coalesces concurrent runs for the same incident number. */
     private final ConcurrentHashMap<String, CompletableFuture<DiagnosisResult>> inFlight =
             new ConcurrentHashMap<>();
 
+    /**
+     * Test/back-compat convenience: no {@link RunTraceRegistry} wired in means every run
+     * behaves exactly as before TASK-009 (LT4 {@code runId} support) existed — {@link
+     * #run(String)} still works and {@link #run(String, String)} simply has nothing to
+     * register a client-minted {@code runId} against.
+     */
     public DiagnosisOrchestrator(DiagnosisEngine engine,
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  TriageProperties props) {
+        this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry());
+    }
+
+    @Autowired
+    public DiagnosisOrchestrator(DiagnosisEngine engine,
+                                 @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
+                                 ServiceNowGateway serviceNow,
+                                 TriageProperties props,
+                                 RunTraceRegistry runTraceRegistry) {
         this.engine = engine;
         this.fallbackEngine = fallbackEngine;
         this.serviceNow = serviceNow;
         this.props = props;
+        this.runTraceRegistry = runTraceRegistry;
         // FND-49: triage.engine=adk without -Padk matches no ADK bean, so the app silently
         // falls back to `engine == fallbackEngine` (deterministic) with nothing announcing
         // it — the FND-8 failure class (narrating a live model over a scripted run) via a
@@ -116,6 +136,17 @@ public class DiagnosisOrchestrator {
     }
 
     public DiagnosisResult run(String rawIncidentNumber) {
+        return run(rawIncidentNumber, null);
+    }
+
+    /**
+     * TASK-009 (LT4 {@code runId} protocol): {@code runId} is the optional, client-minted
+     * id from the {@code X-Triage-Run-Id} header on {@code POST /api/diagnose/{incidentNumber}}.
+     * {@code null} (or blank) means the caller sent no header — most notably {@code
+     * IncidentPoller} (K1), which must NEVER register a buffer entry (LT4 rule 4: "no header
+     * ⇒ no buffer" — K1 runs unattended, indefinitely, with nobody to poll it).
+     */
+    public DiagnosisResult run(String rawIncidentNumber, String runId) {
         // FND-50: normalize here, not just in DiagnosisController — K1 (IncidentPoller)
         // passes ServiceNow's raw value directly, so normalizing only at the controller
         // let K1 and K3 fail to coalesce on a case/whitespace difference, defeating
@@ -126,10 +157,18 @@ public class DiagnosisOrchestrator {
         if (existing != null) {
             log.info("diagnosis for {} already in flight — waiting for it instead of starting a duplicate (FND-31)",
                     incidentNumber);
+            // FND-31 + LT4: this caller never runs an engine (it just waits below), so it
+            // owns no segment of its own — alias its runId to the canonical run's buffer so
+            // a client polling on it watches the same live steps instead of one that will
+            // never receive any. Left as a hand-off to TASK-010 how (or whether) eviction
+            // interacts with this; today's stub is a plain best-effort lookup.
+            if (hasText(runId)) {
+                runTraceRegistry.alias(runId, incidentNumber);
+            }
             return awaitExisting(incidentNumber, existing);
         }
         try {
-            DiagnosisResult result = runOnce(incidentNumber);
+            DiagnosisResult result = runOnce(incidentNumber, runId);
             mine.complete(result);
             return result;
         } catch (RuntimeException e) {
@@ -138,6 +177,10 @@ public class DiagnosisOrchestrator {
         } finally {
             inFlight.remove(incidentNumber, mine);
         }
+    }
+
+    private static boolean hasText(String s) {
+        return s != null && !s.isBlank();
     }
 
     private DiagnosisResult awaitExisting(String incidentNumber, CompletableFuture<DiagnosisResult> existing) {
@@ -153,12 +196,21 @@ public class DiagnosisOrchestrator {
         }
     }
 
-    private DiagnosisResult runOnce(String incidentNumber) {
+    private DiagnosisResult runOnce(String incidentNumber, String runId) {
         long t0 = System.currentTimeMillis();
         // TASK-003 (J11/LT1): one collector per run, shared across the primary and (if
         // needed) fallback engine calls — see diagnoseWithFallback for the segment-per-
         // attempt degrade handling.
-        TraceCollector collector = new TraceCollector();
+        //
+        // TASK-009 (LT4): when the caller supplied a client-minted runId, this is NOT just
+        // a local variable — it is also registered as that runId's live buffer, so a
+        // GET /api/runs/{runId}/steps poll (a later task) sees exactly the steps this run
+        // ends up returning, no separate bookkeeping required. No runId ⇒ no registration ⇒
+        // nothing beyond this ordinary per-call collector (already existed pre-TASK-009) is
+        // allocated — that is what keeps K1 (which never sends a runId) buffer-free.
+        TraceCollector collector = hasText(runId)
+                ? runTraceRegistry.register(runId, incidentNumber)
+                : new TraceCollector();
         DiagnosisResult result = diagnoseWithFallback(incidentNumber, collector);
 
         // FND-36: writebackPosted must reflect what ACTUALLY happened, not just whether
