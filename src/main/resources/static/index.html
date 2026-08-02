@@ -243,6 +243,16 @@
        language; only the width math (log-scale, see lt3LogScalePct()) differs. */
     .lt3-step .bar { margin:-3px 0 7px 42px; }
 
+    /* ---- LT7: provenance chips (J11, TASK-016) -------------------------------
+       Two separate chips, reusing the existing .pill badge idiom (the same one
+       the "advisory" label by <h1> and the suggested-assignment confidence use)
+       rather than inventing a new visual language. Laid out via this wrapper
+       only — .pill itself is untouched, so every other .pill on the page keeps
+       its current look. See provenanceChipsHtml() below for why these are two
+       chips and never one. */
+    .lt7-chips { display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 16px; }
+    .lt7-chips .pill { margin-left:0; }
+
     /* ---- Theme picker (corner) ---- */
     .theme-btn {
       position:fixed; top:14px; right:14px; z-index:20;
@@ -792,6 +802,67 @@ function renderLt4Final(cardEl, data) {
   cardEl.innerHTML = `<h2>Tool-call trace — live (${steps.length})</h2><div>${steps.map(lt4RowHtml).join('')}</div>`;
 }
 
+/* ---- LT7: provenance chips (J11, TASK-016) --------------------------------
+   TWO separate chips, NEVER collapsed into one "mock (no network)"-style
+   label (design doc §LT7): a single combined chip would be untruthful twice
+   over — (1) connector selection is per-connector and mixable (FND-10), e.g.
+   servicenow=real while confluence/sumo/gitlab stay mock is a valid,
+   already-supported run, which one chip can't represent; (2) "no network" is
+   FALSE on the ADK path even when every connector is mock, because the ADK
+   engine still talks to the Copilot proxy over the network — a combined chip
+   claiming "no network" would be lying about the LLM call itself. Scoping the
+   no-network implication to *connector* network only (never the engine as a
+   whole) is exactly why these stay two chips.
+
+   Built once here and rendered once in render()'s own shared template (below)
+   rather than inside renderLt3Replay()/renderLt4Final() — provenance is a
+   run-level property of `data`, not a renderer-specific one, and both the
+   LT3 replay path and the LT4 live path call render() for the same `data`.
+*/
+
+// data.connectors (TASK-016, DiagnosisResult#connectors) is a per-connector
+// map, e.g. { servicenow: "real", confluence: "mock", sumo: "mock", gitlab: "mock" }
+// — reflects the ACTUAL triage.connectors.* config for this run (read live by
+// ConnectorModeProvider server-side), never a hardcoded demo string.
+function connectorChipText(connectors) {
+  const entries = Object.entries(connectors || {});
+  if (!entries.length) return 'connectors: unknown';
+  const label = mode => (mode === 'real' ? 'real' : 'fixtures');
+  const allSameMode = entries.every(([, mode]) => mode === entries[0][1]);
+  if (allSameMode) return `connectors: all ${label(entries[0][1])}`;
+  // Mixed (FND-10, not allSameMode): every entry is either 'real' or a
+  // fixture-ish mode, so the non-real remainder is uniformly "fixtures" by
+  // construction — name every real connector explicitly, then group the rest
+  // as "others=fixtures", the design doc's own example format (README.md
+  // LT7: "servicenow=real, others=fixtures").
+  const realNames = entries.filter(([, mode]) => mode === 'real').map(([name]) => name);
+  if (realNames.length) {
+    return `connectors: ${realNames.map(name => `${name}=real`).join(', ')}, others=fixtures`;
+  }
+  // No connector reported exactly 'real' yet modes differ (e.g. an unexpected
+  // string value) — fall back to a fully explicit per-connector listing
+  // rather than asserting a grouping that wasn't actually verified.
+  return 'connectors: ' + entries.map(([name, mode]) => `${name}=${label(mode)}`).join(', ');
+}
+
+// data.engine scopes what "no network" can mean: DETERMINISTIC and its FND-7
+// DEGRADED_TO_DETERMINISTIC fallback never touch a model/LLM at all (offline);
+// ADK always talks to the Copilot proxy over the network to reach the model,
+// regardless of what the connector chip says. Same field render() already
+// reads for the degraded banner (FND-16) — no new data plumbing here either.
+function engineChipText(engine) {
+  return engine === 'ADK' ? 'ADK · via Copilot proxy' : 'deterministic · offline';
+}
+
+function provenanceChipsHtml(data) {
+  const connectorText = connectorChipText(data.connectors);
+  const engineText = engineChipText(data.engine);
+  return `<div class="lt7-chips">
+    <span class="pill" title="Per-connector real vs fixture status for this run — mixable per FND-10">${esc(connectorText)}</span>
+    <span class="pill" title="Which engine produced this report — scopes any 'no network' claim to connectors only">${esc(engineText)}</span>
+  </div>`;
+}
+
 function render(data) {
   const r = data.report, t = data.trace || [];
   const cands = r.candidateSystems.map(c => `
@@ -893,6 +964,7 @@ function render(data) {
     <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
     <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
     ${writebackCard}
+    ${provenanceChipsHtml(data)}
     ${traceCardHtml}`;
 
   if (isReplay) renderLt3Replay(document.getElementById('lt3Card'), data);

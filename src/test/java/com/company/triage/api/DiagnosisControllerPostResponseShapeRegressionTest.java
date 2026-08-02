@@ -101,7 +101,13 @@ class DiagnosisControllerPostResponseShapeRegressionTest {
               "trace": ["diagnose"],
               "engine": "DETERMINISTIC",
               "writebackPosted": true,
-              "steps": []
+              "steps": [],
+              "connectors": {
+                "servicenow": "mock",
+                "confluence": "mock",
+                "sumo": "mock",
+                "gitlab": "mock"
+              }
             }
             """;
 

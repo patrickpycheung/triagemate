@@ -1,5 +1,6 @@
 package com.company.triage.orchestration;
 
+import com.company.triage.config.ConnectorModeProvider;
 import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.orchestration.trace.InMemoryRunTraceRegistry;
@@ -13,6 +14,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -75,6 +77,7 @@ public class DiagnosisOrchestrator {
     private final ServiceNowGateway serviceNow;
     private final TriageProperties props;
     private final RunTraceRegistry runTraceRegistry;
+    private final Map<String, String> connectors;
     private final ExecutorService engineExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /** FND-31: coalesces concurrent runs for the same incident number. */
@@ -94,17 +97,39 @@ public class DiagnosisOrchestrator {
         this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry());
     }
 
-    @Autowired
+    /**
+     * Test/back-compat convenience: no {@link ConnectorModeProvider} wired in defaults every
+     * connector to {@code "mock"} (its own no-arg constructor) — accurate for these
+     * hand-built-engine unit-test call sites, which never touch a real connector either way.
+     */
     public DiagnosisOrchestrator(DiagnosisEngine engine,
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  TriageProperties props,
                                  RunTraceRegistry runTraceRegistry) {
+        this(engine, fallbackEngine, serviceNow, props, runTraceRegistry, new ConnectorModeProvider());
+    }
+
+    /**
+     * TASK-016 (J11 §LT7): {@code connectorModeProvider} is the ONLY constructor param Spring
+     * actually autowires (real {@link ConnectorModeProvider} bean, backed by the live
+     * {@code Environment}) — the two convenience constructors above exist purely for
+     * pre-TASK-016 test call sites and default it to "mock everywhere", same as
+     * {@code matchIfMissing = true} on every {@code Mock*Gateway}.
+     */
+    @Autowired
+    public DiagnosisOrchestrator(DiagnosisEngine engine,
+                                 @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
+                                 ServiceNowGateway serviceNow,
+                                 TriageProperties props,
+                                 RunTraceRegistry runTraceRegistry,
+                                 ConnectorModeProvider connectorModeProvider) {
         this.engine = engine;
         this.fallbackEngine = fallbackEngine;
         this.serviceNow = serviceNow;
         this.props = props;
         this.runTraceRegistry = runTraceRegistry;
+        this.connectors = connectorModeProvider.modes();
         // FND-49: triage.engine=adk without -Padk matches no ADK bean, so the app silently
         // falls back to `engine == fallbackEngine` (deterministic) with nothing announcing
         // it — the FND-8 failure class (narrating a live model over a scripted run) via a
@@ -257,7 +282,8 @@ public class DiagnosisOrchestrator {
         // snapshot forward from diagnoseWithFallback — nothing emits new steps between
         // there and here (writeback is prose-only, added to `trace`), so no fresh
         // collector.steps() read is needed.
-        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted, result.steps());
+        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted,
+                result.steps(), connectors);
     }
 
     private DiagnosisResult diagnoseWithFallback(String incidentNumber, TraceCollector collector) {
