@@ -6,7 +6,10 @@ import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.gateway.SumoGateway;
 import com.company.triage.model.*;
+import com.company.triage.orchestration.trace.StepCatalog;
+import com.company.triage.orchestration.trace.StepState;
 import com.company.triage.orchestration.trace.TraceSink;
+import com.company.triage.orchestration.trace.TraceStep;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -65,15 +69,25 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
     @Override
     public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
-        // STREAM-003 wires real step emission through `sink`; this task is SPI-shape only,
-        // so the sink is accepted but unused here (equivalent to TraceSink.NOOP semantics).
+        // TASK-008 (J11 LT1/LT2): every existing trace.add(...) line below gets a matching
+        // TraceStep emitted to `sink`, via StepCatalog's dotted-key lookup, ALONGSIDE the
+        // string line — never instead of it. `callId` is the synthetic `det-<seq>` scheme
+        // (LT1 §67); `seq` is a simple running counter over the steps actually emitted (the
+        // conditional gitlab.searchCode step, when skipped, leaves no gap — seq tracks
+        // emission order, not a fixed line number). This engine runs synchronously with no
+        // real async gap (2-19ms total per F-2), so ACTIVE→DONE is emitted back-to-back for
+        // each step; durationMs is still measured (never a hardcoded 0) so the row shape stays
+        // honest for LT3's replay renderer.
+        AtomicInteger stepSeq = new AtomicInteger(0);
         List<String> trace = new ArrayList<>();
         List<Evidence> evidence = new ArrayList<>();
 
         // ---- Step 1: fetch incident (ServiceNow) ------------------------------
         IncidentContext inc = serviceNow.getIncident(incidentNumber);
-        trace.add("servicenow.getIncident(%s) → CI=%s, env=%s".formatted(
-                incidentNumber, inc.configurationItem(), inc.environment()));
+        String traceGetIncident = "servicenow.getIncident(%s) → CI=%s, env=%s".formatted(
+                incidentNumber, inc.configurationItem(), inc.environment());
+        trace.add(traceGetIncident);
+        emitStep(sink, stepSeq, "servicenow.getIncident", traceGetIncident);
 
         // FND-63: the ticket itself is evidence — it is a real source with real content, and
         // every conclusion below is at minimum grounded in what it says. It was never cited,
@@ -92,8 +106,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         IncidentSignals signals = IncidentSignals.from(inc);
         String orderId = signals.primaryIdentifier();
         Identifiers ids = new Identifiers(orderId, null, orderId);
-        trace.add("understand: id=%s, keywords=%s, app=%s".formatted(
-                orderId, signals.keywords(), signals.app()));
+        String traceUnderstand = "understand: id=%s, keywords=%s, app=%s".formatted(
+                orderId, signals.keywords(), signals.app());
+        trace.add(traceUnderstand);
+        emitStep(sink, stepSeq, "understand:", traceUnderstand);
 
         // ---- Step 3: similar incidents + ownership ----------------------------
         List<ResolvedIncident> similar = serviceNow.findSimilarIncidents(inc);
@@ -103,13 +119,17 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                             r.number(), r.similarity() * 100, r.resolutionGroup(), r.resolutionCode()),
                     r.number()));
         }
-        trace.add("servicenow.findSimilarIncidents → %d hits".formatted(similar.size()));
+        String traceFindSimilar = "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
+        trace.add(traceFindSimilar);
+        emitStep(sink, stepSeq, "servicenow.findSimilarIncidents", traceFindSimilar);
 
         Optional<ServiceOwnership> ownership = serviceNow.findOwnership(inc.configurationItem());
         ownership.ifPresent(o -> evidence.add(new Evidence("e-cmdb", "servicenow-cmdb",
                 "CMDB: %s owned by %s".formatted(o.application(), o.supportGroup()), o.source())));
-        trace.add("servicenow.findOwnership(%s) → %s".formatted(
-                inc.configurationItem(), ownership.map(ServiceOwnership::supportGroup).orElse("none")));
+        String traceFindOwnership = "servicenow.findOwnership(%s) → %s".formatted(
+                inc.configurationItem(), ownership.map(ServiceOwnership::supportGroup).orElse("none"));
+        trace.add(traceFindOwnership);
+        emitStep(sink, stepSeq, "servicenow.findOwnership", traceFindOwnership);
 
         // ---- Step 4: knowledge (Confluence) -----------------------------------
         // FND-59: this used to be the fixed literal "checkout order payment reconcile 500"
@@ -126,7 +146,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             evidence.add(new Evidence("e-kb-" + d.id(), "confluence",
                     "%s (%s): %s".formatted(d.title(), d.id(), d.snippet()), d.url()));
         }
-        trace.add("confluence.search(query=\"%s\") → %d page(s)".formatted(confluenceQuery, docs.size()));
+        String traceConfluenceSearch = "confluence.search(query=\"%s\") → %d page(s)"
+                .formatted(confluenceQuery, docs.size());
+        trace.add(traceConfluenceSearch);
+        emitStep(sink, stepSeq, "confluence.search", traceConfluenceSearch);
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
         // FND-62: was always allowedScopes.get(0) — the first configured scope, whatever the
@@ -157,8 +180,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),
                     scope));
         }
-        trace.add("sumo.search(query=\"%s\", scopes=%s → %s, window=±10m, max=20) → %d line(s); errorToken=%s"
-                .formatted(logQuery, scopesToTry, scope, logs.size(), errorToken));
+        String traceSumoSearch = "sumo.search(query=\"%s\", scopes=%s → %s, window=±10m, max=20) → %d line(s); errorToken=%s"
+                .formatted(logQuery, scopesToTry, scope, logs.size(), errorToken);
+        trace.add(traceSumoSearch);
+        emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
 
         // ---- Step 6: targeted code search + log↔code citation (RC3) -----------
         // FND-63: was the literal "Order submission (checkout)". The ticket's own
@@ -183,8 +208,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                         "log line '%s' is emitted at %s:%d".formatted(errorToken, h.filePath(), h.line()),
                         "%s/%s#L%d".formatted(h.project(), h.filePath(), h.line())));
             }
-            trace.add("gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
-                    .formatted(errorToken, projectsToTry, codeHits.size()));
+            String traceGitLabSearch = "gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
+                    .formatted(errorToken, projectsToTry, codeHits.size());
+            trace.add(traceGitLabSearch);
+            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSearch);
         }
 
         // ---- Step 7: who to talk to (J9) --------------------------------------
@@ -206,8 +233,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // caller is captured structurally below regardless.
         if (inc.shortDescription() != null) knownSystemNames.add(inc.shortDescription());
         List<Contact> contacts = gatherContacts(inc, docs, codeHits, knownSystemNames);
-        trace.add("contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
-                .formatted(contacts.size(), docs.size(), codeHits.size()));
+        String traceContacts = "contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
+                .formatted(contacts.size(), docs.size(), codeHits.size());
+        trace.add(traceContacts);
+        emitStep(sink, stepSeq, "contacts:", traceContacts);
 
         // ---- Step 8: assemble the diagnosis report (J4) -----------------------
         // FND-63: candidates and their evidenceRefs were hardcoded, and two of the refs
@@ -332,10 +361,38 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // response to any real observed failure mode.
         com.company.triage.model.DiagnosisReportValidator.validate(report);
 
-        trace.add("report assembled: %d candidates, %d evidence items, assignment=%s"
-                .formatted(candidates.size(), evidence.size(), assignment.group()));
+        String traceReportAssembled = "report assembled: %d candidates, %d evidence items, assignment=%s"
+                .formatted(candidates.size(), evidence.size(), assignment.group());
+        trace.add(traceReportAssembled);
+        emitStep(sink, stepSeq, "report assembled:", traceReportAssembled);
 
         return new DiagnosisResult(report, trace);
+    }
+
+    /**
+     * TASK-008: emit an ACTIVE→DONE {@link TraceStep} pair to {@code sink} for one
+     * {@code trace.add(...)} call site, correlated by the synthetic {@code det-<seq>}
+     * {@code callId} (LT1 §67). {@code seq} advances once per call regardless of which
+     * dotted key is looked up, so a conditionally-skipped step (e.g. {@code
+     * gitlab.searchCode} when no {@code errorToken} was found) leaves no gap in the
+     * sequence — it tracks emission order, not a fixed line number.
+     *
+     * <p>This engine has no real async gap to straddle (2-19ms end to end, per F-2), so
+     * {@code before}/{@code after} are called back-to-back rather than around real I/O —
+     * but {@code durationMs} is still a measured (not hardcoded) elapsed time, so the row
+     * shape stays honest for LT3's replay renderer even when that measured value is 0.
+     */
+    private static void emitStep(TraceSink sink, AtomicInteger stepSeq, String dottedKey, String resultText) {
+        StepCatalog.Entry entry = StepCatalog.lookup(dottedKey);
+        int seq = stepSeq.getAndIncrement();
+        String callId = "det-" + seq;
+        long startedAtEpochMs = System.currentTimeMillis();
+        long startNanos = System.nanoTime();
+        sink.before(new TraceStep(seq, 0, callId, entry.platform(), dottedKey, entry.label(),
+                null, StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.DETERMINISTIC));
+        long durationMs = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+        sink.after(new TraceStep(seq, 0, callId, entry.platform(), dottedKey, entry.label(),
+                resultText, StepState.DONE, startedAtEpochMs, durationMs, DiagnosisResult.Engine.DETERMINISTIC));
     }
 
     /**
