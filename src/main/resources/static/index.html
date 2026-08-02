@@ -387,8 +387,31 @@ async function run() {
   const btn = document.getElementById('go'); const out = document.getElementById('out');
   if (!inc) return;
   btn.disabled = true; out.innerHTML = '<div class="card">Investigating…</div>';
+
+  // LT4 (J11, TASK-015): mint a runId and send it as X-Triage-Run-Id BEFORE the
+  // POST — the only channel the client has to learn a runId before the run ends
+  // (README.md "The runId protocol"). Sent unconditionally, even though the
+  // engine isn't known yet: for a deterministic run this only costs a couple of
+  // cheap poll round-trips racing a POST that resolves synchronously anyway
+  // (the backend registers a buffer for it regardless of engine, per
+  // DiagnosisOrchestrator#runOnce), and for an ADK run it's the only way to show
+  // anything during the measured 37s-93s the POST takes to resolve. Whichever
+  // engine actually answers is decided later, in render() below — see its
+  // isReplay/isLive dispatch for how the two renderers never race.
+  const runId = mintRunId();
+  const lt4Card = document.createElement('div');
+  lt4Card.className = 'card';
+  out.appendChild(lt4Card);
+  // Poll loop starts immediately, independent of (not awaited by) the POST
+  // below — that's the whole point: an ADK run's POST won't resolve for tens
+  // of seconds, and this is what fills the screen in the meantime.
+  const lt4 = startLt4Poll(runId, lt4Card);
+
   try {
-    const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, { method:'POST' });
+    const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, {
+      method: 'POST',
+      headers: { 'X-Triage-Run-Id': runId },
+    });
     // FND-48: render() dereferences data.report.candidateSystems immediately, so a non-2xx
     // body (which has no `report`) used to surface as "TypeError: Cannot read properties of
     // undefined". Guard on res.ok first.
@@ -410,7 +433,14 @@ async function run() {
     render(body);
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${e}</div>`;
-  } finally { btn.disabled = false; }
+  } finally {
+    // Requirement 4: stop on done:true (handled inside startLt4Poll itself) OR
+    // when the POST's own 200 resolves — whichever is first. This covers the
+    // "POST resolves first" half unconditionally (idempotent — a no-op if the
+    // poll loop already self-stopped on `done`).
+    lt4.stop();
+    btn.disabled = false;
+  }
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
@@ -611,6 +641,157 @@ function renderLt3Replay(cardEl, data) {
   });
 }
 
+/* ---- LT4: live poll renderer (J11, TASK-015) -----------------------------
+   Renders the ADK path (data.engine === 'ADK') while the run is still IN FLIGHT —
+   the counterpart to LT3's replay of an already-finished deterministic run.
+   Measured 37s-93s per real agentic run (README.md LT4), so replay-only would
+   leave the screen blank for that entire window; this is the fix.
+
+   The protocol (README.md "The runId protocol", Round 3): the client mints a
+   runId BEFORE the POST (the only channel to learn one before the run ends),
+   sends it as X-Triage-Run-Id, and polls GET /api/runs/{runId}/steps?since={n}
+   concurrently with the in-flight POST. `since` is a GLOBAL flattened-position
+   index (RunStepsController's javadoc), not a per-attempt seq — tracked here as
+   a running total of steps received so far (see startLt4Poll).
+
+   NO PACING — the exact opposite of LT3's renderLt3Replay. A live step is
+   measured 8.0s +/- 2.6 apart, far above any perceptible pacing floor, so
+   "pacing" it would only ever mean artificially delaying something the
+   audience is already waiting on (README.md lines 190-206, the pacing table).
+   Every row here renders the instant its poll response arrives.
+
+   Reuses traceRowHtml()/stepStateToDataState()/stepPlatformToLower() from LT5
+   (TASK-013) and PLATFORM_BADGE_TEXT from LT3 (TASK-014) — row markup and the
+   platform/badge lookup are never reimplemented here.
+*/
+const LT4_POLL_INTERVAL_MS = 750; // within the design's ~500ms-1s window
+
+// Client-minted runId (UUID). Only ever used as an opaque poll-buffer key
+// (X-Triage-Run-Id / RunTraceRegistry) — never parsed, so a strict RFC4122
+// generator isn't required, just a fresh unpredictable-enough string per call.
+function mintRunId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback for a context without crypto.randomUUID (older browser, or a
+  // non-secure context that isn't localhost) — v4-shaped is enough here.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// One row, built for immediate (unpaced) display — no duration bar, no PENDING
+// skeleton like LT3's lt3RowHtml: a live step only ever arrives once it's a
+// real event (ACTIVE at the earliest), so there's nothing to pre-render.
+function lt4RowHtml(step) {
+  const platform = stepPlatformToLower(step.platform);
+  const isOpen = step.state === 'ACTIVE' || step.state === 'PENDING';
+  const label = isOpen
+    ? (step.label || step.tool || '(step)')
+    : (step.result || step.label || step.tool || '(step)');
+  const durationText = typeof step.durationMs === 'number'
+    ? `${step.durationMs} ms`
+    : String(step.state || '').toLowerCase();
+  return traceRowHtml({
+    state: step.state,
+    platform,
+    badgeText: PLATFORM_BADGE_TEXT[platform] || '',
+    label,
+    meta: `${platform} · ${durationText}`,
+  });
+}
+
+// Starts polling runId's live buffer and appending new rows into cardEl as
+// soon as each poll returns them. Returns { stop() } — idempotent — so the
+// caller can halt it from either governing condition (README.md requirement
+// 4): done:true from the poll response, or the original POST's own 200
+// resolving, whichever comes first.
+//
+// Requirement 6 (FND-7 mid-run degrade): no special-casing is needed here.
+// abandonAndStartFallback() re-tags attempt 0's un-consumed rows ABANDONED
+// in place and appends a synthetic FALLBACK_STARTED boundary row (platform
+// TRIAGEMATE, state DONE, label "Falling back to the deterministic engine")
+// as a genuinely NEW step — so it arrives through this same poll loop and
+// renders through this same lt4RowHtml/traceRowHtml path: ABANDONED steps get
+// TASK-013's existing struck-through/dimmed treatment (stepStateToDataState
+// maps ABANDONED -> 'abandoned' already), and the boundary row's own label
+// text visibly announces the transition, rather than either being silently
+// dropped or requiring a bespoke second code path.
+function startLt4Poll(runId, cardEl) {
+  cardEl.innerHTML = '<h2>Tool-call trace — live</h2><div id="lt4Rows"></div>';
+  const rowsEl = cardEl.querySelector('#lt4Rows');
+  let since = -1; // -1 == "send everything so far" (RunStepsController default)
+  let stopped = false;
+  let timer = null;
+
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    if (timer) clearTimeout(timer);
+  }
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/steps?since=${since}`);
+      if (res.status === 404) {
+        // TASK-011/requirement 6: unknown or TTL-evicted runId — stop cleanly.
+        // Not retried: this endpoint's 404 is defined as terminal ("stop
+        // polling, this run is gone" per RunNotFoundException's own javadoc),
+        // and the POST's own response remains the authoritative final answer
+        // regardless of what polling did or didn't see.
+        stop();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        let newCount = 0;
+        for (const attempt of (data.attempts || [])) {
+          const steps = attempt.steps || [];
+          if (steps.length) {
+            rowsEl.insertAdjacentHTML('beforeend', steps.map(lt4RowHtml).join(''));
+            newCount += steps.length;
+          }
+        }
+        // since indexes a POSITION in the flattened, strictly-append-only step
+        // list (RunStepsController javadoc) — every step index > since was just
+        // delivered, contiguously, so advancing by the count received is exact.
+        since += newCount;
+        if (data.done) { stop(); return; }
+      }
+      // A non-404, non-ok response (transient 5xx) is swallowed here rather
+      // than stopping the loop — the POST is still the run's actual owner and
+      // this is just its progress feed; one bad poll shouldn't blind the rest.
+    } catch (e) {
+      // Network hiccup — same reasoning: keep polling, don't crash the UI.
+    }
+    if (!stopped) timer = setTimeout(poll, LT4_POLL_INTERVAL_MS);
+  }
+  poll();
+  return { stop };
+}
+
+// Fills cardEl with the run's FINAL, fully-settled steps once the POST's own
+// 200 has landed — data.steps (DiagnosisResult, always populated regardless
+// of engine) is the ground truth. This corrects any staleness the poll loop
+// could not see: RunStepsController's since-index scheme only ever re-sends
+// a genuinely NEW position, so a step whose row resolved (ACTIVE -> DONE)
+// AFTER an earlier poll had already delivered its ACTIVE row at that index
+// never gets a live update (its javadoc calls this "bounded and
+// self-healing") — this settle-render is exactly that healing step. Also
+// still governed by "no pacing, ever": rendered in one shot, no setTimeout.
+function renderLt4Final(cardEl, data) {
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  const t = data.trace || [];
+  if (!steps.length) {
+    cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
+    return;
+  }
+  cardEl.innerHTML = `<h2>Tool-call trace — live (${steps.length})</h2><div>${steps.map(lt4RowHtml).join('')}</div>`;
+}
+
 function render(data) {
   const r = data.report, t = data.trace || [];
   const cands = r.candidateSystems.map(c => `
@@ -670,11 +851,30 @@ function render(data) {
   // LT3 (TASK-014): the deterministic engine (and its DEGRADED_TO_DETERMINISTIC
   // fallback) finishes synchronously with a full `steps` array already in
   // this response — replay it, paced. The live ADK path (engine === 'ADK')
-  // gets none of this pre-rendering; that's TASK-015 (LT4, no pacing).
+  // gets none of this pre-rendering; that's LT4 below (TASK-015, no pacing).
+  //
+  // LT4 (TASK-015): engine === 'ADK' means this response is the tail end of the
+  // run startLt4Poll() has been progressively rendering into its own card since
+  // before this POST was even sent. isReplay and isLive are mutually exclusive
+  // (data.engine !== 'ADK' vs === 'ADK') and each owns a DIFFERENT card id
+  // (lt3Card vs lt4Card) that only exists after this innerHTML write below — so
+  // there is exactly one render call for exactly one fresh element per run;
+  // they can never both fire, race, or double-render the same node. The
+  // progressive DOM startLt4Poll() built (inside run()'s now-detached lt4Card)
+  // is simply discarded here in favour of renderLt4Final()'s one-shot render
+  // straight from data.steps — the settled, authoritative picture (see
+  // renderLt4Final's own comment for why a fresh render, not a patch, is
+  // needed to heal any staleness the poll loop couldn't see).
   const isReplay = data.engine !== 'ADK' && Array.isArray(data.steps) && data.steps.length > 0;
-  const traceCardHtml = isReplay
-    ? '<div class="card" id="lt3Card"></div>'
-    : `<div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+  const isLive = data.engine === 'ADK';
+  let traceCardHtml;
+  if (isReplay) {
+    traceCardHtml = '<div class="card" id="lt3Card"></div>';
+  } else if (isLive) {
+    traceCardHtml = '<div class="card" id="lt4Card"></div>';
+  } else {
+    traceCardHtml = `<div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+  }
 
   document.getElementById('out').innerHTML = `
     ${banner}
@@ -696,6 +896,7 @@ function render(data) {
     ${traceCardHtml}`;
 
   if (isReplay) renderLt3Replay(document.getElementById('lt3Card'), data);
+  else if (isLive) renderLt4Final(document.getElementById('lt4Card'), data);
 }
 </script>
 </body>
