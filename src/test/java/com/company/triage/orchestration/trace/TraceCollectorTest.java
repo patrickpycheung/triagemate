@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -142,5 +143,76 @@ class TraceCollectorTest {
         assertThat(errors.get()).isZero();
         assertThat(collector.steps()).hasSize(threads);
         assertThat(collector.steps()).allMatch(s -> s.state() == StepState.DONE);
+    }
+
+    /**
+     * Regression test for the TOCTOU race between {@code record()}'s check-then-act
+     * ("is attempt 0 abandoned? no -> insert") and {@code abandonAndStartFallback()}'s
+     * mark-then-freeze ("mark attempt 0 abandoned, then freeze its existing rows").
+     *
+     * The existing tests above only exercise *sequential* orderings (write fully completes,
+     * then abandon runs; or abandon fully completes, then a late write is dropped). They never
+     * put a writer thread concurrently *inside* the abandon call, racing its freeze pass — which
+     * is exactly the window the orphaned-virtual-thread scenario (FND-15: cancellation is
+     * best-effort, so a timed-out attempt-0 thread keeps running) can hit in production.
+     *
+     * A {@link CyclicBarrier} lines the writer thread up right before its {@code record()} call
+     * and the main thread right before {@code abandonAndStartFallback()}, so both cross the
+     * starting line at (as close to) the same instant as the JVM allows on every iteration —
+     * rather than relying on incidental thread-scheduling luck to ever produce the race. The
+     * assertion only needs to hold in the timing where the writer's insert would have landed
+     * after the freeze pass under the old check-then-act code (no shared lock): with the fix,
+     * every row belonging to attempt 0 must end up ABANDONED, with no ACTIVE survivor — because
+     * record() and abandonAndStartFallback() now serialize on a common lock, so either the write
+     * is fully visible before the freeze pass runs (and gets frozen) or it's fully rejected
+     * because abandonedAttempts already contains the attempt (and never lands at all).
+     *
+     * Without the fix in {@link TraceCollector}, this test flakes to a hard failure within a
+     * small number of the iterations below — reliably enough to catch a regression, not by luck.
+     */
+    @Test
+    void writeRacingConcurrentlyWithTheFreezePassNeverEvadesTheAbandonedRetag() throws Exception {
+        int iterations = 500;
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (int i = 0; i < iterations; i++) {
+                TraceCollector collector = new TraceCollector();
+                TraceSink primary = collector.forAttempt(0);
+                // Seed one row so the freeze pass always has something to iterate, and so we can
+                // tell "the racing write's row" apart from "the seed row" by callId.
+                primary.before(step(0, 0, "seed", StepState.ACTIVE));
+
+                CyclicBarrier barrier = new CyclicBarrier(2);
+
+                var writer = pool.submit(() -> {
+                    barrier.await(2, TimeUnit.SECONDS);
+                    // The racing write: lands concurrently with the abandon call's freeze pass.
+                    primary.before(step(1, 0, "race-" + System.nanoTime(), StepState.ACTIVE));
+                    return null;
+                });
+                var abandoner = pool.submit(() -> {
+                    barrier.await(2, TimeUnit.SECONDS);
+                    collector.abandonAndStartFallback(0, 1, DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC,
+                            "timed out");
+                    return null;
+                });
+
+                writer.get(2, TimeUnit.SECONDS);
+                abandoner.get(2, TimeUnit.SECONDS);
+
+                List<TraceStep> attempt0Steps = collector.steps().stream()
+                        .filter(s -> s.attempt() == 0)
+                        .toList();
+
+                assertThat(attempt0Steps)
+                        .as("iteration %d: every attempt-0 row must be frozen ABANDONED, "
+                                + "with no row surviving as ACTIVE (either the racing write was "
+                                + "swept by the freeze pass, or it was rejected outright)", i)
+                        .allMatch(s -> s.state() == StepState.ABANDONED);
+            }
+        } finally {
+            pool.shutdown();
+            assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
     }
 }
