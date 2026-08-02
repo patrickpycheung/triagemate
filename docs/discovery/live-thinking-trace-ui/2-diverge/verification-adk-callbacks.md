@@ -114,3 +114,28 @@ now agree.** It also resolved point 3 above and corrected one of my conclusions:
   `AdkLiveRoundTripTest` already has a zero-budget "deny every tool" case that is the
   perfect place to assert this. Codex's note that the before-callback "short-circuits tool
   execution" *suggests* `after` does not fire, but that is an inference, not verified.
+
+## Update — TASK-006 wiring, two more empirical findings (2026-08-02)
+
+Both edges are now wired for real (`AdkDiagnosisEngine`, `AdkLiveRoundTripTest`). Running
+the actual round trip against the fake server settled the residual uncertainty above, and
+surfaced a second one this spike's bytecode-only method could not have seen:
+
+- ✅ **The denial-double-count question is settled: it does not matter in practice, but the
+  wiring defends against it anyway.** `AdkDiagnosisEngine` now tracks denied `callId`s and
+  makes `after`/`onToolError` a no-op for one, so even if a future ADK version starts
+  firing `after` post-denial, the `DENIED` row can never be silently overwritten by a
+  same-`callId` `DONE` row.
+- ⚠️ **`onToolErrorCallbackSync` is unreachable for a `FunctionTool`-wrapped tool that
+  throws a normal business exception, on this ADK version.** `FunctionTool.runAsync`
+  catches the reflective invocation's exception internally and resolves the call
+  *successfully* with an error-shaped `{status=error, message="An internal error
+  occurred."}` map — `afterToolCallbackSync` fires, not `onToolErrorCallbackSync`.
+  Verified two ways: (1) an actual live round trip where `get_incident` throws
+  `IncidentNotFoundException` resolves `DONE`, never `FAILED`; (2) `javap`-ing
+  `FunctionTool.runAsync`'s bytecode shows a single `catch (Exception e)` wrapping the
+  entire body. Every TriageMate tool is `FunctionTool`-wrapped, so this edge is dead code
+  for this app today — kept wired anyway (LT4 design note: required regardless), and
+  `resolveActiveCall`'s FAILED path is proven directly by
+  `onToolErrorCallbackResolvesActiveCallToFailed` rather than through a live round trip
+  that this ADK version cannot actually produce.

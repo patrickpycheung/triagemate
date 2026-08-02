@@ -6,7 +6,10 @@ import com.company.triage.guardrails.ToolRegistry;
 import com.company.triage.model.DiagnosisReport;
 import com.company.triage.orchestration.DiagnosisEngine;
 import com.company.triage.orchestration.DiagnosisResult;
+import com.company.triage.orchestration.trace.StepCatalog;
+import com.company.triage.orchestration.trace.StepState;
 import com.company.triage.orchestration.trace.TraceSink;
+import com.company.triage.orchestration.trace.TraceStep;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -28,6 +31,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Live agentic engine (J2): the ADK {@link LlmAgent} runs a bounded investigation
@@ -198,8 +203,8 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
      */
     @Override
     public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
-        // STREAM-003 wires real step emission through `sink`; this task is SPI-shape only,
-        // so the sink is accepted but unused here (equivalent to TraceSink.NOOP semantics).
+        // TASK-006 (J11 LT4): the three tool edges below emit real ACTIVE/DONE/FAILED/DENIED
+        // rows through `sink`. The three model edges (LT4's other half) are a later task.
         List<String> trace = new ArrayList<>();
         BoundsCallback bounds = new BoundsCallback(maxToolCalls, ToolRegistry.ALLOWED_TOOLS);
         // FND-33: pin the incident for this run so get_incident/find_similar_incidents
@@ -208,13 +213,19 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         TriageMateTools.bindIncident(incidentNumber);
 
         try {
-            return diagnoseBound(incidentNumber, trace, bounds);
+            return diagnoseBound(incidentNumber, trace, bounds, sink);
         } finally {
             TriageMateTools.clearIncident();
         }
     }
 
-    private DiagnosisResult diagnoseBound(String incidentNumber, List<String> trace, BoundsCallback bounds) {
+    /** In-flight tool call bookkeeping between {@code before} and its matching
+     *  {@code after}/{@code onToolError}, keyed on {@link com.google.adk.tools.ToolContext#functionCallId()}. */
+    record ActiveCall(int seq, long startedAtEpochMs, long startNanos) {
+    }
+
+    private DiagnosisResult diagnoseBound(String incidentNumber, List<String> trace, BoundsCallback bounds,
+                                          TraceSink sink) {
         // FND-65 / LT4 latency spike: nothing previously timestamped the trace, so there was
         // no way to see per-tool-call latency anywhere — not the JSON response, not the
         // console. `[t=…ms, +…ms]` gives elapsed-since-start and elapsed-since-previous-event
@@ -234,6 +245,19 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
             tr.add("%s  [t=%dms, +%dms]".formatted(msg, sinceStartMs, sincePrevMs));
         };
 
+        // TASK-006 (J11 LT4, tool edges): correlates before/after/onToolError on
+        // ToolContext.functionCallId() — NOT a counter, since ADK may run several calls
+        // from one Event in parallel (concurrent HashMap keyed on callId).
+        java.util.Map<String, ActiveCall> activeCalls = new ConcurrentHashMap<>();
+        // verification-adk-callbacks.md's residual uncertainty: whether after/onToolError
+        // still fires for a callId the before edge already denied is UNVERIFIED against the
+        // real ADK runtime. If it does, this callId is remembered so resolveActiveCall can
+        // refuse to touch it — a denial must never be silently overwritten by a later DONE
+        // row sharing the same callId (that would hide the denial from the honesty contract
+        // this whole card is built on).
+        java.util.Set<String> deniedCallIds = ConcurrentHashMap.newKeySet();
+        AtomicInteger stepSeq = new AtomicInteger();
+
         LlmAgent agent = LlmAgent.builder()
                 .name(AGENT_NAME)
                 .description("Bounded advisory incident triage")
@@ -250,15 +274,56 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                         FunctionTool.create(TriageMateTools.class, "findRecentCommitters"))
                 // J8 leash: the app enforces BOTH which tools may run (allowlist) and how
                 // many times (budget). Returning a non-empty Optional short-circuits the
-                // tool (denies it); empty lets it run.
+                // tool (denies it); empty lets it run. TASK-006 composes a trace observer
+                // onto this SAME edge without touching that return value at all — the
+                // denial Optional below is byte-identical to what it was before this task.
                 .beforeToolCallbackSync((invocation, tool, args, toolCtx) -> {
+                    String callId = toolCtx.functionCallId().orElseGet(
+                            () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
+
                     if (!bounds.allow(tool.name())) {
                         String why = bounds.denialReason(tool.name());
                         timed.accept(trace, "adk: DENIED %s — %s".formatted(tool.name(), why));
+                        // Compose, don't conflate (LT4 design note): the denial itself
+                        // (the Optional returned below) is completely untouched by this
+                        // trace emission. A hallucinated tool name falls through
+                        // StepCatalog.lookup's own BLOCKED fallback automatically — it is
+                        // not a key StepCatalog covers — while a real, over-budget tool
+                        // keeps its normal platform/label.
+                        StepCatalog.Entry denied = StepCatalog.lookup(tool.name());
+                        deniedCallIds.add(callId);
+                        sink.before(new TraceStep(stepSeq.getAndIncrement(), 0, callId,
+                                denied.platform(), tool.name(), denied.label(), why, StepState.DENIED,
+                                System.currentTimeMillis(), 0L, DiagnosisResult.Engine.ADK));
                         return Optional.of(Map.of("error", why
                                 + "; stop calling that tool and produce the report from what you have"));
                     }
+
                     timed.accept(trace, "adk tool call: " + tool.name());
+                    StepCatalog.Entry entry = StepCatalog.lookup(tool.name());
+                    long startedAtEpochMs = System.currentTimeMillis();
+                    int seq = stepSeq.getAndIncrement();
+                    activeCalls.put(callId, new ActiveCall(seq, startedAtEpochMs, System.nanoTime()));
+                    sink.before(new TraceStep(seq, 0, callId, entry.platform(), tool.name(), entry.label(),
+                            null, StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.ADK));
+                    return Optional.empty();
+                })
+                // afterToolCallbackSync is explicitly NOT a finally hook (LT4 design note):
+                // a thrown tool call reaches ONLY onToolErrorCallbackSync below, never this
+                // one. Both resolve the ACTIVE row emitted above to a terminal state.
+                .afterToolCallbackSync((invocation, tool, args, toolCtx, result) -> {
+                    String callId = toolCtx.functionCallId().orElseGet(
+                            () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
+                    resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
+                            StepState.DONE, String.valueOf(result));
+                    return Optional.empty();
+                })
+                .onToolErrorCallbackSync((invocation, tool, args, toolCtx, error) -> {
+                    String callId = toolCtx.functionCallId().orElseGet(
+                            () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
+                    timed.accept(trace, "adk: tool error " + tool.name() + " — " + error.getMessage());
+                    resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
+                            StepState.FAILED, String.valueOf(error.getMessage()));
                     return Optional.empty();
                 })
                 .build();
@@ -270,6 +335,47 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         com.company.triage.model.DiagnosisReportValidator.validate(report);
         timed.accept(trace, "adk agent finished: %d tool call(s) observed".formatted(bounds.used()));
         return new DiagnosisResult(report, trace);
+    }
+
+    /**
+     * Shared resolve logic for {@code afterToolCallbackSync}/{@code onToolErrorCallbackSync}
+     * (TASK-006): looks up the {@link ActiveCall} recorded by {@code beforeToolCallbackSync}
+     * for this {@code callId}, computes real elapsed {@code durationMs}, and emits the
+     * terminal replacement row via {@code sink}. If no matching {@code ActiveCall} is found
+     * (e.g. {@code functionCallId()} was absent on the before edge too), the row is still
+     * emitted rather than dropped, using a fresh seq/start so the resolve is never silently
+     * lost — at the cost of not correlating back to an ACTIVE row that never got a real key.
+     *
+     * <p>Exception: if {@code callId} is in {@code deniedCallIds}, this resolve is a no-op —
+     * see the {@code deniedCallIds} javadoc at its declaration site for why a denial must
+     * never be overwritten by a same-callId after/onToolError firing.
+     *
+     * <p>Deliberately takes a plain {@code callId} rather than a {@code ToolContext} — this
+     * method touches no ADK type at all, so {@code AdkOnToolErrorResolveTest} can exercise
+     * the FAILED path directly, without constructing ADK's {@code InvocationContext}/{@code
+     * ToolContext} machinery (which real ADK callback registration still requires, and which
+     * this method deliberately stays free of).
+     */
+    static void resolveActiveCall(java.util.Map<String, ActiveCall> activeCalls,
+                                  java.util.Set<String> deniedCallIds, AtomicInteger stepSeq,
+                                  String callId, String toolName, TraceSink sink,
+                                  StepState terminalState, String result) {
+        if (deniedCallIds.contains(callId)) {
+            return;
+        }
+        ActiveCall call = activeCalls.remove(callId);
+        long startedAtEpochMs = call != null ? call.startedAtEpochMs() : System.currentTimeMillis();
+        long durationMs = call != null ? (System.nanoTime() - call.startNanos()) / 1_000_000L : 0L;
+        int seq = call != null ? call.seq() : stepSeq.getAndIncrement();
+
+        StepCatalog.Entry entry = StepCatalog.lookup(toolName);
+        TraceStep step = new TraceStep(seq, 0, callId, entry.platform(), toolName, entry.label(), result,
+                terminalState, startedAtEpochMs, durationMs, DiagnosisResult.Engine.ADK);
+        if (terminalState == StepState.FAILED) {
+            sink.onError(step);
+        } else {
+            sink.after(step);
+        }
     }
 
     /**
