@@ -101,8 +101,8 @@ class PromptInjectionGuardrailTest {
         for (Payload p : loadPayloads()) {
             var snow = new RecordingServiceNow();
             DiagnosisReport poisoned = poisonedReport(p.text());
-            DiagnosisEngine engine = incident -> new DiagnosisResult(poisoned, new ArrayList<>(List.of("diagnose")));
-            DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+            DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(poisoned, new ArrayList<>(List.of("diagnose")));
+            DiagnosisEngine unusedFallback = (incident, sink) -> { throw new AssertionError("fallback must not run"); };
 
             new DiagnosisOrchestrator(engine, unusedFallback, snow, TriagePropertiesFixture.deterministic()).run("INC0010005");
 

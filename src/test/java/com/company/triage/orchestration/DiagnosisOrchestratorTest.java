@@ -57,8 +57,8 @@ class DiagnosisOrchestratorTest {
     void postsTwoAdvisoryCommentsSourcesFirst() {
         var snow = new RecordingServiceNow();
         DiagnosisReport report = sampleReport();
-        DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
-        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+        DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
+        DiagnosisEngine unusedFallback = (incident, sink) -> { throw new AssertionError("fallback must not run"); };
 
         DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0010005");
 
@@ -99,7 +99,7 @@ class DiagnosisOrchestratorTest {
     void differentlyCasedIncidentNumbersStillCoalesce() throws Exception {
         var engineCalls = new AtomicInteger(0);
         var latch = new CountDownLatch(1);
-        DiagnosisEngine engine = incident -> {
+        DiagnosisEngine engine = (incident, sink) -> {
             engineCalls.incrementAndGet();
             try { latch.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             return new DiagnosisResult(sampleReport(), new ArrayList<>(List.of("diagnose")));
@@ -126,8 +126,8 @@ class DiagnosisOrchestratorTest {
     void partialWritebackFailureIsDisclosedNotLost() {
         var snow = new SecondWriteFailsServiceNow();
         DiagnosisReport report = sampleReport();
-        DiagnosisEngine engine = incident -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
-        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+        DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(report, new ArrayList<>(List.of("diagnose")));
+        DiagnosisEngine unusedFallback = (incident, sink) -> { throw new AssertionError("fallback must not run"); };
 
         DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(true, 5000)).run("INC0010005");
 
@@ -140,8 +140,8 @@ class DiagnosisOrchestratorTest {
     @Test
     void writebackDisabledPostsNothing() {
         var snow = new RecordingServiceNow();
-        DiagnosisEngine engine = incident -> new DiagnosisResult(sampleReport(), new ArrayList<>());
-        DiagnosisEngine unusedFallback = incident -> { throw new AssertionError("fallback must not run"); };
+        DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(sampleReport(), new ArrayList<>());
+        DiagnosisEngine unusedFallback = (incident, sink) -> { throw new AssertionError("fallback must not run"); };
         DiagnosisResult r = new DiagnosisOrchestrator(engine, unusedFallback, snow, props(false, 5000)).run("INC0010005");
         assertThat(snow.notes).isEmpty();
         // FND-25: the UI reads this field, not report content, to decide whether to
@@ -154,11 +154,11 @@ class DiagnosisOrchestratorTest {
     @Test
     void primaryEngineFailureDegradesToFallbackEngine() {
         var snow = new RecordingServiceNow();
-        DiagnosisEngine failingPrimary = incident -> {
+        DiagnosisEngine failingPrimary = (incident, sink) -> {
             throw new IllegalStateException("LLM calls limit exceeded (simulated)");
         };
         DiagnosisReport fallbackReport = sampleReport();
-        DiagnosisEngine fallback = incident ->
+        DiagnosisEngine fallback = (incident, sink) ->
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: assembled report")));
 
         DiagnosisResult r = new DiagnosisOrchestrator(failingPrimary, fallback, snow, props(true, 5000)).run("INC0010005");
@@ -175,7 +175,7 @@ class DiagnosisOrchestratorTest {
     @Test
     void whenPrimaryIsAlreadyTheFallbackEngineFailuresPropagate() {
         var snow = new RecordingServiceNow();
-        DiagnosisEngine onlyEngine = incident -> { throw new IllegalStateException("boom"); };
+        DiagnosisEngine onlyEngine = (incident, sink) -> { throw new IllegalStateException("boom"); };
 
         var orchestrator = new DiagnosisOrchestrator(onlyEngine, onlyEngine, snow, props(true, 5000));
 
@@ -189,7 +189,7 @@ class DiagnosisOrchestratorTest {
     @Test
     void engineTimeoutPropagatesWhenNoFallback() {
         var snow = new RecordingServiceNow();
-        DiagnosisEngine slow = incident -> {
+        DiagnosisEngine slow = (incident, sink) -> {
             sleepUninterruptibly(500);
             return new DiagnosisResult(sampleReport(), new ArrayList<>());
         };
@@ -204,12 +204,12 @@ class DiagnosisOrchestratorTest {
     @Test
     void engineTimeoutOnPrimaryDegradesToFallback() {
         var snow = new RecordingServiceNow();
-        DiagnosisEngine slowPrimary = incident -> {
+        DiagnosisEngine slowPrimary = (incident, sink) -> {
             sleepUninterruptibly(500);
             return new DiagnosisResult(sampleReport(), new ArrayList<>());
         };
         DiagnosisReport fallbackReport = sampleReport();
-        DiagnosisEngine fallback = incident ->
+        DiagnosisEngine fallback = (incident, sink) ->
                 new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: ok")));
         var orchestrator = new DiagnosisOrchestrator(slowPrimary, fallback, snow, props(true, 50));
 
@@ -243,7 +243,7 @@ class DiagnosisOrchestratorTest {
         AtomicInteger engineCalls = new AtomicInteger();
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        DiagnosisEngine engine = incident -> {
+        DiagnosisEngine engine = (incident, sink) -> {
             engineCalls.incrementAndGet();
             started.countDown();
             try {
@@ -282,7 +282,7 @@ class DiagnosisOrchestratorTest {
     void sequentialRunsOfTheSameIncidentAreNotCoalesced() {
         var snow = new RecordingServiceNow();
         AtomicInteger engineCalls = new AtomicInteger();
-        DiagnosisEngine engine = incident -> {
+        DiagnosisEngine engine = (incident, sink) -> {
             engineCalls.incrementAndGet();
             return new DiagnosisResult(sampleReport(), new ArrayList<>());
         };

@@ -6,6 +6,7 @@ import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.gateway.SumoGateway;
 import com.company.triage.model.*;
+import com.company.triage.orchestration.trace.TraceSink;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -63,7 +64,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     }
 
     @Override
-    public DiagnosisResult diagnose(String incidentNumber) {
+    public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
+        // STREAM-003 wires real step emission through `sink`; this task is SPI-shape only,
+        // so the sink is accepted but unused here (equivalent to TraceSink.NOOP semantics).
         List<String> trace = new ArrayList<>();
         List<Evidence> evidence = new ArrayList<>();
 

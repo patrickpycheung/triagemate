@@ -64,7 +64,7 @@ class IncidentPollerTest {
      */
     static class CountingOrchestrator extends DiagnosisOrchestrator {
         private static final DiagnosisEngine DETERMINISTIC_STUB =
-                i -> new DiagnosisResult(null, new ArrayList<>(), DiagnosisResult.Engine.DETERMINISTIC);
+                (i, sink) -> new DiagnosisResult(null, new ArrayList<>(), DiagnosisResult.Engine.DETERMINISTIC);
 
         final List<String> diagnosed = new ArrayList<>();
         private final DiagnosisResult.Engine engine;
@@ -72,7 +72,7 @@ class IncidentPollerTest {
 
         CountingOrchestrator(ServiceNowGateway snow, DiagnosisResult.Engine engine) {
             super(engine == DiagnosisResult.Engine.ADK
-                        ? (i -> new DiagnosisResult(null, new ArrayList<>(), engine))
+                        ? ((i, sink) -> new DiagnosisResult(null, new ArrayList<>(), engine))
                         : DETERMINISTIC_STUB,
                   DETERMINISTIC_STUB,
                   snow, orchestratorProps());

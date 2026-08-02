@@ -5,6 +5,7 @@ import com.company.triage.gateway.*;
 import com.company.triage.model.DiagnosisReport;
 import com.company.triage.orchestration.DiagnosisEngine;
 import com.company.triage.orchestration.DiagnosisResult;
+import com.company.triage.orchestration.trace.TraceSink;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -200,7 +201,9 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
             "find_recent_committers");
 
     @Override
-    public DiagnosisResult diagnose(String incidentNumber) {
+    public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
+        // STREAM-003 wires real step emission through `sink`; this task is SPI-shape only,
+        // so the sink is accepted but unused here (equivalent to TraceSink.NOOP semantics).
         List<String> trace = new ArrayList<>();
         BoundsCallback bounds = new BoundsCallback(maxToolCalls, ALLOWED_TOOLS);
         // FND-33: pin the incident for this run so get_incident/find_similar_incidents
