@@ -108,11 +108,9 @@
     .link { color:var(--acc); text-decoration:underline; }
 
     /* ---- LT5: trace-row visual vocabulary (J11) ------------------------------
-       CSS-only building blocks for step-row rendering. TASK-014/015 wire real
-       TraceStep data into rows built from these classes via the
-       stepStateToDataState()/traceRowHtml() helpers in the script below —
-       this task only builds and demonstrates the vocabulary (see the
-       <details class="lt5-demo"> block near the bottom of <body>).
+       CSS-only building blocks for step-row rendering. LT3's replay renderer
+       and LT4's live poller both build rows from these classes via the
+       stepStateToDataState()/traceRowHtml() helpers in the script below.
        Reuses the .ev left-rail idiom (accent border-left + inset background)
        as its structural base. State lives purely in [data-state] on
        .trace-row; motion (badge glow-pulse + rail shimmer) is layered on top
@@ -228,9 +226,6 @@
       .trace-row[data-state="active"]::after { display:none; }
     }
 
-    .lt5-demo { margin-top:26px; }
-    .lt5-demo summary { cursor:pointer; color:var(--muted); font-size:12px; }
-    .lt5-demo[open] summary { margin-bottom:10px; }
 
     /* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
        Frame copy above the row list — the honesty-contract sentence carrying
@@ -327,17 +322,6 @@
   </div>
 
   <div id="out"></div>
-
-  <!-- LT5 dev sample section — NOT live data. Demonstrates the trace-row
-       visual vocabulary (state mapping, glow/shimmer, TRIAGEMATE subordinate
-       treatment) built by this task, for TASK-014/015 to consume. Collapsed
-       by default so it doesn't intrude on the real demo flow; expand to
-       inspect, or switch themes with the picker above while it's open to
-       confirm the glow-pulse re-derives from var(--acc) per theme. -->
-  <details class="lt5-demo">
-    <summary>LT5 visual vocabulary — dev sample rows (not live data)</summary>
-    <div id="lt5Sample"></div>
-  </details>
 </div>
 
 <script>
@@ -507,28 +491,6 @@ function traceRowHtml(step) {
     </div>
   </div>`;
 }
-
-// Dev-only demo: one sample row per data-state (plus the two real fail/warn
-// variants and two TRIAGEMATE subordinate rows) so the vocabulary above is
-// inspectable without live data. Lives inside the collapsed <details
-// class="lt5-demo"> — expand it, then use the theme picker to confirm the
-// glow-pulse ring re-derives from var(--acc) across themes.
-function initLt5Demo() {
-  const el = document.getElementById('lt5Sample');
-  if (!el) return;
-  const samples = [
-    { state:'PENDING',   platform:'gitlab',     badgeText:'GL', label:'Searching GitLab for related commits…', meta:'gitlab · queued' },
-    { state:'ACTIVE',    platform:'servicenow', badgeText:'SN', label:'Reading the incident…',                  meta:'servicenow · in progress' },
-    { state:'DONE',      platform:'confluence', badgeText:'CF', label:'Runbook found',                          meta:'confluence · 7.1 s' },
-    { state:'FAILED',    platform:'sumologic',  badgeText:'SL', label:'Log query failed',                       meta:'sumologic · error' },
-    { state:'DENIED',    platform:'gitlab',     badgeText:'GL', label:'Blocked an unrecognised tool call',      meta:'gitlab · denied' },
-    { state:'ABANDONED', platform:'servicenow', badgeText:'SN', label:'Reading the incident…',                  meta:'servicenow · abandoned — fallback started' },
-    { state:'ACTIVE',    platform:'triagemate', badgeText:'',   label:'Thinking…',                              meta:'model · in progress' },
-    { state:'DONE',      platform:'triagemate', badgeText:'',   label:'chose search_confluence',                meta:'model · 2.4 s' },
-  ];
-  el.innerHTML = samples.map(traceRowHtml).join('');
-}
-initLt5Demo();
 
 /* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
    Renders an animated post-hoc REPLAY of an already-complete deterministic

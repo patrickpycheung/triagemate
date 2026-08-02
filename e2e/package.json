@@ -1,0 +1,12 @@
+{
+  "name": "triagemate-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright UI checks for TriageMate's J11 live-thinking-trace frontend (src/main/resources/static/index.html). Drives the app over real HTTP against the deterministic (offline, mock-connector) engine — no ADK/Copilot proxy required.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
