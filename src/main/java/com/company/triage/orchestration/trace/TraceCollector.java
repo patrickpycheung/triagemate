@@ -71,6 +71,30 @@ public final class TraceCollector {
     private final Object abandonLock = new Object();
 
     /**
+     * TASK-011 (J11/LT4 poll endpoint): set once {@link
+     * com.company.triage.orchestration.DiagnosisOrchestrator DiagnosisOrchestrator} has
+     * produced this run's final {@code DiagnosisResult} (report, engine label, and
+     * writeback outcome all settled) — see {@link #markDone()}. Deliberately a fact
+     * about the RUN, not derived from step states: the last tool-call step resolving is
+     * NOT the same moment as the run being done (writeback still has to happen after),
+     * and an inference from step state alone would report {@code done} too early,
+     * breaking the design doc's binding requirement that this flag agree with the
+     * POST's eventual 200.
+     */
+    private volatile boolean done;
+
+    /** TASK-011: marks this run's steps as fully final. Called exactly once, by the
+     *  code that owns the run's lifecycle end-to-end — see the {@link #done} javadoc. */
+    public void markDone() {
+        done = true;
+    }
+
+    /** Whether {@link #markDone()} has been called for this run yet. */
+    public boolean isDone() {
+        return done;
+    }
+
+    /**
      * A {@link TraceSink} view over this collector that stamps every step it receives
      * with {@code attempt}, overriding whatever attempt the step itself carried.
      */

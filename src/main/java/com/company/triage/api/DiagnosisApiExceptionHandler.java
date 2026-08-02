@@ -3,6 +3,7 @@ package com.company.triage.api;
 import com.company.triage.gateway.IncidentNotFoundException;
 import com.company.triage.model.DiagnosisReportInvalidException;
 import com.company.triage.orchestration.DiagnosisTimeoutException;
+import com.company.triage.orchestration.trace.RunNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -27,9 +28,10 @@ import java.util.Objects;
  * IllegalStateException}→404 mapping that meant an unrelated internal error could be served
  * to the client as "incident not found", with its internal message echoed out.
  *
- * <p>Deliberately narrow: five types, four statuses (two timeout-shaped exceptions share
- * 504 — see FND-55 below). Anything else still falls through to Spring's default handling —
- * a demo-quality error contract, not a general-purpose one.
+ * <p>Deliberately narrow: six types, four statuses (two timeout-shaped exceptions share
+ * 504 — see FND-55 below; {@code RunNotFoundException} shares 404 with {@code
+ * IncidentNotFoundException} — see TASK-011 below). Anything else still falls through to
+ * Spring's default handling — a demo-quality error contract, not a general-purpose one.
  */
 @RestControllerAdvice(basePackages = "com.company.triage.api")
 class DiagnosisApiExceptionHandler {
@@ -42,6 +44,14 @@ class DiagnosisApiExceptionHandler {
 
     @ExceptionHandler(IncidentNotFoundException.class)
     ResponseEntity<Map<String, String>> incidentNotFound(IncidentNotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, e);
+    }
+
+    /** TASK-011: {@code GET /api/runs/{runId}/steps} for an unknown or TASK-010-evicted
+     *  {@code runId} — same 404 treatment as an unknown incident number above, so a
+     *  poller (STREAM-005) gets one clean signal to stop, never a 500 or a hang. */
+    @ExceptionHandler(RunNotFoundException.class)
+    ResponseEntity<Map<String, String>> runNotFound(RunNotFoundException e) {
         return error(HttpStatus.NOT_FOUND, e);
     }
 

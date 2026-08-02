@@ -87,6 +87,15 @@ class DiagnosisOrchestratorRunIdTest {
         public void alias(String runId, String incidentNumber) {
             aliasCalls.add(new String[] {runId, incidentNumber});
         }
+
+        @Override
+        public TraceCollector lookup(String runId) {
+            TraceCollector collector = registered.get(runId);
+            if (collector == null) {
+                throw new com.company.triage.orchestration.trace.RunNotFoundException(runId);
+            }
+            return collector;
+        }
     }
 
     // --- rule 4: "no header ⇒ no buffer" --------------------------------------------

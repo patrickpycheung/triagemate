@@ -245,6 +245,14 @@ public class DiagnosisOrchestrator {
 
         log.info("diagnosis for {} completed in {} ms ({} steps, writeback={})",
                 incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackPosted);
+        // TASK-011 (J11/LT4 poll endpoint): mark the run done HERE, not any earlier — this
+        // is the first point at which the report, engine label, and writeback outcome are
+        // all settled, i.e. the exact moment the POST is about to return its final 200. A
+        // GET /api/runs/{runId}/steps poller's `done` flag must agree with that (design
+        // doc, binding), so it cannot flip true merely because the last tool-call step
+        // resolved — writeback still had to happen after that. No runId ⇒ collector is a
+        // bare local instance nobody polls, so marking it done is harmless.
+        collector.markDone();
         // Reconstruction site 3/3: result.steps() already carries the collector's final
         // snapshot forward from diagnoseWithFallback — nothing emits new steps between
         // there and here (writeback is prose-only, added to `trace`), so no fresh

@@ -43,4 +43,16 @@ public interface RunTraceRegistry {
      * canonical run's entry has already aged out).
      */
     void alias(String runId, String incidentNumber);
+
+    /**
+     * TASK-011: the read side of this interface — {@link #register}/{@link #alias} had
+     * no way to read a {@code runId}'s buffer back until {@code GET
+     * /api/runs/{runId}/steps} needed one. Returns the {@link TraceCollector} currently
+     * registered for {@code runId} (the same instance a caller's engine call, or an
+     * aliased FND-31 coalesced caller, is writing into), or throws {@link
+     * RunNotFoundException} if {@code runId} is unknown OR has aged out under
+     * TASK-010's TTL/cap eviction — the two cases are indistinguishable to a poller and
+     * deliberately treated identically here.
+     */
+    TraceCollector lookup(String runId);
 }

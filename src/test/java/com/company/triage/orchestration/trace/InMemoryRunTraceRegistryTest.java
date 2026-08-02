@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * TASK-010's bounded {@link RunTraceRegistry} implementation: cap ~20 retained runs
@@ -240,6 +241,48 @@ class InMemoryRunTraceRegistryTest {
 
         assertThat(registry.size()).isEqualTo(2); // run-A and run-B both resolvable, sharing one collector
         assertThat(registry.peek("run-A")).isSameAs(registry.peek("run-B"));
+    }
+
+    // --- lookup() (TASK-011: the read side GET /api/runs/{runId}/steps needs) ------
+
+    @Test
+    void lookupReturnsTheRegisteredCollector() {
+        var registry = new InMemoryRunTraceRegistry();
+        TraceCollector collector = registry.register("run-A", "INC0010005");
+
+        assertThat(registry.lookup("run-A")).isSameAs(collector);
+    }
+
+    @Test
+    void lookupOfAnUnknownRunIdThrowsRunNotFoundException() {
+        var registry = new InMemoryRunTraceRegistry();
+
+        assertThatThrownBy(() -> registry.lookup("never-registered"))
+                .isInstanceOf(RunNotFoundException.class);
+    }
+
+    @Test
+    void lookupOfATtlExpiredRunIdThrowsRunNotFoundExceptionEvenWithoutAPriorSweepingCall() {
+        var clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
+        var registry = new InMemoryRunTraceRegistry(clock);
+        registry.register("run-A", "INC0010005");
+
+        clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+
+        // No register()/alias() call happened since — lookup() itself must sweep, not
+        // rely on some other call to have done it, since a poller can be the only
+        // activity on an otherwise-idle run.
+        assertThatThrownBy(() -> registry.lookup("run-A"))
+                .isInstanceOf(RunNotFoundException.class);
+    }
+
+    @Test
+    void lookupSeesTheAliasedCollectorToo() {
+        var registry = new InMemoryRunTraceRegistry();
+        TraceCollector canonical = registry.register("run-A", "INC0010005");
+        registry.alias("run-B", "INC0010005");
+
+        assertThat(registry.lookup("run-B")).isSameAs(canonical);
     }
 
     @Test

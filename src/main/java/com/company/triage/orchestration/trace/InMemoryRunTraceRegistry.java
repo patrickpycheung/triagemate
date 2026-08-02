@@ -146,6 +146,24 @@ public class InMemoryRunTraceRegistry implements RunTraceRegistry {
         return last;
     }
 
+    @Override
+    public TraceCollector lookup(String runId) {
+        long now = clock.millis();
+        synchronized (lock) {
+            // Sweep first: a poller (GET /api/runs/{runId}/steps) can be the ONLY activity
+            // on a run whose owner has stopped writing — without sweeping here, a runId
+            // whose TTL elapsed would keep reading as "found" until some unrelated
+            // register()/alias() call happened to sweep it, which may never happen again
+            // for a demo that's already moved on to a different incident.
+            evictStaleAndOverflow(now);
+            RunEntry entry = collectors.get(runId);
+            if (entry == null) {
+                throw new RunNotFoundException(runId);
+            }
+            return entry.collector;
+        }
+    }
+
     // --- visible for tests -------------------------------------------------------
     TraceCollector peek(String runId) {
         synchronized (lock) {
