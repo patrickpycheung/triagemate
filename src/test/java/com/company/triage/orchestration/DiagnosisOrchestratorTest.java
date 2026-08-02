@@ -4,6 +4,10 @@ import com.company.triage.config.TriageProperties;
 import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.*;
+import com.company.triage.orchestration.trace.Platform;
+import com.company.triage.orchestration.trace.StepState;
+import com.company.triage.orchestration.trace.TraceCollector;
+import com.company.triage.orchestration.trace.TraceStep;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -219,6 +223,75 @@ class DiagnosisOrchestratorTest {
         assertThat(r.engine()).isEqualTo(DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
         assertThat(r.trace().get(0)).contains("DiagnosisTimeoutException")
                 .contains("degraded to the deterministic engine");
+    }
+
+    /**
+     * TASK-003 (J11/LT1 Invariant 1): on an FND-7 degrade, the primary attempt's steps
+     * must NOT be discarded — they're frozen (ABANDONED) and kept, a FALLBACK_STARTED
+     * boundary is recorded, and the fallback attempt's own steps restart {@code seq} at
+     * 0 within their own segment. Modeled directly on {@code engineTimeoutOnPrimaryDegradesToFallback}
+     * above, extended with real sink emissions from both engines so the segment-per-attempt
+     * behavior is actually observable.
+     */
+    @Test
+    void engineTimeoutOnPrimaryDegradesToFallbackPreservesAbandonedStepsAndMarksFallbackBoundary() {
+        var snow = new RecordingServiceNow();
+        DiagnosisEngine slowPrimary = (incident, sink) -> {
+            sink.before(new TraceStep(0, 0, "primary-call-1", Platform.SERVICENOW, "search_incidents",
+                    "Searching ServiceNow…", null, StepState.ACTIVE, System.currentTimeMillis(), null,
+                    DiagnosisResult.Engine.ADK));
+            sleepUninterruptibly(500);
+            return new DiagnosisResult(sampleReport(), new ArrayList<>());
+        };
+        DiagnosisReport fallbackReport = sampleReport();
+        DiagnosisEngine fallback = (incident, sink) -> {
+            sink.before(new TraceStep(0, 0, "det-0", Platform.SERVICENOW, "servicenow.getIncident",
+                    "Fetching incident…", null, StepState.ACTIVE, System.currentTimeMillis(), null,
+                    DiagnosisResult.Engine.DETERMINISTIC));
+            sink.after(new TraceStep(0, 0, "det-0", Platform.SERVICENOW, "servicenow.getIncident",
+                    "Fetching incident…", "OK", StepState.DONE, System.currentTimeMillis(), 5L,
+                    DiagnosisResult.Engine.DETERMINISTIC));
+            return new DiagnosisResult(fallbackReport, new ArrayList<>(List.of("deterministic: ok")));
+        };
+        var orchestrator = new DiagnosisOrchestrator(slowPrimary, fallback, snow, props(true, 50));
+
+        DiagnosisResult r = orchestrator.run("INC0010005");
+
+        assertThat(r.report()).isSameAs(fallbackReport);
+        assertThat(r.engine()).isEqualTo(DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
+
+        List<TraceStep> steps = r.steps();
+
+        // Attempt 0's step is present (never discarded) and re-tagged ABANDONED.
+        TraceStep abandoned = steps.stream().filter(s -> s.attempt() == 0).findFirst()
+                .orElseThrow(() -> new AssertionError("attempt 0 step missing from r.steps(): " + steps));
+        assertThat(abandoned.callId()).isEqualTo("primary-call-1");
+        assertThat(abandoned.state()).as("frozen segment must be marked ABANDONED").isEqualTo(StepState.ABANDONED);
+
+        // A FALLBACK_STARTED boundary row is present, introducing attempt 1.
+        TraceStep boundary = steps.stream()
+                .filter(s -> TraceCollector.FALLBACK_STARTED_TOOL.equals(s.tool()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no FALLBACK_STARTED boundary in r.steps(): " + steps));
+        assertThat(boundary.attempt()).isEqualTo(1);
+
+        // Attempt 1's real steps restart seq at 0 within their own segment — note the
+        // fallback engine itself passed attempt=0 on its TraceStep (engines don't know
+        // retry state); the orchestrator's collector re-stamps it to 1 regardless.
+        List<TraceStep> attempt1Steps = steps.stream()
+                .filter(s -> s.attempt() == 1 && !TraceCollector.FALLBACK_STARTED_TOOL.equals(s.tool()))
+                .toList();
+        assertThat(attempt1Steps).isNotEmpty();
+        assertThat(attempt1Steps.get(0).seq()).isZero();
+        assertThat(attempt1Steps.get(0).callId()).isEqualTo("det-0");
+        assertThat(attempt1Steps.get(0).state()).isEqualTo(StepState.DONE);
+
+        // Ordering: abandoned attempt-0 row(s), then the boundary, then attempt-1 rows.
+        int abandonedIdx = steps.indexOf(abandoned);
+        int boundaryIdx = steps.indexOf(boundary);
+        int attempt1Idx = steps.indexOf(attempt1Steps.get(0));
+        assertThat(abandonedIdx).isLessThan(boundaryIdx);
+        assertThat(boundaryIdx).isLessThan(attempt1Idx);
     }
 
     private static void sleepUninterruptibly(long millis) {

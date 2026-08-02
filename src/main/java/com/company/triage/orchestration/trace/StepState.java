@@ -15,5 +15,13 @@ public enum StepState {
     /** Emitted by {@code TraceSink.onError} — the call threw. */
     FAILED,
     /** The call was not attempted because a guardrail denied it. */
-    DENIED
+    DENIED,
+    /**
+     * TASK-003 (J11 LT1 Invariant 1): the engine attempt this row belongs to was frozen
+     * mid-run by an FND-7 degrade — the row is kept (never deleted, per the honesty
+     * contract) but re-tagged {@code ABANDONED} regardless of whatever state it last had
+     * ({@code ACTIVE}/{@code DONE}/{@code FAILED}), so a renderer can show it struck
+     * through without losing the row. See {@code TraceCollector#abandonAndStartFallback}.
+     */
+    ABANDONED
 }

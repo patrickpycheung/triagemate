@@ -1,6 +1,7 @@
 package com.company.triage.orchestration;
 
 import com.company.triage.model.DiagnosisReport;
+import com.company.triage.orchestration.trace.TraceStep;
 
 import java.util.List;
 
@@ -21,12 +22,22 @@ import java.util.List;
  * from the report — so with {@code triage.writeback.enabled=false} it told the audience
  * comments were posted when none were. Set by {@link DiagnosisOrchestrator#run} AFTER
  * the writeback decision is made, which is the only place that actually knows.
+ *
+ * <p>{@code steps} (TASK-003, J11/LT1) is the structured live-thinking-trace counterpart
+ * to {@code trace} — an ADDITION alongside it, never a replacement or a derivation of
+ * it. {@code trace} stays byte-identical to what it always was: 11 existing trace-line
+ * formats carry argument detail and roughly 10 test assertions match their prefixes, so
+ * deriving one from the other (or changing either's shape) is exactly the FND-16 failure
+ * class this card's own javadoc warns about above. {@code steps} is populated by {@link
+ * DiagnosisOrchestrator} from its per-run {@code TraceCollector}, segmented by engine
+ * attempt so an FND-7 degrade never silently discards the primary attempt's rows.
  */
 public record DiagnosisResult(
         DiagnosisReport report,
         List<String> trace,
         Engine engine,
-        boolean writebackPosted
+        boolean writebackPosted,
+        List<TraceStep> steps
 ) {
     /** Which engine produced the report. */
     public enum Engine {
@@ -40,17 +51,22 @@ public record DiagnosisResult(
 
     /**
      * Back-compat convenience for engine implementations, which return a result BEFORE
-     * the orchestrator knows the engine label or the writeback outcome — both are
-     * filled in with real values afterward (see {@link DiagnosisOrchestrator}). Engines
-     * should never set these themselves.
+     * the orchestrator knows the engine label, the writeback outcome, or the collected
+     * {@code steps} — all three are filled in with real values afterward (see {@link
+     * DiagnosisOrchestrator}). Engines should never set these themselves.
      */
     public DiagnosisResult(DiagnosisReport report, List<String> trace) {
-        this(report, trace, Engine.DETERMINISTIC, true);
+        this(report, trace, Engine.DETERMINISTIC, true, List.of());
     }
 
     /** Back-compat convenience: pre-FND-25 callers that only cared about {@code engine}. */
     public DiagnosisResult(DiagnosisReport report, List<String> trace, Engine engine) {
-        this(report, trace, engine, true);
+        this(report, trace, engine, true, List.of());
+    }
+
+    /** Back-compat convenience: pre-TASK-003 callers that don't carry {@code steps}. */
+    public DiagnosisResult(DiagnosisReport report, List<String> trace, Engine engine, boolean writebackPosted) {
+        this(report, trace, engine, writebackPosted, List.of());
     }
 
     /** True when this report did NOT come from the engine that was asked for. */

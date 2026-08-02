@@ -2,6 +2,8 @@ package com.company.triage.orchestration;
 
 import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
+import com.company.triage.orchestration.trace.TraceCollector;
+import com.company.triage.orchestration.trace.TraceSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -153,7 +155,11 @@ public class DiagnosisOrchestrator {
 
     private DiagnosisResult runOnce(String incidentNumber) {
         long t0 = System.currentTimeMillis();
-        DiagnosisResult result = diagnoseWithFallback(incidentNumber);
+        // TASK-003 (J11/LT1): one collector per run, shared across the primary and (if
+        // needed) fallback engine calls — see diagnoseWithFallback for the segment-per-
+        // attempt degrade handling.
+        TraceCollector collector = new TraceCollector();
+        DiagnosisResult result = diagnoseWithFallback(incidentNumber, collector);
 
         // FND-36: writebackPosted must reflect what ACTUALLY happened, not just whether
         // writeback was enabled — those diverged the moment either write could fail.
@@ -187,33 +193,53 @@ public class DiagnosisOrchestrator {
 
         log.info("diagnosis for {} completed in {} ms ({} steps, writeback={})",
                 incidentNumber, System.currentTimeMillis() - t0, result.trace().size(), writebackPosted);
-        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted);
+        // Reconstruction site 3/3: result.steps() already carries the collector's final
+        // snapshot forward from diagnoseWithFallback — nothing emits new steps between
+        // there and here (writeback is prose-only, added to `trace`), so no fresh
+        // collector.steps() read is needed.
+        return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted, result.steps());
     }
 
-    private DiagnosisResult diagnoseWithFallback(String incidentNumber) {
+    private DiagnosisResult diagnoseWithFallback(String incidentNumber, TraceCollector collector) {
         if (engine == fallbackEngine) {
             // Deterministic engine IS the active engine — no fallback to fall back to;
             // let a failure (including a timeout) propagate as the real bug it would be.
-            return callWithTimeout(engine, incidentNumber);
+            // Reconstruction site 1/3: the engine's own DiagnosisResult never carries real
+            // steps (it's built via a back-compat constructor) — the collector is the only
+            // place they actually accumulate, so carry it forward here explicitly.
+            DiagnosisResult result = callWithTimeout(engine, incidentNumber, collector.forAttempt(0));
+            return new DiagnosisResult(result.report(), result.trace(), result.engine(),
+                    result.writebackPosted(), collector.steps());
         }
         try {
-            DiagnosisResult live = callWithTimeout(engine, incidentNumber);
+            DiagnosisResult live = callWithTimeout(engine, incidentNumber, collector.forAttempt(0));
             // The primary engine ran; label the result with which one it actually was.
-            return new DiagnosisResult(live.report(), live.trace(), DiagnosisResult.Engine.ADK);
+            // Reconstruction site 2/3.
+            return new DiagnosisResult(live.report(), live.trace(), DiagnosisResult.Engine.ADK,
+                    true, collector.steps());
         } catch (Exception e) {
             log.warn("primary engine failed for {} ({}: {}) — degrading to the deterministic engine",
                     incidentNumber, e.getClass().getSimpleName(), e.getMessage());
-            DiagnosisResult fallback = callWithTimeout(fallbackEngine, incidentNumber);
+            // J11/LT1 Invariant 1: freeze attempt 0's steps (kept, re-tagged ABANDONED —
+            // never discarded) and record a FALLBACK_STARTED boundary before attempt 1
+            // starts. The primary's virtual thread is not killed (FND-15 is best-effort),
+            // so any further writes it makes for attempt 0 land in a dead segment and are
+            // dropped by the collector — they can never merge into attempt 1's sequence.
+            collector.abandonAndStartFallback(0, 1, DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC,
+                    "%s: %s".formatted(e.getClass().getSimpleName(), e.getMessage()));
+            DiagnosisResult fallback = callWithTimeout(fallbackEngine, incidentNumber, collector.forAttempt(1));
             fallback.trace().add(0, "⚠ primary engine did not converge (%s: %s) — degraded to the deterministic engine"
                     .formatted(e.getClass().getSimpleName(), e.getMessage()));
+            // Reconstruction site 3/3 (of diagnoseWithFallback; runOnce carries it forward
+            // once more for writebackPosted, making 4 sites total in this class).
             return new DiagnosisResult(fallback.report(), fallback.trace(),
-                    DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC);
+                    DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC, true, collector.steps());
         }
     }
 
     /** FND-15: bounds any single engine call to {@code timeoutMs}, on a virtual thread. */
-    private DiagnosisResult callWithTimeout(DiagnosisEngine target, String incidentNumber) {
-        Future<DiagnosisResult> future = engineExecutor.submit(() -> target.diagnose(incidentNumber));
+    private DiagnosisResult callWithTimeout(DiagnosisEngine target, String incidentNumber, TraceSink sink) {
+        Future<DiagnosisResult> future = engineExecutor.submit(() -> target.diagnose(incidentNumber, sink));
         long timeoutMs = props.orchestrator().timeoutMs();
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
