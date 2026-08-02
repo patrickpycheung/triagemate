@@ -6,6 +6,10 @@ import com.company.triage.gateway.mock.*;
 import com.company.triage.model.Contact;
 import com.company.triage.model.DiagnosisReport;
 import com.company.triage.model.KnowledgeDoc;
+import com.company.triage.orchestration.trace.Platform;
+import com.company.triage.orchestration.trace.StepState;
+import com.company.triage.orchestration.trace.TraceCollector;
+import com.company.triage.orchestration.trace.TraceStep;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -192,5 +196,74 @@ class DeterministicDiagnosisEngineTest {
         // the demo's "Payments Platform Support".
         assertThat(r.suggestedAssignment().group()).doesNotContain("Payments Platform Support");
         assertThat(r.missingInformation()).isNotEmpty();
+    }
+
+    /**
+     * STREAM-003 review remediation (TASK-008 test gap): the existing trace-string
+     * assertions above only prove the OLD {@code List<String> trace} field didn't
+     * regress — they say nothing about the NEW {@link TraceStep} emissions {@code
+     * emitStep} adds alongside every trace line. This drives {@code diagnose(incidentNumber,
+     * sink)} through a real {@link TraceCollector} (the same collector {@code
+     * DiagnosisOrchestrator} uses in production) and asserts the resulting steps have the
+     * correct platform/state/callId/durationMs shape — for a ServiceNow tool-mapped step
+     * ({@code servicenow.getIncident} → {@link Platform#SERVICENOW}) and a TRIAGEMATE
+     * pseudo-platform step ({@code understand:} / {@code contacts:}).
+     */
+    @Test
+    void diagnoseEmitsTraceStepsWithCorrectShapeThroughATraceCollector() {
+        TraceCollector collector = new TraceCollector();
+
+        DiagnosisResult result = engine.diagnose("INC0010005", collector.forAttempt(0));
+
+        // Sanity: the collector's steps match up with the result the caller gets back.
+        assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
+
+        List<TraceStep> steps = collector.steps();
+        assertThat(steps).isNotEmpty();
+
+        // Every emitted step must be DONE (this engine runs synchronously — nothing should
+        // ever be left stuck ACTIVE) or, for the conditional gitlab.searchCode path, simply
+        // absent. FAILED/ABANDONED are not reachable on this engine's happy path.
+        assertThat(steps).allSatisfy(step -> assertThat(step.state()).isIn(StepState.DONE));
+
+        // callId follows the synthetic "det-<seq>" convention (LT1 §67), one per emitted
+        // step, with no gaps or duplicates.
+        assertThat(steps).extracting(TraceStep::callId)
+                .allMatch(id -> id.matches("det-\\d+"))
+                .doesNotHaveDuplicates();
+
+        // A ServiceNow tool-mapped step: servicenow.getIncident -> Platform.SERVICENOW,
+        // with a real (non-null) measured duration and its result text carried through.
+        assertThat(steps).anySatisfy(step -> {
+            assertThat(step.tool()).isEqualTo("servicenow.getIncident");
+            assertThat(step.platform()).isEqualTo(Platform.SERVICENOW);
+            assertThat(step.state()).isEqualTo(StepState.DONE);
+            assertThat(step.durationMs()).isNotNull();
+            assertThat(step.durationMs()).isGreaterThanOrEqualTo(0L);
+            assertThat(step.result()).contains("servicenow.getIncident");
+            assertThat(step.callId()).matches("det-\\d+");
+        });
+
+        // A TRIAGEMATE pseudo-platform step: understand: -> internal bookkeeping, not a
+        // real integration call.
+        assertThat(steps).anySatisfy(step -> {
+            assertThat(step.tool()).isEqualTo("understand:");
+            assertThat(step.platform()).isEqualTo(Platform.TRIAGEMATE);
+            assertThat(step.state()).isEqualTo(StepState.DONE);
+            assertThat(step.durationMs()).isNotNull();
+        });
+
+        // A second TRIAGEMATE step: contacts: — proves this engine emits more than one
+        // TRIAGEMATE-mapped step, not just understand:.
+        assertThat(steps).anySatisfy(step -> {
+            assertThat(step.tool()).isEqualTo("contacts:");
+            assertThat(step.platform()).isEqualTo(Platform.TRIAGEMATE);
+            assertThat(step.state()).isEqualTo(StepState.DONE);
+        });
+
+        // Every step carries attempt 0 (stamped by collector.forAttempt(0)) and belongs to
+        // the DETERMINISTIC engine.
+        assertThat(steps).allMatch(step -> step.attempt() == 0);
+        assertThat(steps).allMatch(step -> step.engine() == DiagnosisResult.Engine.DETERMINISTIC);
     }
 }

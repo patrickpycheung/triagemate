@@ -286,53 +286,90 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 // tool (denies it); empty lets it run. TASK-006 composes a trace observer
                 // onto this SAME edge without touching that return value at all — the
                 // denial Optional below is byte-identical to what it was before this task.
+                //
+                // SAFETY (remediation of STREAM-003 review finding): the real allow/deny
+                // decision is computed FIRST and every branch's return value is fixed
+                // before any TraceSink call is made; the trace-emission block is wrapped in
+                // try/catch exactly like beforeModelObserve's CRITICAL SAFETY CONTRACT below
+                // — a throwing sink can only ever cost a trace row, never the denial Optional
+                // or the tool's real execution. AdkToolEdgeSafetyTest proves this holds even
+                // when the sink itself is made to throw, on both the ALLOWED and DENIED paths.
                 .beforeToolCallbackSync((invocation, tool, args, toolCtx) -> {
                     String callId = toolCtx.functionCallId().orElseGet(
                             () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
 
                     if (!bounds.allow(tool.name())) {
                         String why = bounds.denialReason(tool.name());
-                        timed.accept(trace, "adk: DENIED %s — %s".formatted(tool.name(), why));
-                        // Compose, don't conflate (LT4 design note): the denial itself
-                        // (the Optional returned below) is completely untouched by this
-                        // trace emission. A hallucinated tool name falls through
-                        // StepCatalog.lookup's own BLOCKED fallback automatically — it is
-                        // not a key StepCatalog covers — while a real, over-budget tool
-                        // keeps its normal platform/label.
-                        StepCatalog.Entry denied = StepCatalog.lookup(tool.name());
+                        // The real denial (returned below) does not depend on anything past
+                        // this line — deniedCallIds must be recorded regardless of whether
+                        // the sink call succeeds, so a later after/onToolError firing for
+                        // this callId is still refused (see deniedCallIds javadoc).
                         deniedCallIds.add(callId);
-                        sink.before(new TraceStep(stepSeq.getAndIncrement(), 0, callId,
-                                denied.platform(), tool.name(), denied.label(), why, StepState.DENIED,
-                                System.currentTimeMillis(), 0L, DiagnosisResult.Engine.ADK));
+                        try {
+                            timed.accept(trace, "adk: DENIED %s — %s".formatted(tool.name(), why));
+                            // Compose, don't conflate (LT4 design note): the denial itself
+                            // (the Optional returned below) is completely untouched by this
+                            // trace emission. A hallucinated tool name falls through
+                            // StepCatalog.lookup's own BLOCKED fallback automatically — it is
+                            // not a key StepCatalog covers — while a real, over-budget tool
+                            // keeps its normal platform/label.
+                            StepCatalog.Entry denied = StepCatalog.lookup(tool.name());
+                            sink.before(new TraceStep(stepSeq.getAndIncrement(), 0, callId,
+                                    denied.platform(), tool.name(), denied.label(), why, StepState.DENIED,
+                                    System.currentTimeMillis(), 0L, DiagnosisResult.Engine.ADK));
+                        } catch (RuntimeException e) {
+                            log.warn("beforeToolCallbackSync trace observer failed on DENIED path "
+                                    + "— denial proceeds untouched", e);
+                        }
                         return Optional.of(Map.of("error", why
                                 + "; stop calling that tool and produce the report from what you have"));
                     }
 
-                    timed.accept(trace, "adk tool call: " + tool.name());
-                    StepCatalog.Entry entry = StepCatalog.lookup(tool.name());
-                    long startedAtEpochMs = System.currentTimeMillis();
-                    int seq = stepSeq.getAndIncrement();
-                    activeCalls.put(callId, new ActiveCall(seq, startedAtEpochMs, System.nanoTime()));
-                    sink.before(new TraceStep(seq, 0, callId, entry.platform(), tool.name(), entry.label(),
-                            null, StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.ADK));
+                    try {
+                        timed.accept(trace, "adk tool call: " + tool.name());
+                        StepCatalog.Entry entry = StepCatalog.lookup(tool.name());
+                        long startedAtEpochMs = System.currentTimeMillis();
+                        int seq = stepSeq.getAndIncrement();
+                        activeCalls.put(callId, new ActiveCall(seq, startedAtEpochMs, System.nanoTime()));
+                        sink.before(new TraceStep(seq, 0, callId, entry.platform(), tool.name(), entry.label(),
+                                null, StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.ADK));
+                    } catch (RuntimeException e) {
+                        log.warn("beforeToolCallbackSync trace observer failed — tool call proceeds untouched", e);
+                    }
                     return Optional.empty();
                 })
                 // afterToolCallbackSync is explicitly NOT a finally hook (LT4 design note):
                 // a thrown tool call reaches ONLY onToolErrorCallbackSync below, never this
                 // one. Both resolve the ACTIVE row emitted above to a terminal state.
+                //
+                // SAFETY: this edge always returns Optional.empty() regardless of the sink's
+                // behaviour — resolveActiveCall (which calls into sink.after/onError) is
+                // wrapped in try/catch so a throwing sink can never propagate out of this ADK
+                // callback and disrupt the real tool result already delivered to the model.
                 .afterToolCallbackSync((invocation, tool, args, toolCtx, result) -> {
                     String callId = toolCtx.functionCallId().orElseGet(
                             () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
-                    resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
-                            StepState.DONE, String.valueOf(result));
+                    try {
+                        resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
+                                StepState.DONE, String.valueOf(result));
+                    } catch (RuntimeException e) {
+                        log.warn("afterToolCallbackSync trace observer failed — tool result proceeds untouched", e);
+                    }
                     return Optional.empty();
                 })
+                // SAFETY: same contract as afterToolCallbackSync above — always returns
+                // Optional.empty(), and the sink-touching work is wrapped in try/catch so a
+                // throwing sink can never prevent this error from being handled normally.
                 .onToolErrorCallbackSync((invocation, tool, args, toolCtx, error) -> {
                     String callId = toolCtx.functionCallId().orElseGet(
                             () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
-                    timed.accept(trace, "adk: tool error " + tool.name() + " — " + error.getMessage());
-                    resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
-                            StepState.FAILED, String.valueOf(error.getMessage()));
+                    try {
+                        timed.accept(trace, "adk: tool error " + tool.name() + " — " + error.getMessage());
+                        resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
+                                StepState.FAILED, String.valueOf(error.getMessage()));
+                    } catch (RuntimeException e) {
+                        log.warn("onToolErrorCallbackSync trace observer failed — tool error proceeds untouched", e);
+                    }
                     return Optional.empty();
                 })
                 // TASK-007 (J11 LT4, model edges) — the majority of the run's timeline
@@ -356,17 +393,36 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 // than predicting the label up front or deferring to see whether a later
                 // beforeToolCallback fires (which would race this same resolve). See
                 // describeModelOutcome's javadoc.
+                //
+                // SAFETY: same contract as afterToolCallbackSync/onToolErrorCallbackSync above
+                // — resolveActiveModelCall (which calls into sink.after/onError) is wrapped in
+                // try/catch so a throwing sink can never propagate out of this ADK callback and
+                // disrupt the real model response already delivered to the run.
                 .afterModelCallbackSync((ctx, response) -> {
-                    resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
-                            StepState.DONE, describeModelOutcome(response));
+                    try {
+                        resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
+                                StepState.DONE, describeModelOutcome(response));
+                    } catch (RuntimeException e) {
+                        log.warn("afterModelCallbackSync trace observer failed — model response proceeds untouched",
+                                e);
+                    }
                     return Optional.empty();
                 })
                 // How a proxy/model failure becomes VISIBLE in the trace instead of the run
                 // just silently stopping or degrading with no on-screen signal of why.
+                //
+                // SAFETY: same contract as above — resolveActiveModelCall is wrapped in
+                // try/catch so a throwing sink can never prevent the real model error from
+                // being handled normally.
                 .onModelErrorCallbackSync((ctx, request, error) -> {
                     timed.accept(trace, "adk: model error — " + error.getMessage());
-                    resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
-                            StepState.FAILED, String.valueOf(error.getMessage()));
+                    try {
+                        resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
+                                StepState.FAILED, String.valueOf(error.getMessage()));
+                    } catch (RuntimeException e) {
+                        log.warn("onModelErrorCallbackSync trace observer failed — model error proceeds untouched",
+                                e);
+                    }
                     return Optional.empty();
                 })
                 .build();
