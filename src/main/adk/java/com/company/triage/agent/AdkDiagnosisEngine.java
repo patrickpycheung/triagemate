@@ -16,10 +16,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.RunConfig;
 import com.google.adk.events.Event;
+import com.google.adk.models.LlmResponse;
 import com.google.adk.runner.InMemoryRunner;
 import com.google.adk.sessions.Session;
 import com.google.adk.tools.FunctionTool;
 import com.google.genai.types.Content;
+import com.google.genai.types.FunctionCall;
 import com.google.genai.types.Part;
 import java.util.Map;
 import java.util.Optional;
@@ -204,7 +206,8 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     @Override
     public DiagnosisResult diagnose(String incidentNumber, TraceSink sink) {
         // TASK-006 (J11 LT4): the three tool edges below emit real ACTIVE/DONE/FAILED/DENIED
-        // rows through `sink`. The three model edges (LT4's other half) are a later task.
+        // rows through `sink`. TASK-007 adds the three model edges — together, all six
+        // edges LT4 specifies.
         List<String> trace = new ArrayList<>();
         BoundsCallback bounds = new BoundsCallback(maxToolCalls, ToolRegistry.ALLOWED_TOOLS);
         // FND-33: pin the incident for this run so get_incident/find_similar_incidents
@@ -256,6 +259,12 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         // row sharing the same callId (that would hide the denial from the honesty contract
         // this whole card is built on).
         java.util.Set<String> deniedCallIds = ConcurrentHashMap.newKeySet();
+        // TASK-007 (J11 LT4, model edges): same "in-flight bookkeeping between before and
+        // its matching after/onError" idea as activeCalls above, but keyed on
+        // CallbackContext.eventId() — the model-side analogue of ToolContext.functionCallId()
+        // — since a model call has no ToolContext. No denied-id set here: BoundsCallback only
+        // ever governs tools, so a model call has no DENIED state to protect.
+        java.util.Map<String, ActiveCall> activeModelCalls = new ConcurrentHashMap<>();
         AtomicInteger stepSeq = new AtomicInteger();
 
         LlmAgent agent = LlmAgent.builder()
@@ -326,6 +335,40 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                             StepState.FAILED, String.valueOf(error.getMessage()));
                     return Optional.empty();
                 })
+                // TASK-007 (J11 LT4, model edges) — the majority of the run's timeline
+                // (~75% measured, LT4 design note): every window the tool edges above are
+                // silent during — between tool calls, and worst, the 13s ± 1.3 the model
+                // spends composing the final report with no tool call in flight at all — now
+                // gets a TRIAGEMATE "Thinking…" row via these three edges, correlated on
+                // CallbackContext.eventId() (the model-side analogue of functionCallId()).
+                //
+                // CRITICAL SAFETY: beforeModelObserve below returns Optional.empty()
+                // UNCONDITIONALLY — see its javadoc. Returning anything else here would
+                // REPLACE the model's actual response with whatever this observer returned,
+                // silently substituting text the model never produced, with no DENIED-style
+                // row to reveal it happened (worse than the tool-edge short-circuit hazard,
+                // which is at least visible). AdkBeforeModelCallbackSafetyTest proves this.
+                .beforeModelCallbackSync((ctx, requestBuilder) ->
+                        beforeModelObserve(activeModelCalls, stepSeq, sink, ctx.eventId()))
+                // Retrospective labelling (LT4 design note): "chose <tool>" vs "produced the
+                // report" is only knowable once the model's actual response is in hand, so
+                // this inspects the real LlmResponse content HERE — at resolve time — rather
+                // than predicting the label up front or deferring to see whether a later
+                // beforeToolCallback fires (which would race this same resolve). See
+                // describeModelOutcome's javadoc.
+                .afterModelCallbackSync((ctx, response) -> {
+                    resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
+                            StepState.DONE, describeModelOutcome(response));
+                    return Optional.empty();
+                })
+                // How a proxy/model failure becomes VISIBLE in the trace instead of the run
+                // just silently stopping or degrading with no on-screen signal of why.
+                .onModelErrorCallbackSync((ctx, request, error) -> {
+                    timed.accept(trace, "adk: model error — " + error.getMessage());
+                    resolveActiveModelCall(activeModelCalls, stepSeq, ctx.eventId(), sink,
+                            StepState.FAILED, String.valueOf(error.getMessage()));
+                    return Optional.empty();
+                })
                 .build();
 
         DiagnosisReport report = runAgentAndParse(agent, incidentNumber, trace);
@@ -376,6 +419,100 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         } else {
             sink.after(step);
         }
+    }
+
+    /**
+     * {@code beforeModelCallbackSync}'s trace observer (TASK-007), extracted to a plain
+     * static method — taking a {@code TraceSink} and a raw {@code eventId} rather than ADK's
+     * {@code CallbackContext}/{@code LlmRequest.Builder} — for the same reason {@link
+     * #resolveActiveCall} is: it lets a test exercise this exact logic, including forcing an
+     * internal failure, without constructing ADK's callback machinery.
+     *
+     * <p><b>CRITICAL SAFETY CONTRACT: every path through this method returns {@code
+     * Optional.empty()} — unconditionally.</b> Per the LT4 design note, returning anything
+     * else from {@code beforeModelCallback} REPLACES the model's actual response — an
+     * observer that returned a non-empty {@code Optional<LlmResponse>} would make the run
+     * proceed as if the model had said something it never said, a direct honesty-contract
+     * breach with no {@code DENIED}-style row to reveal it happened (unlike the tool-edge
+     * short-circuit, which is at least visible). The try/catch below exists purely so a bug
+     * in trace bookkeeping — a full {@code activeModelCalls} map throwing, a sink
+     * implementation that throws, {@code eventId} being null/blank — can only ever cost a
+     * trace row, never the model's real answer. {@code AdkBeforeModelCallbackSafetyTest}
+     * proves this holds even when the sink itself is made to throw.
+     */
+    static Optional<LlmResponse> beforeModelObserve(Map<String, ActiveCall> activeModelCalls,
+                                                     AtomicInteger stepSeq, TraceSink sink, String eventId) {
+        try {
+            String key = (eventId == null || eventId.isBlank())
+                    ? "no-event-id-" + stepSeq.get() : eventId;
+            long startedAtEpochMs = System.currentTimeMillis();
+            int seq = stepSeq.getAndIncrement();
+            activeModelCalls.put(key, new ActiveCall(seq, startedAtEpochMs, System.nanoTime()));
+            StepCatalog.Entry entry = StepCatalog.modelThink();
+            sink.before(new TraceStep(seq, 0, key, entry.platform(), null, entry.label(), null,
+                    StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.ADK));
+        } catch (RuntimeException e) {
+            log.warn("beforeModelCallbackSync trace observer failed — model call proceeds untouched", e);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Shared resolve logic for {@code afterModelCallbackSync}/{@code onModelErrorCallbackSync}
+     * (TASK-007) — the model-edge mirror of {@link #resolveActiveCall}. Looks up the {@link
+     * ActiveCall} {@link #beforeModelObserve} recorded for this {@code eventId}, computes
+     * real elapsed {@code durationMs}, and emits the terminal replacement row via {@code
+     * sink}. Unlike {@link #resolveActiveCall}, there is no denied-id set to consult — model
+     * calls have no {@code DENIED} state; {@code BoundsCallback} governs tools only.
+     */
+    static void resolveActiveModelCall(Map<String, ActiveCall> activeModelCalls, AtomicInteger stepSeq,
+                                       String eventId, TraceSink sink, StepState terminalState, String result) {
+        String key = (eventId == null || eventId.isBlank()) ? "no-event-id-" + stepSeq.get() : eventId;
+        ActiveCall call = activeModelCalls.remove(key);
+        long startedAtEpochMs = call != null ? call.startedAtEpochMs() : System.currentTimeMillis();
+        long durationMs = call != null ? (System.nanoTime() - call.startNanos()) / 1_000_000L : 0L;
+        int seq = call != null ? call.seq() : stepSeq.getAndIncrement();
+
+        StepCatalog.Entry entry = StepCatalog.modelThink();
+        TraceStep step = new TraceStep(seq, 0, key, entry.platform(), null, entry.label(), result,
+                terminalState, startedAtEpochMs, durationMs, DiagnosisResult.Engine.ADK);
+        if (terminalState == StepState.FAILED) {
+            sink.onError(step);
+        } else {
+            sink.after(step);
+        }
+    }
+
+    /**
+     * Retrospective label for a resolved model window (TASK-007 / LT4 design note): whether
+     * a window was "deciding what to check next" or "composing the diagnosis" is only
+     * knowable AFTER the model's response is in hand — never before. This inspects the
+     * ACTUAL {@link LlmResponse} content passed into {@code afterModelCallbackSync} — the
+     * response IS the ground truth for what the model just did — rather than predicting the
+     * outcome ahead of time, or deferring the label until a later {@code beforeToolCallback}
+     * fires (which would race the resolve of this same row, and cannot fire before this
+     * method returns anyway: ADK invokes {@code afterModelCallbackSync} before it acts on
+     * that response, so this is not a guess — verified against a live round trip in {@code
+     * AdkLiveRoundTripTest}). A response containing a tool call means the model chose to call
+     * it next; no tool call means the response was the terminal report — or, for an FND-42
+     * repair turn, the malformed text that triggered the retry, still honestly "produced the
+     * report" since no tool call happened either way (this is how a repair retry falls out as
+     * a second "Thinking…" row for free, with no special-case code).
+     */
+    static String describeModelOutcome(LlmResponse response) {
+        if (response == null) {
+            return "produced the report";
+        }
+        return response.content()
+                .flatMap(Content::parts)
+                .flatMap(parts -> parts.stream()
+                        .map(Part::functionCall)
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .findFirst())
+                .flatMap(FunctionCall::name)
+                .map(name -> "chose " + name)
+                .orElse("produced the report");
     }
 
     /**

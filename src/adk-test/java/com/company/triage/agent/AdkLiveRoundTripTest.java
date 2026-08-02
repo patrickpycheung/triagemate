@@ -87,6 +87,25 @@ class AdkLiveRoundTripTest {
             // Exactly one row per callId — the DONE replacement overwrote the ACTIVE row,
             // it did not append a second one (TraceSink's replace-by-callId contract).
             assertThat(steps).filteredOn(step -> "get_incident".equals(step.tool())).hasSize(1);
+
+            // TASK-007 (J11 LT4, model edges): this fake server's script is exactly two
+            // LLM turns — turn 1 chooses get_incident, turn 2 (after the tool result) is
+            // the final report with no tool call — so retrospective labelling must produce
+            // ONE "chose get_incident" row and ONE "produced the report" row, verified
+            // against this live round trip rather than assumed from the callback ordering.
+            List<TraceStep> modelRows = steps.stream()
+                    .filter(step -> step.platform() == Platform.TRIAGEMATE)
+                    .filter(step -> "Thinking…".equals(step.label()))
+                    .toList();
+            assertThat(modelRows).hasSize(2);
+            assertThat(modelRows).allMatch(step -> step.tool() == null);
+            assertThat(modelRows).allMatch(step -> step.state() == StepState.DONE);
+            assertThat(modelRows).allMatch(step -> step.durationMs() != null);
+            assertThat(modelRows).anyMatch(step -> "chose get_incident".equals(step.result()));
+            assertThat(modelRows).anyMatch(step -> "produced the report".equals(step.result()));
+            // Each model row's callId is its own eventId — distinct from get_incident's
+            // functionCallId-based callId, and distinct from each other (no collapsing).
+            assertThat(modelRows).extracting(TraceStep::callId).doesNotHaveDuplicates();
         }
     }
 
@@ -239,6 +258,14 @@ class AdkLiveRoundTripTest {
      * the tool-result turn has already happened once — a fresh session would restart
      * at the tool-call turn, not the malformed-final turn, so this also proves the
      * retry reuses context rather than re-investigating).
+     *
+     * <p>TASK-007 (J11 LT4, model edges): also proves the free side-effect the design note
+     * calls out — a repair retry is itself a model call with no tool call, so it naturally
+     * produces a SECOND {@code "Thinking…"} row through the same beforeModel/afterModel
+     * mechanism, with no special-case code for FND-42 anywhere in {@code
+     * AdkDiagnosisEngine}. Switched from the single-arg {@code diagnose(incidentNumber)} to
+     * the {@code TraceSink}-carrying overload so this can be verified against a live round
+     * trip rather than just assumed.
      */
     @Test
     void malformedFinalResponseGetsOneRepairRetryThenSucceeds() throws Exception {
@@ -253,10 +280,28 @@ class AdkLiveRoundTripTest {
                     props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
                             List.of("order-payments/payment-service")));
 
-            DiagnosisResult result = engine.diagnose("INC0010005");
+            TraceCollector collector = new TraceCollector();
+            DiagnosisResult result = engine.diagnose("INC0010005", collector.forAttempt(0));
 
             assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
             assertThat(result.trace()).anyMatch(s -> s.contains("one repair retry (FND-42)"));
+
+            // TASK-007: two model-think rows for the two LLM calls after the tool call —
+            // the first malformed "final" turn and the repair retry — neither of which
+            // called a tool, so BOTH resolve to "produced the report", not just one.
+            List<TraceStep> modelRows = collector.steps().stream()
+                    .filter(step -> step.platform() == Platform.TRIAGEMATE)
+                    .filter(step -> "Thinking…".equals(step.label()))
+                    .toList();
+            assertThat(modelRows).hasSizeGreaterThanOrEqualTo(2);
+            assertThat(modelRows).allMatch(step -> step.state() == StepState.DONE);
+            assertThat(modelRows).allMatch(step -> step.result() != null);
+            // Every model row here resolves "produced the report": the tool-call turn's
+            // model row chose get_incident (asserted separately below in the general
+            // round-trip test), but BOTH of these final-turn rows — the malformed one and
+            // the repair retry — had no tool call in their response, retrospectively.
+            assertThat(modelRows).filteredOn(step -> "produced the report".equals(step.result()))
+                    .hasSizeGreaterThanOrEqualTo(2);
         }
     }
 }
