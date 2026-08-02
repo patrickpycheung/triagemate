@@ -1,6 +1,8 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: J1–J10 Built; **J11 (live-thinking-trace) STUCK at CDS Round 4** (blocked on 2 external spikes, not a design question) — graduated 2026-07-31 from DDS `live-thinking-trace-ui`. Previously: all ten concepts (J1–J10) Built (FND-32: this line previously said "CDS
+**Phase**: J1–J11 Built — all eleven concepts complete (J11 live-thinking-trace landed
+2026-08-02 via STREAM-001–006, verification sweep TASK-017 confirmed both profiles green
+and the additive-only transport guarantee holds). (FND-32: this line previously said "CDS
 Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
 **Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
 plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
@@ -12,9 +14,9 @@ copilot-cli-runtime/` (the E2 LLM-backend decision).
 
 Implementation is at the **repo root** (`pom.xml`, `src/`; FND-11 — an earlier `app/`
 subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3.
-- `mvn test` → **46/46 pass** (default profile); `./run-deterministic.sh` boots in
+- `mvn test` → **140/140 pass** (default profile); `./run-deterministic.sh` boots in
   ~1s and `POST /api/diagnose/INC0010005` returns the full result end-to-end (offline).
-- `mvn -Padk test` → **62/62 pass**: the real ADK 1.7.0 `LlmAgent` loop runs
+- `mvn -Padk test` → **183/183 pass**: the real ADK 1.7.0 `LlmAgent` loop runs
   end-to-end against a local fake OpenAI endpoint (tool-call → tool exec → J4 parse),
   the J8 tool allowlist + call bound are proven, and the orchestrator's timeout +
   concurrency-coalescing (FND-15/31) are covered. (FND-30: hand-maintained test
@@ -41,7 +43,7 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J8 | guardrails-observability | Simple | 🟢 Built (allowlist, advisory-only, trace) | all |
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
-| J11 | live-thinking-trace | Complex | 🟡 **Stable, design-only** (CDS R5–R9, 2026-08-02) — LT4 latency spike returned and was folded in (LT4 grew from 3 tool edges to **6**, `javap`-verified). LT5 projector risk **closed by operator**: presentation is a big screen off the corp laptop, not a projected image, so the photon-loss caveat doesn't apply. **Zero open design items**, one quiet round from 🟢. **Not yet implemented** — no code exists; needs `cds-implementation-planner` if/when scheduled | J1, J2, J4, J7, J8 |
+| J11 | live-thinking-trace | Complex | 🟢 Built (STREAM-001–006, 2026-08-02) — LT1 SPI migration, LT2 ToolRegistry/StepCatalog, LT4's 6 ADK callback edges, LT3/LT4/LT5/LT7 frontend renderers, and the additive-only `X-Triage-Run-Id` transport all landed; `mvn test` 140/140, `mvn -Padk test` 183/183. Verification sweep (TASK-017) confirmed the pre-J11 `DiagnosisResult` shape is unchanged for callers with no run-id header, and the deterministic replay path renders correctly end-to-end. Live ADK round-trip re-verified via the `adk-test` module + TASK-015's own Playwright-driven manual check — no Copilot proxy in this environment for a fresh live round trip | J1, J2, J4, J7, J8 |
 
 ## Spikes
 

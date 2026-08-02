@@ -1,9 +1,11 @@
 # J11 — Live Thinking Trace (animated per-step agent trace)
 
-**State**: 🟡 Stable (CDS Round 9, 2026-08-02 — **zero open items**, LT5 closed by operator call; one quiet round from 🟢) · **Complexity**: Complex ·
-**Design converged; NOT YET IMPLEMENTED** — no `TraceStep`/`TraceSink`/`StepCatalog` exists in
-`src/` yet. J1–J10 are 🟢 Built; this card is design-only until `cds-implementation-planner`
-runs on it.
+**State**: 🟢 Built (STREAM-001–006, 2026-08-02 — verification sweep TASK-017 confirmed
+`mvn test` 140/140 and `mvn -Padk test` 183/183 green, the additive-only transport
+guarantee holds with no `X-Triage-Run-Id` header, and the deterministic replay path
+renders correctly) · **Complexity**: Complex ·
+`TraceStep`/`TraceSink`/`StepCatalog` and the LT1–LT7 design below are all implemented in
+`src/`. J1–J11 are now all 🟢 Built.
 **Depends on**: J1, J2, J4, J7, J8 · **Amends**: J1 (response shape), J7 (UI), J8 (observability)
 **Source**: DDS `docs/discovery/live-thinking-trace-ui/` (Phase 4, concepts LT1–LT7)
 
