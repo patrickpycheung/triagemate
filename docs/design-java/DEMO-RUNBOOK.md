@@ -73,7 +73,7 @@ curl -s http://localhost:4000/v1/models | jq -r '.data[].id'
 ```
 > **Verified 2026-07-30 on the corp laptop**: the seat exposes **31 models**, including
 > `claude-opus-4.6`, `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`, `gemini-3.5-flash`.
-> **Demo on `claude-opus-4.6`.** Raw list: `bin/spike-output.log`.
+> **Demo on `claude-opus-4.6`.** Raw list: `bin/spikes/spike-output.log`.
 >
 > ⚠️ **Do not leave this on `gpt-4o-mini`.** It's served, so the spike's check 2 passes —
 > but it is a *mini* model, and both the step-2 narration ("a high Copilot model

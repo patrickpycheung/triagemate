@@ -43,7 +43,7 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
    seat, and **`bin/e2-proxy-spike.sh` passed 4/4** — including check 4, tool-calling:
    the proxy returns `tool_calls`, so **D1's ADK agent loop works and the evidence trail
    survives**. This was the single highest-risk unknown in the demo; it is now closed.
-   Raw evidence: `bin/spike-output.log`. Setup encoded in `bin/setup-copilot-api.sh`.
+   Raw evidence: `bin/spikes/spike-output.log`. Setup encoded in `bin/setup-copilot-api.sh`.
 
    **The seat exposes 31 models, including frontier tiers** — `claude-opus-4.6`,
    `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`, `gemini-3.5-flash`. So D1's "high
@@ -76,7 +76,7 @@ one-line config change and no loss of control. Keep E1 as an *interactive* optio
    real log↔code citation, two comments posted) — but **the ADK engine never executed**. It
    threw immediately on a blank `triage.integrations.llm.api-key` and the FND-7 fallback
    degraded to the **deterministic engine**. No LLM was called. Evidence:
-   `bin/spike-output.log`, trace line 1:
+   `bin/spikes/spike-output.log`, trace line 1:
    `⚠ primary engine did not converge (IllegalStateException: Missing required config:
    LLM_API_KEY …) — degraded to the deterministic engine`.
 

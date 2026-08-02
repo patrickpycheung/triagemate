@@ -2,7 +2,9 @@
 
 **Status**: ✅ DONE (2026-08-01) · **Trust**: 🔬 Spiked — measured, not reasoned
 **Run by**: operator, on the corporate laptop · **Samples**: 3 successful ADK runs
-**Raw**: `spike-run-{2,3,4}.json`, `proxy-output.log`, `adk-output.log` (repo root at run time)
+**Raw**: `spike-run-{2,3,4}.json`, `proxy-output.log`, `adk-output.log` — generated at repo
+root during the run, not retained afterward; every number below was extracted from them into
+this file, which is the durable record
 
 Answers the question `STATUS.md` parked J11 on: *how long does a real ADK step actually
 take, and does LT4 (live streaming of the trace) therefore matter?*

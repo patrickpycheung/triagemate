@@ -1086,7 +1086,7 @@ spike C2 (2026-07-30) the ADK engine threw immediately on a blank
 `triage.integrations.llm.api-key`, degraded to the deterministic engine, and returned a
 correct `Payments Platform Support` assignment with a real log↔code citation and two posted
 comments. The run was reported as *"successfully ran C2"*. **No LLM was called at all.**
-Evidence: `bin/spike-output.log`, trace line 1.
+Evidence: `bin/spikes/spike-output.log`, trace line 1.
 
 **Why it matters**: the demo's central claim is *"this is a high Copilot model reasoning,
 on rails"* (D1) and D3's contrast asserts the model is the same frontier one Copilot CLI
