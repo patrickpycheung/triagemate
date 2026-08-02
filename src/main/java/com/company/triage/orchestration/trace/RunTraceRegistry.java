@@ -14,13 +14,12 @@ package com.company.triage.orchestration.trace;
  * which has no live UI to feed — never calls this interface at all: LT4 rule 4, "no header ⇒
  * no buffer", so K1 can never grow it unattended.
  *
- * <p><b>What this task leaves for TASK-010.</b> This stub is deliberately unbounded, with no
- * TTL and no eviction — see {@link InMemoryRunTraceRegistry}. TASK-010 owns turning it into
- * an actually-bounded buffer (design doc: cap ~20 retained runs, ~5 min TTL, oldest-first
- * eviction — "Bound the buffer", same paragraph as the {@code runId} protocol) and the
- * {@code GET} endpoint that reads it. Neither of those requires this interface, or any of
- * {@code DiagnosisOrchestrator}'s call sites, to change — implement a new {@code
- * RunTraceRegistry} (or make this one bounded internally) and swap the Spring bean.
+ * <p><b>Bounded as of TASK-010.</b> TASK-009 shipped {@link InMemoryRunTraceRegistry}
+ * deliberately unbounded (no TTL, no eviction). TASK-010 bounded it in place — cap ~20
+ * retained runs, ~5 min TTL measured from each run's last write, oldest-first eviction
+ * (design doc: "Bound the buffer", same paragraph as the {@code runId} protocol) — without
+ * changing this interface or any of {@code DiagnosisOrchestrator}'s call sites. The {@code
+ * GET /api/runs/{runId}/steps} endpoint that reads this buffer is a later task.
  */
 public interface RunTraceRegistry {
 
