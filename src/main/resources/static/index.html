@@ -226,7 +226,6 @@
       .trace-row[data-state="active"]::after { display:none; }
     }
 
-
     /* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
        Frame copy above the row list — the honesty-contract sentence carrying
        the four load-bearing words (replaying/completed/nothing is running
@@ -637,6 +636,17 @@ function renderLt3Replay(cardEl, data) {
    platform/badge lookup are never reimplemented here.
 */
 const LT4_POLL_INTERVAL_MS = 750; // within the design's ~500ms-1s window
+// The first poll is fired before the POST that creates the run is even sent
+// (see run(): "Poll loop starts immediately, independent of ... the POST
+// below"), so it routinely wins the race against the server registering the
+// run buffer — a bare fetch()+dispatch is comparable to or slower than one
+// poll tick. A 404 in that window is not "this run doesn't exist", it's
+// "this run doesn't exist YET". Only treat 404 as the endpoint's documented
+// terminal signal (RunNotFoundException: unknown/evicted) once that many
+// consecutive 404s have been seen with no successful poll in between —
+// enough grace for the registration race, still bounded so a genuinely
+// gone/evicted run doesn't poll forever.
+const LT4_NOT_FOUND_GRACE_ATTEMPTS = 5;
 
 // Client-minted runId (UUID). Only ever used as an opaque poll-buffer key
 // (X-Triage-Run-Id / RunTraceRegistry) — never parsed, so a strict RFC4122
@@ -697,6 +707,8 @@ function startLt4Poll(runId, cardEl) {
   let since = -1; // -1 == "send everything so far" (RunStepsController default)
   let stopped = false;
   let timer = null;
+  let everSawData = false;
+  let notFoundStreak = 0;
 
   function stop() {
     if (stopped) return;
@@ -709,15 +721,24 @@ function startLt4Poll(runId, cardEl) {
     try {
       const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/steps?since=${since}`);
       if (res.status === 404) {
-        // TASK-011/requirement 6: unknown or TTL-evicted runId — stop cleanly.
-        // Not retried: this endpoint's 404 is defined as terminal ("stop
-        // polling, this run is gone" per RunNotFoundException's own javadoc),
-        // and the POST's own response remains the authoritative final answer
-        // regardless of what polling did or didn't see.
-        stop();
+        notFoundStreak++;
+        // Once the run has been seen alive, a later 404 is the endpoint's
+        // documented terminal signal (RunNotFoundException: evicted) — stop
+        // immediately. Before that, it's most likely the startup
+        // registration race (see LT4_NOT_FOUND_GRACE_ATTEMPTS above) — keep
+        // polling until the grace budget is spent. Either way the POST's own
+        // response remains the authoritative final answer regardless of what
+        // polling did or didn't see.
+        if (everSawData || notFoundStreak >= LT4_NOT_FOUND_GRACE_ATTEMPTS) {
+          stop();
+          return;
+        }
+        if (!stopped) timer = setTimeout(poll, LT4_POLL_INTERVAL_MS);
         return;
       }
       if (res.ok) {
+        everSawData = true;
+        notFoundStreak = 0;
         const data = await res.json();
         let newCount = 0;
         for (const attempt of (data.attempts || [])) {

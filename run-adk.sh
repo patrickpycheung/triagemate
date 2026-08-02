@@ -47,7 +47,7 @@ PUBLIC_NPM_REGISTRY="https://registry.npmjs.org/"
 SYSTEM_CAFILE="/etc/ssl/certs/ca-certificates.crt"
 
 STARTED_PROXY=false
-if curl -sS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1; then
+if curl -fsS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1; then
   echo "Copilot proxy already up at $PROXY_BASE"
 elif command -v copilot-api >/dev/null 2>&1; then
   echo "Starting Copilot proxy: copilot-api start --port $PROXY_PORT --proxy-env"
@@ -84,10 +84,10 @@ fi
 
 if $STARTED_PROXY; then
   for _ in $(seq 1 30); do
-    curl -sS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1 && break
+    curl -fsS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1 && break
     sleep 1
   done
-  if ! curl -sS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1; then
+  if ! curl -fsS --max-time 2 "$PROXY_BASE/models" >/dev/null 2>&1; then
     echo "Proxy did not come up within 30s — check /tmp/copilot-api.log" >&2
     echo "(first run needs an interactive GitHub OAuth device-flow login;" >&2
     echo "on a corp-laptop/Nexus-pinned npm see ./bin/setup-copilot-api.sh)" >&2

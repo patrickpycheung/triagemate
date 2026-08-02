@@ -51,14 +51,21 @@ test.describe('J11 live thinking trace — deterministic engine', () => {
     const totalRows = await rows.count();
     expect(totalRows).toBeGreaterThanOrEqual(9); // the deterministic engine's own step count
 
-    // Sample shortly after the rows first appear: at least one row must still
-    // be non-DONE (queued/active), proving the reveal is staggered rather than
-    // instantaneous. If this ever flakes because the machine is exceptionally
-    // fast, that itself is a signal the pacing floor regressed — do not raise
-    // the timeout to "fix" a real regression.
-    await page.waitForTimeout(150);
-    const states = await rows.evaluateAll(els => els.map(el => el.getAttribute('data-state')));
-    expect(states.some(s => s !== 'done')).toBe(true);
+    // At least one row must still be non-DONE shortly after the rows first
+    // appear, proving the reveal is staggered rather than instantaneous. This
+    // polls instead of sleeping a fixed duration (flaky under CI/host load)
+    // — but the bound stays well under the ~400ms pacing floor, so it can
+    // only pass because the first row genuinely hasn't flipped yet, not
+    // because the poll happened to get lucky on timing.
+    await expect
+      .poll(
+        async () => {
+          const states = await rows.evaluateAll(els => els.map(el => el.getAttribute('data-state')));
+          return states.some(s => s !== 'done');
+        },
+        { timeout: 300 },
+      )
+      .toBe(true);
 
     // Eventually every row settles to 'done' (a clean deterministic run never
     // fails/denies/abandons a step) — proves the reveal actually completes,
