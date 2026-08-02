@@ -481,7 +481,11 @@ function traceRowHtml(step) {
   const dataState = stepStateToDataState(step.state);
   const subordinate = step.platform === 'triagemate';
   const cls = 'trace-row' + (subordinate ? ' trace-row--subordinate' : '');
-  const badge = subordinate ? '' : `<div class="trace-badge">${esc(step.badgeText || '')}</div>`;
+  // badgeSvg is trusted, static markup from PLATFORM_LOGO_SVG (bundled asset
+  // strings, never user input) — inlined raw (not esc()'d) so its
+  // fill="currentColor" path inherits .trace-badge's per-platform `color`
+  // (var(--sn)/--cf/--sl/--gl), same theming mechanism the badge text used.
+  const badge = subordinate ? '' : `<div class="trace-badge">${step.badgeSvg || ''}</div>`;
   return `<div class="${cls}" data-state="${esc(dataState)}" data-platform="${esc(step.platform || '')}">
     ${badge}
     <div class="trace-body">
@@ -515,8 +519,21 @@ const STEP_PLATFORM_TO_LOWER = {
   SERVICENOW: 'servicenow', CONFLUENCE: 'confluence',
   SUMO: 'sumologic', GITLAB: 'gitlab', TRIAGEMATE: 'triagemate',
 };
-const PLATFORM_BADGE_TEXT = {
-  servicenow: 'SN', confluence: 'CF', sumologic: 'SL', gitlab: 'GL', triagemate: '',
+// Real vendor logos (static/logos/, LT6 — operator ruling 2026-07-30/31: use
+// real marks, not initials, so a badge identifies which system was actually
+// consulted). Inlined here (not <img src="logos/*.svg">) because an <img>'s
+// SVG document is a separate rendering context — fill="currentColor" inside
+// it would NOT inherit .trace-badge's CSS `color`. Inlining puts the <path>
+// directly in this document's DOM, so currentColor resolves against the
+// badge's own color (var(--sn)/--cf/--sl/--gl, set per [data-platform] —
+// see the CSS rules near .trace-badge above), giving every theme its own
+// tint of the same mark, exactly like the two-letter badges did before.
+const PLATFORM_LOGO_SVG = {
+  servicenow: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill-rule="evenodd" fill="currentColor" d="M32.195 3.312A32.267 32.267 0 0 0 9.949 58.883a6.346 6.346 0 0 0 8.264.43 23.035 23.035 0 0 1 27.445 0 6.364 6.364 0 0 0 8.389-.43A32.267 32.267 0 0 0 32.195 3.312m-.18 48.275a15.632 15.632 0 0 1-16.133-16.026 16.044 16.044 0 1 1 32.07 0 15.614 15.614 0 0 1-16.026 16.026"/></svg>',
+  confluence: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M.87 18.257c-.248.382-.53.875-.763 1.245a.764.764 0 0 0 .255 1.04l4.965 3.054a.764.764 0 0 0 1.058-.26c.199-.332.454-.763.733-1.221 1.967-3.247 3.945-2.853 7.508-1.146l4.957 2.337a.764.764 0 0 0 1.028-.382l2.364-5.346a.764.764 0 0 0-.382-1 599.851 599.851 0 0 1-4.965-2.361C10.911 10.97 5.224 11.185.87 18.257zM23.131 5.743c.249-.405.531-.875.764-1.25a.764.764 0 0 0-.256-1.034L18.675.404a.764.764 0 0 0-1.058.26c-.195.335-.451.763-.734 1.225-1.966 3.246-3.945 2.85-7.508 1.146L4.437.694a.764.764 0 0 0-1.027.382L1.046 6.422a.764.764 0 0 0 .382 1c1.039.49 3.105 1.467 4.965 2.361 6.698 3.246 12.392 3.029 16.738-4.04z"/></svg>',
+  sumologic: '<svg viewBox="22.84 23.58 64 64" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M33.095 24.188c-5.766 2.418-9.505 6.48-9.573 12.95l-.02 37.13c.05 7.43 6.05 13.283 13.5 13.293h35.582c7.48-.01 13.49-5.697 13.567-13.205V37.03c-.05-5.002-2.506-8.77-6.754-11.433-1.37-.86-5.08-1.556-6.735-1.645-13.47-.705-27.31-.196-36.708-.196-.303 0-2.623.333-2.858.43zm9.7 27.35l7.35.01c1.194.04 1.596-.43 1.576-1.576a242.45 242.45 0 0 1 0-7.547c.04-2.623 1.517-4.336 3.7-4.336 2.26 0 3.788 1.752 3.827 4.405.02 1.165 0 2.32 0 3.77.254 1.478-.822 3.73.45 4.904 1.145 1.067 3.328.255 5.05.333 1.35.06 2.712-.03 4.062.03 2.085.098 3.7 1.782 3.67 3.74s-1.654 3.72-3.66 3.778c-2.643.078-5.286.078-7.93.01-1.263-.03-1.713.41-1.664 1.684.078 2.447.04 4.904.02 7.35-.02 2.77-1.43 4.425-3.74 4.444-2.27.02-3.73-1.654-3.778-4.444-.04-2.447-.07-4.904.01-7.35.04-1.253-.362-1.723-1.645-1.684-2.447.078-4.904.04-7.35.01-2.672-.03-4.2-1.43-4.16-3.76.04-2.25 1.664-3.74 4.22-3.77z"/></svg>',
+  gitlab: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg>',
+  triagemate: '',
 };
 function stepPlatformToLower(platform) {
   return STEP_PLATFORM_TO_LOWER[platform] || 'triagemate';
@@ -549,7 +566,7 @@ function lt3RowHtml(step, maxDurationMs) {
   const row = traceRowHtml({
     state: step.state,
     platform,
-    badgeText: PLATFORM_BADGE_TEXT[platform] || '',
+    badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
     meta: `${platform} · ${durationText}`,
   });
@@ -632,7 +649,7 @@ function renderLt3Replay(cardEl, data) {
    Every row here renders the instant its poll response arrives.
 
    Reuses traceRowHtml()/stepStateToDataState()/stepPlatformToLower() from LT5
-   (TASK-013) and PLATFORM_BADGE_TEXT from LT3 (TASK-014) — row markup and the
+   (TASK-013) and PLATFORM_LOGO_SVG from LT3 (TASK-014) — row markup and the
    platform/badge lookup are never reimplemented here.
 */
 const LT4_POLL_INTERVAL_MS = 750; // within the design's ~500ms-1s window
@@ -679,7 +696,7 @@ function lt4RowHtml(step) {
   return traceRowHtml({
     state: step.state,
     platform,
-    badgeText: PLATFORM_BADGE_TEXT[platform] || '',
+    badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
     meta: `${platform} · ${durationText}`,
   });
