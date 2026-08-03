@@ -79,6 +79,26 @@ green and offline on a machine without credentials.
 mvn test -Dtest=RealSumoGatewayLiveTest
 ```
 
+The project/environment it probes is **injectable** — the target is only a means to reach
+the API, so it isn't baked in. Resolution order: system property → `secrets.properties` →
+default (`delivery-hazards` / `ptest`).
+
+```bash
+mvn test -Dtest=RealSumoGatewayLiveTest \
+    -Dsumo.probe.project=my-app -Dsumo.probe.environment=prod
+```
+
+or, to set it once per machine, in `secrets.properties` (gitignored, alongside the
+credentials):
+
+```properties
+sumo.probe.project=my-app
+sumo.probe.environment=prod
+```
+
+If the default probe project ever stops logging, the failure message names it and tells
+you which flags to override — the test fails loudly rather than silently testing nothing.
+
 Measured on the AU instance (2026-08-03): a 30-minute window over one project completes in
 ~4s; a 24-hour window was still gathering at 24s. The app caps the window at
 `max-window-minutes` (30), so it stays in the fast case.
