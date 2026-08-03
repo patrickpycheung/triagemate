@@ -21,18 +21,18 @@
        cosmetic only: it never changes what the page reports (see the FND-16/25
        notes in render() — those read real DiagnosisResult fields, not colours).
     */
-    :root, [data-theme="midnight"] {
-      --bg:#0f1420; --card:#182030; --ink:#e8edf6; --muted:#93a1b5;
-      --acc:#5aa9ff; --ok:#3ecf8e; --warn:#ffb454;
-      --border:#24304a; --input-bg:#0d1220; --input-border:#2a3550;
-      --chip:#243350; --inset:#0e1626; --btn-ink:#04122b; --trace:#9fb3d0;
-      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
-      --sn:#5fd96a; --cf:#4d9fff; --sl:#38bdf8; --gl:#ff8a4d;
-      --crit:#ff5c5c;
-      --brand:#e4222f;   /* Australia Post mark — the company is the same in every theme */
-    }
-    /* Australia Post — the corporate read: red on white, high-key. */
-    [data-theme="auspost"] {
+    /* Every theme here is a variation on ONE identity: Australia Post. The earlier
+       mixed set (midnight blue, hackathon purple, ServiceNow green, neutral paper) was
+       cut — this is an Australia Post hackathon, so the palette should say so, and a
+       theme picker offering an unrelated purple only invited someone to demo in it.
+       What varies between these six is the SURFACE the red sits on (light, dark, warm,
+       max-contrast) and, in one case, the accent the real corporate ServiceNow instance
+       actually uses. --brand is Australia Post red in all of them without exception:
+       the company doesn't change with the room. */
+
+    /* Australia Post — the corporate read: red on white, high-key. Also :root, so it is
+       what an unknown/legacy saved theme falls back to rather than a blank page. */
+    :root, [data-theme="auspost"] {
       --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
       --acc:#dc1928; --ok:#0a7d54; --warn:#b45309;
       --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
@@ -40,27 +40,42 @@
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#c9184a;
-      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
+      --brand:#dc1928;
     }
-    /* Australia Post's own ServiceNow instance — colours extracted directly from a
-       screenshot of the real DAP DP dashboard (theme-AusPost-ServiceNow.png, repo root).
-       That screenshot's chrome (top bar, side nav) is a near-black navy/indigo, but
-       every actual piece of content — the list panels, tables, status text — sits on
-       white/light-grey, which is what this app's card-on-page layout actually mirrors
-       (no separate nav/sidebar surface to put the dark chrome on). So: light page
-       background sampled from the screenshot's content area (#f6f6f8), white panels,
-       and --ink set to the screenshot's own navy chrome colour (#181826) — dark enough
-       to read clearly on both --bg and --card, which is the one thing every theme here
-       must guarantee (a single --ink shared by both surfaces; see the token-block note
-       above). The accent is the instance's own link/action blue (#3c59e7 — the colour
-       of every record link in that alert list), NOT the Australia Post red: red is
-       already the "Australia Post" theme's whole identity, and this instance simply
-       doesn't lead with it (the logo mark is the only red on the page). Blue-on-white
-       is what the screenshot actually reads as, and it keeps the two AusPost themes
-       visually distinguishable. --chip/--inset/--border carry the indigo side nav's
-       (#302f4b) tint at low saturation. --ok/--warn/--crit are the alert list's own
-       green "Closed" / amber "Major" status dots, darkened enough to stay legible as
-       small-text pills on a light background. */
+
+    /* Variation 1 — Dark. The same red on a warm near-black, for a dim room where the
+       high-key white theme glares. Red lifted to #ff4b57 because #dc1928 on near-black
+       sits under the contrast floor for small text. */
+    [data-theme="auspost-dark"] {
+      --bg:#14100f; --card:#1f1816; --ink:#f5ece9; --muted:#b09a95;
+      --acc:#ff4b57; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#3a2b28; --input-bg:#120e0d; --input-border:#4a3733;
+      --chip:#3d1f22; --inset:#191211; --btn-ink:#1a0405; --trace:#c9b3ae;
+      --banner-bg:#2e1c0a; --banner-ink:#ffb454;
+      --sn:#5fd96a; --cf:#5b9bff; --sl:#4fc3f7; --gl:#ff9d54;
+      --crit:#ff2f4d;
+      --brand:#ff4b57;
+    }
+
+    /* Variation 2 — Ink. Corporate dark done in navy rather than black: softer than the
+       Dark variation, and closer to the chrome of the real ServiceNow instance. */
+    [data-theme="auspost-ink"] {
+      --bg:#151827; --card:#1e2236; --ink:#e9ecf5; --muted:#98a1bd;
+      --acc:#ff5468; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#2c3350; --input-bg:#11141f; --input-border:#39415f;
+      --chip:#33203a; --inset:#191d2e; --btn-ink:#14060a; --trace:#a9b3cc;
+      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
+      --sn:#5fd96a; --cf:#7aa7ff; --sl:#4fd1e8; --gl:#ff9d54;
+      --crit:#ff4257;
+      --brand:#ff4b57;
+    }
+
+    /* Variation 3 — ServiceNow. Colours sampled from the real DAP DP dashboard
+       (theme-AusPost-ServiceNow.png). Its content sits on white/light-grey, so this is a
+       light theme; --ink is the screenshot's own navy chrome colour. The accent is the
+       instance's link/action blue (#3c59e7), NOT the red — red is the base theme's whole
+       identity, and that instance simply doesn't lead with it (the logo is the only red
+       on the page). The mark stays red regardless, via --brand. */
     [data-theme="auspost-servicenow"] {
       --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#5f6480;
       --acc:#3c59e7; --ok:#1f9254; --warn:#cc7a00;
@@ -69,31 +84,36 @@
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#d32f2f;
-      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
+      --brand:#dc1928;
     }
-    /* Paper — neutral light, for screenshots and printed handouts. */
-    [data-theme="paper"] {
-      --bg:#fbfbfa; --card:#ffffff; --ink:#1f2328; --muted:#656d76;
-      --acc:#0969da; --ok:#1a7f37; --warn:#9a6700;
-      --border:#d1d9e0; --input-bg:#ffffff; --input-border:#c9d1d9;
-      --chip:#ddf4ff; --inset:#f6f8fa; --btn-ink:#ffffff; --trace:#57606a;
-      --banner-bg:#fff8c5; --banner-ink:#7d4e00;
-      --sn:#157347; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
-      --crit:#cf222e;
-      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
+
+    /* Variation 4 — Warm. Cream paper rather than clinical white: reads well in print
+       and in screenshots pasted into a deck, where pure #fff blows out. */
+    [data-theme="auspost-warm"] {
+      --bg:#faf6f1; --card:#fffdfa; --ink:#2b2119; --muted:#6d6055;
+      --acc:#c41425; --ok:#0a7d54; --warn:#a75d0a;
+      --border:#e6dcd0; --input-bg:#fffdfa; --input-border:#cfc2b3;
+      --chip:#f7e3e0; --inset:#f5efe7; --btn-ink:#ffffff; --trace:#5b4f45;
+      --banner-bg:#fdf0da; --banner-ink:#8a5000;
+      --sn:#1a7f4b; --cf:#12489e; --sl:#0b6273; --gl:#a8480f;
+      --crit:#b0122f;
+      --brand:#dc1928;
     }
-    /* Projector — max contrast, thick accents. Answers the J11 legibility
-       question the hard way: if it reads at the back of the room here, it reads. */
-    [data-theme="projector"] {
-      --bg:#000000; --card:#0d0d0d; --ink:#ffffff; --muted:#c9c9c9;
-      --acc:#ffd400; --ok:#00e676; --warn:#ff9100;
-      --border:#4a4a4a; --input-bg:#000000; --input-border:#6e6e6e;
-      --chip:#333300; --inset:#141400; --btn-ink:#000000; --trace:#e0e0e0;
-      --banner-bg:#2e2000; --banner-ink:#ffd400;
-      --sn:#3ddc72; --cf:#4da6ff; --sl:#22e0ff; --gl:#ff8a3d;
+
+    /* Variation 5 — Contrast. Max legibility for a projector or the back of a room:
+       pure black, pure white text, saturated red. Answers the J11 legibility question
+       the hard way — if it reads here, it reads anywhere. */
+    [data-theme="auspost-contrast"] {
+      --bg:#000000; --card:#0d0d0d; --ink:#ffffff; --muted:#cfcfcf;
+      --acc:#ff2b3d; --ok:#00e676; --warn:#ffab00;
+      --border:#4a4a4a; --input-bg:#000000; --input-border:#7a7a7a;
+      --chip:#3a0710; --inset:#140406; --btn-ink:#ffffff; --trace:#e6e6e6;
+      --banner-bg:#2e0a10; --banner-ink:#ffab00;
+      --sn:#3ddc72; --cf:#5fb0ff; --sl:#33e3ff; --gl:#ff9445;
       --crit:#ff2b2b;
-      --brand:#ff2b2b;   /* Australia Post mark — the company is the same in every theme */
+      --brand:#ff2b3d;
     }
+
     * { box-sizing:border-box; }
     body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
     .wrap { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
@@ -208,9 +228,9 @@
        (sketch.html hardcoded rgba(90,169,255,…), the midnight blue, so it
        pulsed blue on every theme including auspost red and projector
        yellow). color-mix() re-derives on every theme switch automatically,
-       no JS recompute needed — verified by inspection across midnight,
-       auspost, auspost-servicenow, paper and projector (all 5 data-theme
-       values reference var(--acc) here; grepped for hex/rgba here — none). */
+       no JS recompute needed — verified by inspection across all six
+       auspost* themes (every one references var(--acc) here; grepped for
+       hex/rgba in this block — none). */
     @keyframes tt-pulse {
       0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--acc) 0%, transparent); }
       50% { box-shadow:0 0 0 5px color-mix(in srgb, var(--acc) 22%, transparent); transform:scale(1.06); }
@@ -239,6 +259,26 @@
     .trace-row[data-platform="confluence"] .trace-badge { color:var(--cf); }
     .trace-row[data-platform="sumologic"]  .trace-badge { color:var(--sl); }
     .trace-row[data-platform="gitlab"]     .trace-badge { color:var(--gl); }
+
+    /* Per-platform row background — the same brand hue as the badge, mixed into
+       --inset at low strength so consecutive calls to the same system read as one
+       band and a switch of system is visible before you read a word.
+
+       Kept at 7% deliberately. This is a THIRD encoding of identity (badge colour,
+       logo, now background) and identity is not the important signal in a trace —
+       state is. A stronger tint would compete with the state colours on the
+       left border and, on the light themes, start eating the contrast the label
+       text needs. color-mix against --inset (not a fixed colour) means each theme
+       tints its OWN surface, so this works on the near-black Contrast variation
+       and the cream Warm one without a per-theme rule.
+
+       TRIAGEMATE rows deliberately get NO tint: they aren't a system, and giving
+       them a background of their own would make them look like a fifth vendor —
+       the exact thing the Round-6 subordinate treatment above exists to prevent. */
+    .trace-row[data-platform="servicenow"] { background:color-mix(in srgb, var(--sn) 7%, var(--inset)); }
+    .trace-row[data-platform="confluence"] { background:color-mix(in srgb, var(--cf) 7%, var(--inset)); }
+    .trace-row[data-platform="sumologic"]  { background:color-mix(in srgb, var(--sl) 7%, var(--inset)); }
+    .trace-row[data-platform="gitlab"]     { background:color-mix(in srgb, var(--gl) 7%, var(--inset)); }
 
     /* Requirement 3: reduced motion removes ALL animation (glow-pulse AND
        shimmer) — state is still conveyed, because border-left color/token,
@@ -312,8 +352,9 @@
 
 <!-- Theme picker. Deliberately a plain corner control: the brand direction
      is still undecided, so ship the shortlist and let a look at them settle
-     it rather than guessing. Three earlier candidates (hackathon purple,
-     ServiceNow green, AusPost dark) were cut as too extreme. -->
+     it rather than guessing. Every entry is now a variation on Australia
+     Post; the earlier unrelated palettes (midnight, hackathon purple,
+     ServiceNow green, neutral paper) were cut. -->
 <button class="theme-btn" id="themeBtn" title="Change theme"
         aria-haspopup="true" aria-expanded="false" aria-controls="themeMenu">
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -374,14 +415,15 @@
    The list order is the review order: the two real candidates first.
 */
 const THEMES = [
-  { id:'auspost',      name:'Australia Post',   sw:'#dc1928' },
-  { id:'auspost-servicenow', name:'Aus Post ServiceNow', sw:'#3c59e7' },
-  { id:'midnight',     name:'Midnight',         sw:'#5aa9ff' },
-  { id:'paper',        name:'Paper (light)',    sw:'#0969da' },
-  { id:'projector',    name:'Projector',        sw:'#ffd400' },
+  { id:'auspost',            name:'Australia Post',      sw:'#dc1928' },
+  { id:'auspost-dark',       name:'AP · Dark',           sw:'#ff4b57' },
+  { id:'auspost-ink',        name:'AP · Ink',            sw:'#ff5468' },
+  { id:'auspost-servicenow', name:'AP · ServiceNow',     sw:'#3c59e7' },
+  { id:'auspost-warm',       name:'AP · Warm',           sw:'#c41425' },
+  { id:'auspost-contrast',   name:'AP · Contrast',       sw:'#ff2b3d' },
 ];
 const THEME_KEY = 'triagemate.theme';
-const DEFAULT_THEME = 'midnight';
+const DEFAULT_THEME = 'auspost';
 
 function applyTheme(id) {
   const theme = THEMES.some(t => t.id === id) ? id : DEFAULT_THEME;
