@@ -23,6 +23,7 @@ import com.google.adk.tools.FunctionTool;
 import com.google.genai.types.Content;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.Part;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -351,7 +352,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                             () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
                     try {
                         resolveActiveCall(activeCalls, deniedCallIds, stepSeq, callId, tool.name(), sink,
-                                StepState.DONE, String.valueOf(result));
+                                StepState.DONE, summariseToolResult(tool.name(), result));
                     } catch (RuntimeException e) {
                         log.warn("afterToolCallbackSync trace observer failed — tool result proceeds untouched", e);
                     }
@@ -475,6 +476,19 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         } else {
             sink.after(step);
         }
+        // Mirror every resolved tool call to the console — see the note on
+        // DeterministicDiagnosisEngine.emitStep: the trace UI and the log should show the
+        // same investigation, so a run is followable from the terminal alone.
+        logStep(seq, entry.platform().toString(), toolName, terminalState, result);
+    }
+
+    /** One console line per resolved trace step, shared by the tool and model edges. */
+    private static void logStep(int seq, String platform, String what, StepState state, String result) {
+        if (state == StepState.FAILED) {
+            log.warn("  step {} · {} · {} FAILED — {}", seq + 1, platform, what, result);
+        } else {
+            log.info("  step {} · {} · {}", seq + 1, platform, result);
+        }
     }
 
     /**
@@ -537,6 +551,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         } else {
             sink.after(step);
         }
+        logStep(seq, "model", "think", terminalState, result);
     }
 
     /**
@@ -555,6 +570,77 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
      * report" since no tool call happened either way (this is how a repair retry falls out as
      * a second "Thinking…" row for free, with no special-case code).
      */
+    /**
+     * Human-readable one-liner for what a tool call actually came back with — this is what
+     * the LT3/LT4 trace row displays.
+     *
+     * <p>This used to be {@code String.valueOf(result)}, which dumped ADK's raw wrapper
+     * map straight onto the screen: an empty search rendered as the literal
+     * {@code {result=[]}}. The trace is read by humans watching a demo, not by developers
+     * reading a debug log — it needs to say <i>what was found</i>, not show the transport
+     * shape it arrived in. Anything unrecognised falls back to a truncated toString rather
+     * than inventing a summary, so a shape we didn't anticipate degrades to "ugly but
+     * honest" instead of "confidently wrong".
+     */
+    static String summariseToolResult(String toolName, Object result) {
+        Object value = unwrapAdkResult(result);
+        String noun = resultNoun(toolName);
+
+        if (value == null) {
+            return "no result";
+        }
+        if (value instanceof Collection<?> c) {
+            return c.isEmpty() ? "nothing found" : c.size() + " " + noun + (c.size() == 1 ? "" : "s");
+        }
+        if (value instanceof Map<?, ?> m) {
+            if (m.isEmpty()) {
+                return "nothing found";
+            }
+            // The one Map-returning tool (find_ownership) answers with a support group, and
+            // says so explicitly when it has no answer.
+            Object group = m.get("supportGroup");
+            if (group != null) {
+                return "unknown".equals(String.valueOf(group))
+                        ? "no owner recorded" : "owner: " + group;
+            }
+            return truncate(String.valueOf(value));
+        }
+        // A single record (e.g. get_incident -> IncidentContext). Its toString is long and
+        // field-shaped; the useful signal is just that it came back.
+        return "found 1 " + noun;
+    }
+
+    /**
+     * ADK hands the callback the tool's return value wrapped in a single-entry map keyed
+     * {@code "result"} (that wrapper is what leaked {@code {result=[]}} onto the screen).
+     * Unwrap it when present; pass anything else through untouched so a future ADK version
+     * that stops wrapping keeps working.
+     */
+    private static Object unwrapAdkResult(Object result) {
+        if (result instanceof Map<?, ?> m && m.size() == 1 && m.containsKey("result")) {
+            return m.get("result");
+        }
+        return result;
+    }
+
+    /** What the items a given tool returns should be CALLED in the trace. */
+    private static String resultNoun(String toolName) {
+        return switch (toolName == null ? "" : toolName) {
+            case "find_similar_incidents" -> "similar incident";
+            case "search_confluence"      -> "page";
+            case "search_logs"            -> "log line";
+            case "search_code"            -> "code match";
+            case "find_page_contributors",
+                 "find_recent_committers" -> "name";
+            case "get_incident"           -> "incident";
+            default                        -> "result";
+        };
+    }
+
+    private static String truncate(String s) {
+        return s.length() <= 80 ? s : s.substring(0, 77) + "…";
+    }
+
     static String describeModelOutcome(LlmResponse response) {
         if (response == null) {
             return "produced the report";

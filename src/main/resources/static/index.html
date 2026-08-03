@@ -485,10 +485,31 @@ console.assert(stepStateToDataState('ABANDONED') === 'abandoned', 'LT5 state map
 //   step = {
 //     state:     StepState string ('PENDING'|'ACTIVE'|'DONE'|'FAILED'|'DENIED'|'ABANDONED'),
 //     platform:  'servicenow'|'confluence'|'sumologic'|'gitlab'|'triagemate',
-//     badgeText: short vendor abbreviation (ignored for 'triagemate' — no badge is shown),
+//     badgeSvg:  inline vendor logo SVG (empty for 'triagemate' — no badge is shown),
 //     label:     the in-progress/result label text,
-//     meta:      small secondary line (platform · duration/status)
+//     meta:      small secondary line (platform, plus state when notable)
 //   }
+// The small secondary line under a step's label: which system, plus the state —
+// but ONLY when the state is worth saying. A DONE row's outcome is already the
+// label text right above it, so appending "done" is noise.
+//
+// Deliberately carries NO duration. It used to read "servicenow · 12 ms": that is
+// developer debug detail, and on the deterministic path (every step ~0-1 ms) it was
+// also actively misleading — a wall of "0 ms" reads as "nothing happened". The
+// trace is for a human watching a demo follow which systems were consulted, not
+// for profiling. Removed per direct product feedback.
+function stepMetaText(platform, state) {
+  const key = String(state || '').toUpperCase();
+  const suffix = {
+    PENDING:   'queued',
+    ACTIVE:    'in progress',
+    FAILED:    'failed',
+    DENIED:    'blocked',
+    ABANDONED: 'abandoned — fallback started',
+  }[key];
+  return suffix ? `${platform} · ${suffix}` : platform;
+}
+
 function traceRowHtml(step) {
   const dataState = stepStateToDataState(step.state);
   const subordinate = step.platform === 'triagemate';
@@ -556,11 +577,10 @@ function stepPlatformToLower(platform) {
 // actually revealed, so the skeleton doesn't spoil the "nothing is running
 // now" framing by showing timings ahead of time.
 //
-// No duration bar: an earlier version paired each row with a log-scale
-// width bar, but with step count/timing not always known ahead of a run and
-// duration already shown as text in the meta line, the bar was redundant at
-// best and misread as a progress indicator at worst — removed per direct
-// product feedback.
+// No duration bar: an earlier version paired each row with a log-scale width
+// bar, but with step count/timing not always known ahead of a run it read as a
+// progress indicator it could not honestly be — removed per direct product
+// feedback, as was the duration text that replaced it (see stepMetaText).
 function lt3RowHtml(step) {
   const platform = stepPlatformToLower(step.platform);
   const isQueued = step.state === 'PENDING';
@@ -568,13 +588,12 @@ function lt3RowHtml(step) {
   const label = isQueued
     ? (step.tool || step.label || '(step)')
     : (step.result || step.label || step.tool || '(step)');
-  const durationText = durationMs != null ? `${durationMs} ms` : (isQueued ? 'queued' : String(step.state || '').toLowerCase());
   return traceRowHtml({
     state: step.state,
     platform,
     badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
-    meta: `${platform} · ${durationText}`,
+    meta: stepMetaText(platform, step.state),
   });
 }
 
@@ -582,11 +601,15 @@ function lt3RowHtml(step) {
 // all four load-bearing words verbatim — replaying, completed, "nothing is
 // running now", real — so the UI can never be mistaken for something live.
 function lt3FrameText(steps) {
-  const totalMs = steps.reduce((sum, s) => sum + (typeof s.durationMs === 'number' ? s.durationMs : 0), 0);
+  // Still carries the four load-bearing words the design mandates — *replaying*,
+  // *completed*, *nothing is running now*, *real* — but no longer quotes a total
+  // duration, and claims the ORDER AND RESULTS are real rather than the "timings":
+  // durations are no longer shown per row, so promising them would point at
+  // something the reader can't see (and "0 ms total" read as a bug, not a fact).
   const n = steps.length;
-  return `↺ Replaying a completed run — ${n} step${n === 1 ? '' : 's'} in ${totalMs} ms total. `
+  return `↺ Replaying a completed run — ${n} step${n === 1 ? '' : 's'}. `
     + `Nothing is running now; steps are revealed at ~0.4 s each so they're readable. `
-    + `The order and the timings below are real.`;
+    + `The order and the results below are real.`;
 }
 
 // Fills an already-inserted empty card element with the LT3 replay:
@@ -692,15 +715,12 @@ function lt4RowHtml(step) {
   const label = isOpen
     ? (step.label || step.tool || '(step)')
     : (step.result || step.label || step.tool || '(step)');
-  const durationText = typeof step.durationMs === 'number'
-    ? `${step.durationMs} ms`
-    : String(step.state || '').toLowerCase();
   return traceRowHtml({
     state: step.state,
     platform,
     badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
-    meta: `${platform} · ${durationText}`,
+    meta: stepMetaText(platform, step.state),
   });
 }
 
@@ -1004,8 +1024,8 @@ function render(data) {
       <p style="color:var(--muted);margin:-4px 0 12px;font-size:13px">People with recent context — wiki authors of the runbooks consulted and recent committers to the implicated file. Advisory; shown here only, not posted to the ticket.</p>
       ${contacts||'<p class="src">— no contacts found for this incident</p>'}</div>
     <div class="card"><h2>Evidence</h2>${ev}</div>
-    <div class="card"><h2>Contradicting evidence</h2><ul>${contra||'<li>—</li>'}</ul></div>
-    <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
+    ${contra ? `<div class="card"><h2>Contradicting evidence</h2><ul>${contra}</ul></div>` : ''}
+    ${miss ? `<div class="card"><h2>Missing information</h2><ul>${miss}</ul></div>` : ''}
     <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
     ${writebackCard}
     ${provenanceChipsHtml(data)}

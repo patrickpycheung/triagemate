@@ -38,6 +38,9 @@ import java.util.regex.Pattern;
 @Component
 public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(DeterministicDiagnosisEngine.class);
+
     private static final Pattern ERROR_TOKEN = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b");
 
     private final ServiceNowGateway serviceNow;
@@ -81,6 +84,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         AtomicInteger stepSeq = new AtomicInteger(0);
         List<String> trace = new ArrayList<>();
         List<Evidence> evidence = new ArrayList<>();
+        log.info("deterministic triage of {} — starting bounded investigation", incidentNumber);
 
         // ---- Step 1: fetch incident (ServiceNow) ------------------------------
         IncidentContext inc = serviceNow.getIncident(incidentNumber);
@@ -406,6 +410,11 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         long durationMs = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
         sink.after(new TraceStep(seq, 0, callId, entry.platform(), dottedKey, entry.label(),
                 resultText, StepState.DONE, startedAtEpochMs, durationMs, DiagnosisResult.Engine.DETERMINISTIC));
+        // Every investigation step also goes to the console. This engine is the DEFAULT one,
+        // and it used to log nothing at all: a full 11-step run printed only the
+        // orchestrator's single "completed" line, so from the console the app looked idle
+        // while it was actually working. The trace UI and the log now show the same steps.
+        log.info("  step {} · {} · {}", seq + 1, entry.platform(), resultText);
     }
 
     /**

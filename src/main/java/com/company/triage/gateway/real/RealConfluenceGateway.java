@@ -22,6 +22,9 @@ import java.util.List;
 @ConditionalOnProperty(name = "triage.connectors.confluence", havingValue = "real")
 public class RealConfluenceGateway implements ConfluenceGateway {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(RealConfluenceGateway.class);
+
     private final RestClient http;
 
     public RealConfluenceGateway(IntegrationProperties props) {
@@ -37,6 +40,7 @@ public class RealConfluenceGateway implements ConfluenceGateway {
 
     @Override
     public List<KnowledgeDoc> search(String query) {
+        log.info("[Confluence] searching pages for: {}", query);
         try {
             String cql = "text ~ \"" + query.replace("\"", " ") + "\"";
             JsonNode resp = http.get()
@@ -64,6 +68,8 @@ public class RealConfluenceGateway implements ConfluenceGateway {
      */
     @Override
     public List<Contact> contributors(KnowledgeDoc doc) {
+        log.info("[Confluence] looking up contributors for page: {}",
+                doc == null ? "(none)" : doc.title());
         if (doc == null || doc.id() == null || doc.id().isBlank()) {
             return List.of();
         }

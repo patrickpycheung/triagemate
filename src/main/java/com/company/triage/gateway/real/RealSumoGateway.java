@@ -23,6 +23,9 @@ import java.util.List;
 @ConditionalOnProperty(name = "triage.connectors.sumo", havingValue = "real")
 public class RealSumoGateway implements SumoGateway {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(RealSumoGateway.class);
+
     private static final int MAX_POLLS = 15;
     private final RestClient http;
 
@@ -40,6 +43,8 @@ public class RealSumoGateway implements SumoGateway {
 
     @Override
     public List<LogEvidence> search(LogSearchRequest req) {
+        log.info("[Sumo] searching scope={} for \"{}\" between {} and {}",
+                req.sourceCategory(), req.query(), req.fromTime(), req.toTime());
         String query = "_sourceCategory=" + req.sourceCategory() + " " + req.query();
         String body = """
             {"query":%s,"from":"%s","to":"%s","timeZone":"UTC"}
