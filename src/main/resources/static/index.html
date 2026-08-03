@@ -581,12 +581,41 @@ function stepPlatformToLower(platform) {
 // bar, but with step count/timing not always known ahead of a run it read as a
 // progress indicator it could not honestly be — removed per direct product
 // feedback, as was the duration text that replaced it (see stepMetaText).
-function lt3RowHtml(step) {
+/* ---- Shared trace-card shell (J11) ---------------------------------------
+   LT3 (deterministic replay) and LT4 (ADK live) render the SAME structure —
+   header with a running count, one caption line, then a growing row list —
+   so switching engines doesn't change the shape of what the audience sees.
+   They differ in exactly two places, both deliberate and both honesty-contract
+   requirements, not layout: the word replay/live in the header, and what the
+   caption says. Everything else (row markup, growth behaviour, count) is shared.
+*/
+function traceCardShell(cardEl, mode, captionText) {
+  cardEl.innerHTML = `<h2>Tool-call trace — ${mode} (<span class="tc-count">0</span>)</h2>
+    <p class="lt3-frame">${esc(captionText)}</p>
+    <div class="tc-rows"></div>`;
+  return {
+    rowsEl: cardEl.querySelector('.tc-rows'),
+    countEl: cardEl.querySelector('.tc-count'),
+  };
+}
+
+/** Appends rows and keeps the header count in step — the one growth path both use. */
+function appendTraceRows(shell, steps) {
+  if (!steps.length) return;
+  shell.rowsEl.insertAdjacentHTML('beforeend', steps.map(traceStepRowHtml).join(''));
+  shell.countEl.textContent = shell.rowsEl.children.length;
+}
+
+function traceStepRowHtml(step) {
   const platform = stepPlatformToLower(step.platform);
-  const isQueued = step.state === 'PENDING';
-  const durationMs = (!isQueued && typeof step.durationMs === 'number') ? step.durationMs : null;
-  const label = isQueued
-    ? (step.tool || step.label || '(step)')
+  // Un-resolved rows (queued on the replay path, in-flight on the live path) show the
+  // catalog's friendly label ("Searching Confluence for a runbook…"); resolved rows show
+  // what actually came back. Both paths use the SAME rule — the replay path used to fall
+  // back to step.tool here, so a pending row read as the raw dotted key
+  // "confluence.search" while the live path said the sentence. Same data, two voices.
+  const unresolved = step.state === 'PENDING' || step.state === 'ACTIVE';
+  const label = unresolved
+    ? (step.label || step.tool || '(step)')
     : (step.result || step.label || step.tool || '(step)');
   return traceRowHtml({
     state: step.state,
@@ -633,24 +662,23 @@ function renderLt3Replay(cardEl, data) {
     return;
   }
 
-  cardEl.innerHTML = `<h2>Tool-call trace — replay (${steps.length})</h2>
-    <p class="lt3-frame">${esc(lt3FrameText(steps))}</p>
-    <div id="lt3Rows"></div>`;
-  const rowsEl = cardEl.querySelector('#lt3Rows');
-  rowsEl.innerHTML = steps.map(s => lt3RowHtml({ ...s, state: 'PENDING' })).join('');
+  const shell = traceCardShell(cardEl, 'replay', lt3FrameText(steps));
 
-  // Paced sequential reveal — a REPLAY-ONLY rule (README.md LT3 pacing
-  // table, lines 195-198): reveal step N after max(realDuration, ~0.4s).
-  // Do NOT confuse this with LT4's live path, which never paces at all —
-  // that "no pacing" rule belongs exclusively to TASK-015's live poll.
-  const rowNodes = rowsEl.querySelectorAll('.trace-row');
+  // Paced sequential reveal — a REPLAY-ONLY rule (README.md LT3 pacing table):
+  // reveal step N after max(realDuration, ~0.4s). The live path never paces.
+  //
+  // Rows are APPENDED one at a time, exactly as the live path appends them on
+  // arrival. This used to pre-render every step as a grey PENDING skeleton and
+  // flip them in place — which made the two engines look like different
+  // products: deterministic showed a full list filling in, ADK showed a list
+  // growing. Appending is the only motion BOTH can do (the live path can't know
+  // its steps ahead of time), so it's the one they now share. The pacing stays
+  // the difference in TIMING, not in shape.
   let cumulativeDelay = 0;
-  steps.forEach((step, i) => {
+  steps.forEach((step) => {
     const realDuration = typeof step.durationMs === 'number' ? step.durationMs : 0;
     cumulativeDelay += Math.max(realDuration, 400);
-    setTimeout(() => {
-      if (rowNodes[i]) rowNodes[i].outerHTML = lt3RowHtml(step);
-    }, cumulativeDelay);
+    setTimeout(() => appendTraceRows(shell, [step]), cumulativeDelay);
   });
 }
 
@@ -677,6 +705,10 @@ function renderLt3Replay(cardEl, data) {
    (TASK-013) and PLATFORM_LOGO_SVG from LT3 (TASK-014) — row markup and the
    platform/badge lookup are never reimplemented here.
 */
+// The live counterpart of lt3FrameText — same caption slot, opposite claim, so the
+// two engines share a structure while each stays honest about what it is showing.
+const LT4_FRAME_TEXT = '▶ Live run — each step appears the moment that call returns. '
+  + 'Nothing here is paced or replayed; the order and the results below are real.';
 const LT4_POLL_INTERVAL_MS = 750; // within the design's ~500ms-1s window
 // The first poll is fired before the POST that creates the run is even sent
 // (see run(): "Poll loop starts immediately, independent of ... the POST
@@ -707,22 +739,8 @@ function mintRunId() {
 }
 
 // One row, built for immediate (unpaced) display — no duration bar, no PENDING
-// skeleton like LT3's lt3RowHtml: a live step only ever arrives once it's a
+// skeleton like LT3's traceStepRowHtml: a live step only ever arrives once it's a
 // real event (ACTIVE at the earliest), so there's nothing to pre-render.
-function lt4RowHtml(step) {
-  const platform = stepPlatformToLower(step.platform);
-  const isOpen = step.state === 'ACTIVE' || step.state === 'PENDING';
-  const label = isOpen
-    ? (step.label || step.tool || '(step)')
-    : (step.result || step.label || step.tool || '(step)');
-  return traceRowHtml({
-    state: step.state,
-    platform,
-    badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
-    label,
-    meta: stepMetaText(platform, step.state),
-  });
-}
 
 // Starts polling runId's live buffer and appending new rows into cardEl as
 // soon as each poll returns them. Returns { stop() } — idempotent — so the
@@ -735,14 +753,16 @@ function lt4RowHtml(step) {
 // in place and appends a synthetic FALLBACK_STARTED boundary row (platform
 // TRIAGEMATE, state DONE, label "Falling back to the deterministic engine")
 // as a genuinely NEW step — so it arrives through this same poll loop and
-// renders through this same lt4RowHtml/traceRowHtml path: ABANDONED steps get
+// renders through this same traceStepRowHtml/traceRowHtml path: ABANDONED steps get
 // TASK-013's existing struck-through/dimmed treatment (stepStateToDataState
 // maps ABANDONED -> 'abandoned' already), and the boundary row's own label
 // text visibly announces the transition, rather than either being silently
 // dropped or requiring a bespoke second code path.
 function startLt4Poll(runId, cardEl) {
-  cardEl.innerHTML = '<h2>Tool-call trace — live</h2><div id="lt4Rows"></div>';
-  const rowsEl = cardEl.querySelector('#lt4Rows');
+  // Same shell the replay path uses — header with a running count, one caption
+  // line, then the growing row list. The caption is the live counterpart of
+  // LT3's replay frame: same slot, same styling, opposite claim.
+  const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
   let since = -1; // -1 == "send everything so far" (RunStepsController default)
   let stopped = false;
   let timer = null;
@@ -783,7 +803,7 @@ function startLt4Poll(runId, cardEl) {
         for (const attempt of (data.attempts || [])) {
           const steps = attempt.steps || [];
           if (steps.length) {
-            rowsEl.insertAdjacentHTML('beforeend', steps.map(lt4RowHtml).join(''));
+            appendTraceRows(shell, steps);
             newCount += steps.length;
           }
         }
@@ -821,7 +841,8 @@ function renderLt4Final(cardEl, data) {
     cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
     return;
   }
-  cardEl.innerHTML = `<h2>Tool-call trace — live (${steps.length})</h2><div>${steps.map(lt4RowHtml).join('')}</div>`;
+  const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
+  appendTraceRows(shell, steps);
 }
 
 /* ---- LT7: provenance chips (J11, TASK-016) --------------------------------

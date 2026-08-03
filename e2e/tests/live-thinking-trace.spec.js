@@ -39,42 +39,31 @@ test.describe('J11 live thinking trace — deterministic engine', () => {
     await page.fill('#inc', SEEDED_INCIDENT);
     await page.click('#go');
 
-    // The replay renderer (LT3) pre-renders every step as a PENDING skeleton
-    // row immediately, then flips each to its resolved state one at a time,
-    // paced at max(realDuration, ~400ms) apart. So: the full row COUNT should
-    // appear quickly, but not all of them should be DONE immediately — that
-    // would mean the pacing floor was silently bypassed and everything was
-    // rendered in one shot.
-    const rows = page.locator('#lt3Rows .trace-row');
+    // Rows are APPENDED one at a time, paced at max(realDuration, ~400ms) — the
+    // same growth motion the live/ADK path uses, so switching engines doesn't
+    // change the shape of what the audience sees. (This replaced a pre-rendered
+    // grey skeleton that flipped in place; the two engines looked like different
+    // products.) So the row count must GROW rather than arrive complete.
+    const rows = page.locator('.tc-rows .trace-row');
     await expect(rows.first()).toBeVisible({ timeout: 10_000 });
 
-    const totalRows = await rows.count();
-    expect(totalRows).toBeGreaterThanOrEqual(9); // the deterministic engine's own step count
+    const firstCount = await rows.count();
+    expect(firstCount).toBeGreaterThan(0);
+    // Not everything at once — with a ~400ms floor per step, a 9+ step run
+    // cannot possibly be fully rendered by the time the first row is visible.
+    expect(firstCount).toBeLessThan(9);
 
-    // At least one row must still be non-DONE shortly after the rows first
-    // appear, proving the reveal is staggered rather than instantaneous. This
-    // polls instead of sleeping a fixed duration (flaky under CI/host load)
-    // — but the bound stays well under the ~400ms pacing floor, so it can
-    // only pass because the first row genuinely hasn't flipped yet, not
-    // because the poll happened to get lucky on timing.
-    await expect
-      .poll(
-        async () => {
-          const states = await rows.evaluateAll(els => els.map(el => el.getAttribute('data-state')));
-          return states.some(s => s !== 'done');
-        },
-        { timeout: 300 },
-      )
-      .toBe(true);
+    // ...and it keeps growing until the whole run is on screen.
+    await expect.poll(async () => rows.count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(9); // the deterministic engine's own step count
 
-    // Eventually every row settles to 'done' (a clean deterministic run never
-    // fails/denies/abandons a step) — proves the reveal actually completes,
-    // not just that it starts staggered.
-    await expect
-      .poll(async () => (await rows.evaluateAll(els => els.map(el => el.getAttribute('data-state')))), {
-        timeout: 10_000,
-      })
-      .toEqual(new Array(totalRows).fill('done'));
+    // Every rendered row settles to 'done' — a clean deterministic run never
+    // fails/denies/abandons a step.
+    const states = await rows.evaluateAll(els => els.map(el => el.getAttribute('data-state')));
+    expect(states.every(s => s === 'done')).toBe(true);
+
+    // The header count tracks the rows actually on screen (shared by both engines).
+    await expect(page.locator('.tc-count')).toHaveText(String(await rows.count()));
   });
 
   test('provenance renders as two separate chips, never one collapsed claim', async ({ page }) => {
@@ -97,7 +86,7 @@ test.describe('J11 live thinking trace — deterministic engine', () => {
     await page.fill('#inc', SEEDED_INCIDENT);
     await page.click('#go');
 
-    const triagemateRows = page.locator('#lt3Rows .trace-row[data-platform="triagemate"]');
+    const triagemateRows = page.locator('.tc-rows .trace-row[data-platform="triagemate"]');
     await expect
       .poll(async () => triagemateRows.count(), { timeout: 10_000 })
       .toBeGreaterThan(0);
