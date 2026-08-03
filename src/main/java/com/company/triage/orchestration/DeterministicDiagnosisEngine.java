@@ -175,8 +175,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String environment = IncidentSignals.environmentCode(
                 inc.environment(), sumoAllowedEnvironments, sumoDefaultEnvironment);
         String scope = sumoProps.sourceCategoryFor(projectSlug, environment);
-        List<LogEvidence> logs = sumo.search(new LogSearchRequest(scope, sumoProps.index(), logQuery,
-                inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), sumoProps.maxResults()));
+        LogSearchRequest sumoRequest = new LogSearchRequest(scope, sumoProps.index(), logQuery,
+                inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), sumoProps.maxResults());
+        List<LogEvidence> logs = sumo.search(sumoRequest);
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
         String errorToken = errorLine == null ? null : firstMatch(ERROR_TOKEN, errorLine.message());
@@ -185,8 +186,13 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),
                     scope));
         }
-        String traceSumoSearch = "sumo.search(scope=%s, query=\"%s\", window=±10m, max=%d) → %d line(s); errorToken=%s"
-                .formatted(scope, logQuery, sumoProps.maxResults(), logs.size(), errorToken);
+        // Show the query EXACTLY as sent, index clause included. The trace previously
+        // printed scope and search term separately, which made it impossible to tell from
+        // the UI whether the _index clause was being applied at all — and without it a
+        // real Sumo search returns zero rows every time, so it is the one part of the
+        // query most worth being able to see.
+        String traceSumoSearch = "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
+                .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
         trace.add(traceSumoSearch);
         emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
 

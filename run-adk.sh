@@ -25,7 +25,7 @@
 # Runs on port 8080 by default — same as run-deterministic.sh, so run only one
 # at a time unless you override --port to compare them side by side.
 #
-# Usage: ./run-adk.sh [-- extra mvn args]
+# Usage: ./run-adk.sh [extra --app.args=...]   (forwarded to the app, not to Maven)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -94,7 +94,22 @@ if $STARTED_PROXY; then
   fi
 fi
 
+# Extra arguments are forwarded to the APPLICATION, appended to the engine flag
+# this script already sets. The spring-boot plugin takes them comma-joined in one
+# -D property, so they can't just be appended to the mvn command line. Lets you do
+#   ./run-adk.sh --server.port=80
+# See docs/design-java/CUSTOM-DOMAIN.md.
+APP_ARGS="--triage.engine=adk"
+if [ "$#" -gt 0 ]; then
+  APP_ARGS="$APP_ARGS,$(IFS=,; echo "$*")"
+fi
+
+PORT="8080"
+for arg in "$@"; do
+  case "$arg" in --server.port=*) PORT="${arg#--server.port=}" ;; esac
+done
+
 echo "=== TriageMate — ADK live agent engine (D1) ==="
-echo "    http://localhost:8080"
+echo "    http://localhost:$PORT"
 echo "    Run ./bin/e2-proxy-spike.sh any time to validate the full proxy chain."
-exec mvn -Padk spring-boot:run -Dspring-boot.run.arguments=--triage.engine=adk "$@"
+exec mvn -Padk spring-boot:run -Dspring-boot.run.arguments="$APP_ARGS"

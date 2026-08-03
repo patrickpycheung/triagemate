@@ -51,3 +51,34 @@ triage.integrations.sumo.secret=<access key from step 1>
   collectors, sources, or dashboards. A read-only/search-scoped role is sufficient.
 - Access keys can be revoked individually from the same Access Keys page without
   affecting your login credentials.
+
+## 5. Query shape (important)
+
+The app composes the query from `triage.sumo.source-category-pattern` + `index`
+(`application.yml`), producing:
+
+```
+_sourceCategory=IDT/ITServices/Tomcat/<project>/<env>/AppEvt_<project> and _index=Global_Standard_Infrequent
+```
+
+**Both clauses matter.** Without `_index` the corporate instance returns **zero rows** for
+a query that is otherwise perfectly well-formed — which reads as "no logs for this
+incident" rather than as a broken query. Pinned by `LogSearchRequestQueryTest`.
+
+Timestamps go as second-precision UTC with no offset (`2026-08-03T04:16:40`), paired with
+`"timeZone":"UTC"`. `OffsetDateTime.toString()` is rejected with
+`400 searchjob.invalid.timestamp.from`. Pinned by `RealSumoGatewayTimeFormatTest`.
+
+## 6. Verifying against the live API
+
+`RealSumoGatewayLiveTest` hits the real API. It is **opt-in**: with no
+`triage.integrations.sumo.*` values in `secrets.properties` it skips, so `mvn test` stays
+green and offline on a machine without credentials.
+
+```bash
+mvn test -Dtest=RealSumoGatewayLiveTest
+```
+
+Measured on the AU instance (2026-08-03): a 30-minute window over one project completes in
+~4s; a 24-hour window was still gathering at 24s. The app caps the window at
+`max-window-minutes` (30), so it stays in the fast case.

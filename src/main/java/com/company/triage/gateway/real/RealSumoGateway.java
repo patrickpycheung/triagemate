@@ -47,9 +47,15 @@ public class RealSumoGateway implements SumoGateway {
                 req.sourceCategory(), req.query(), req.fromTime(), req.toTime());
         String query = req.toSumoQuery();
         log.debug("[Sumo] query: {}", query);
+        // Sumo's Search Job API rejects OffsetDateTime.toString() outright:
+        //   "The 'from' field (2026-08-03T14:16:40.644281692+10:00) contains an invalid time."
+        // It wants a plain second-precision local timestamp paired with the timeZone field
+        // below — no sub-second fraction, no offset suffix. Caught by
+        // RealSumoGatewayLiveTest; a stubbed gateway can't see this, and every real call
+        // was 400-ing before the fix.
         String body = """
             {"query":%s,"from":"%s","to":"%s","timeZone":"UTC"}
-            """.formatted(json(query), req.fromTime(), req.toTime());
+            """.formatted(json(query), sumoTime(req.fromTime()), sumoTime(req.toTime()));
 
         JsonNode created = http.post().uri("/api/v1/search/jobs")
                 .body(body).retrieve().body(JsonNode.class);
@@ -57,13 +63,24 @@ public class RealSumoGateway implements SumoGateway {
         if (jobId == null) return List.of();
 
         try {
+            // Measured against the real AU instance: a 30-minute window over one project
+            // completes in ~4s (4 polls). A 24-hour window was still gathering at 24s — but
+            // the app never asks for one (max-window-minutes caps it at 30). If the budget
+            // IS exhausted we still fetch what the job has gathered so far rather than
+            // returning nothing, but say so, because partial results that look complete are
+            // the kind of thing that quietly misleads a diagnosis.
+            boolean complete = false;
             for (int i = 0; i < MAX_POLLS; i++) {
                 JsonNode status = http.get().uri("/api/v1/search/jobs/{id}", jobId)
                         .retrieve().body(JsonNode.class);
                 String state = status == null ? "" : status.path("state").asText();
-                if ("DONE GATHERING RESULTS".equals(state)) break;
+                if ("DONE GATHERING RESULTS".equals(state)) { complete = true; break; }
                 if ("CANCELLED".equals(state)) return List.of();
                 Thread.sleep(1000);
+            }
+            if (!complete) {
+                log.warn("[Sumo] search job {} still gathering after {}s — returning partial results",
+                        jobId, MAX_POLLS);
             }
             JsonNode msgs = http.get()
                     .uri("/api/v1/search/jobs/{id}/messages?offset=0&limit={n}", jobId, req.maxResults())
@@ -86,6 +103,16 @@ public class RealSumoGateway implements SumoGateway {
             try { http.delete().uri("/api/v1/search/jobs/{id}", jobId).retrieve().toBodilessEntity(); }
             catch (Exception ignore) { /* best-effort cleanup */ }
         }
+    }
+
+    /**
+     * The timestamp format Sumo's Search Job API accepts: UTC, second precision, no offset
+     * suffix (the request body carries {@code "timeZone":"UTC"} instead). Package-private
+     * so {@link RealSumoGatewayTimeFormatTest} can pin it without a network call.
+     */
+    static String sumoTime(java.time.OffsetDateTime t) {
+        return t.atZoneSameInstant(java.time.ZoneOffset.UTC)
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
     }
 
     private static String json(String s) {

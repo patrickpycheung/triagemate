@@ -16,7 +16,7 @@
   <style>
     /* ---- Theme tokens -------------------------------------------------------
        Every colour the page paints comes from one of these. Adding a theme
-       below means overriding these 16 vars — no rule outside :root/[data-theme]
+       below means overriding these 17 vars — no rule outside :root/[data-theme]
        may hardcode a hex, or that theme silently half-applies. Theme choice is
        cosmetic only: it never changes what the page reports (see the FND-16/25
        notes in render() — those read real DiagnosisResult fields, not colours).
@@ -29,6 +29,7 @@
       --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
       --sn:#5fd96a; --cf:#4d9fff; --sl:#38bdf8; --gl:#ff8a4d;
       --crit:#ff5c5c;
+      --brand:#e4222f;   /* Australia Post mark — the company is the same in every theme */
     }
     /* Australia Post — the corporate read: red on white, high-key. */
     [data-theme="auspost"] {
@@ -39,6 +40,7 @@
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#c9184a;
+      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
     }
     /* Australia Post's own ServiceNow instance — colours extracted directly from a
        screenshot of the real DAP DP dashboard (theme-AusPost-ServiceNow.png, repo root).
@@ -67,6 +69,7 @@
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#d32f2f;
+      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
     }
     /* Paper — neutral light, for screenshots and printed handouts. */
     [data-theme="paper"] {
@@ -77,6 +80,7 @@
       --banner-bg:#fff8c5; --banner-ink:#7d4e00;
       --sn:#157347; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#cf222e;
+      --brand:#dc1928;   /* Australia Post mark — the company is the same in every theme */
     }
     /* Projector — max contrast, thick accents. Answers the J11 legibility
        question the hard way: if it reads at the back of the room here, it reads. */
@@ -88,12 +92,17 @@
       --banner-bg:#2e2000; --banner-ink:#ffd400;
       --sn:#3ddc72; --cf:#4da6ff; --sl:#22e0ff; --gl:#ff8a3d;
       --crit:#ff2b2b;
+      --brand:#ff2b2b;   /* Australia Post mark — the company is the same in every theme */
     }
     * { box-sizing:border-box; }
     body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
     .wrap { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
     h1 { font-size:22px; margin:0 0 4px; }
     .sub { color:var(--muted); margin:0 0 20px; }
+    /* Brand row: the Australia Post mark beside the app title. */
+    .brand { display:flex; align-items:flex-start; gap:14px; }
+    .brand-mark { flex:0 0 auto; width:40px; height:40px; color:var(--brand); margin-top:-2px; }
+    @media (max-width:520px) { .brand-mark { width:32px; height:32px; } }
     .row { display:flex; gap:10px; margin-bottom:22px; }
     input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid var(--input-border); background:var(--input-bg); color:var(--ink); font-size:15px; }
     button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:var(--btn-ink); font-weight:600; cursor:pointer; }
@@ -326,8 +335,28 @@
 </div>
 
 <div class="wrap">
-  <h1>TriageMate <span class="pill">advisory</span></h1>
-  <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
+  <!-- Australia Post mark. Traced from the corporate ServiceNow instance's own header
+       (theme-AusPost-ServiceNow.png) as geometry — circle, vertical cut, elliptical
+       counter — rather than embedded as a bitmap, so it stays sharp at any size and
+       inherits its colour from the theme. `currentColor` on the fill means it picks up
+       --acc, which is the real Australia Post red (#dc1928) in both AusPost themes and
+       the theme's own accent elsewhere. Internal hackathon app; the mark is here to
+       identify whose system this is, not as third-party branding. -->
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 80 80" role="img" aria-label="Australia Post">
+      <mask id="auspost-mark">
+        <rect width="80" height="80" fill="black"/>
+        <circle cx="39" cy="41.5" r="27.5" fill="white"/>
+        <rect x="30" y="0" width="7.5" height="80" fill="black"/>
+        <ellipse cx="42.5" cy="34" rx="13" ry="16" fill="black"/>
+      </mask>
+      <rect width="80" height="80" fill="currentColor" mask="url(#auspost-mark)"/>
+    </svg>
+    <div>
+      <h1>TriageMate <span class="pill">advisory</span></h1>
+      <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
+    </div>
+  </div>
 
   <div class="row">
     <input id="inc" value="INC0010005" placeholder="INC0010005"/>
