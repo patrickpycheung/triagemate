@@ -231,11 +231,6 @@
        the four load-bearing words (replaying/completed/nothing is running
        now/real). See lt3FrameText() below; this rule is purely typographic. */
     .lt3-frame { color:var(--muted); font-size:12.5px; margin:-4px 0 14px; line-height:1.5; }
-    .lt3-step { margin-bottom:2px; }
-    /* Log-scale duration bar per row — reuses the existing .bar/.bar>i idiom
-       (candidate-confidence bars above) rather than inventing a new visual
-       language; only the width math (log-scale, see lt3LogScalePct()) differs. */
-    .lt3-step .bar { margin:-3px 0 7px 42px; }
 
     /* ---- LT7: provenance chips (J11, TASK-016) -------------------------------
        Two separate chips, reusing the existing .pill badge idiom (the same one
@@ -539,23 +534,17 @@ function stepPlatformToLower(platform) {
   return STEP_PLATFORM_TO_LOWER[platform] || 'triagemate';
 }
 
-// Log-scale width so a 2ms step and a slow one (F-3: deterministic engine
-// against real connectors) both read as visibly nonzero — the deterministic
-// mock run is 2-19ms total, a linear scale would flatten every bar to
-// invisible. Floored at 6% so even a 0ms/unresolved (ABANDONED) duration
-// still shows a sliver rather than literally nothing.
-function lt3LogScalePct(durationMs, maxDurationMs) {
-  const d = Math.max(0, Number(durationMs) || 0);
-  const max = Math.max(1, Number(maxDurationMs) || 1);
-  const pct = Math.log(d + 1) / Math.log(max + 1) * 100;
-  return Math.max(6, Math.min(100, Math.round(pct)));
-}
-
-// One row + its duration bar. `step.state === 'PENDING'` is the pre-render
-// skeleton state (see renderLt3Replay) — real duration/result text is
-// withheld until the row is actually revealed, so the skeleton doesn't spoil
-// the "nothing is running now" framing by showing timings ahead of time.
-function lt3RowHtml(step, maxDurationMs) {
+// One row. `step.state === 'PENDING'` is the pre-render skeleton state (see
+// renderLt3Replay) — real duration/result text is withheld until the row is
+// actually revealed, so the skeleton doesn't spoil the "nothing is running
+// now" framing by showing timings ahead of time.
+//
+// No duration bar: an earlier version paired each row with a log-scale
+// width bar, but with step count/timing not always known ahead of a run and
+// duration already shown as text in the meta line, the bar was redundant at
+// best and misread as a progress indicator at worst — removed per direct
+// product feedback.
+function lt3RowHtml(step) {
   const platform = stepPlatformToLower(step.platform);
   const isQueued = step.state === 'PENDING';
   const durationMs = (!isQueued && typeof step.durationMs === 'number') ? step.durationMs : null;
@@ -563,15 +552,13 @@ function lt3RowHtml(step, maxDurationMs) {
     ? (step.tool || step.label || '(step)')
     : (step.result || step.label || step.tool || '(step)');
   const durationText = durationMs != null ? `${durationMs} ms` : (isQueued ? 'queued' : String(step.state || '').toLowerCase());
-  const row = traceRowHtml({
+  return traceRowHtml({
     state: step.state,
     platform,
     badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
     meta: `${platform} · ${durationText}`,
   });
-  const pct = isQueued ? 6 : lt3LogScalePct(durationMs, maxDurationMs);
-  return `<div class="lt3-step">${row}<div class="bar"><i style="width:${pct}%"></i></div></div>`;
 }
 
 // The honesty-contract frame copy (README.md LT3, lines 177-181): must carry
@@ -606,25 +593,23 @@ function renderLt3Replay(cardEl, data) {
     return;
   }
 
-  const maxDurationMs = steps.reduce((m, s) => Math.max(m, typeof s.durationMs === 'number' ? s.durationMs : 0), 0);
-
   cardEl.innerHTML = `<h2>Tool-call trace — replay (${steps.length})</h2>
     <p class="lt3-frame">${esc(lt3FrameText(steps))}</p>
     <div id="lt3Rows"></div>`;
   const rowsEl = cardEl.querySelector('#lt3Rows');
-  rowsEl.innerHTML = steps.map(s => lt3RowHtml({ ...s, state: 'PENDING' }, maxDurationMs)).join('');
+  rowsEl.innerHTML = steps.map(s => lt3RowHtml({ ...s, state: 'PENDING' })).join('');
 
   // Paced sequential reveal — a REPLAY-ONLY rule (README.md LT3 pacing
   // table, lines 195-198): reveal step N after max(realDuration, ~0.4s).
   // Do NOT confuse this with LT4's live path, which never paces at all —
   // that "no pacing" rule belongs exclusively to TASK-015's live poll.
-  const rowNodes = rowsEl.querySelectorAll('.lt3-step');
+  const rowNodes = rowsEl.querySelectorAll('.trace-row');
   let cumulativeDelay = 0;
   steps.forEach((step, i) => {
     const realDuration = typeof step.durationMs === 'number' ? step.durationMs : 0;
     cumulativeDelay += Math.max(realDuration, 400);
     setTimeout(() => {
-      if (rowNodes[i]) rowNodes[i].outerHTML = lt3RowHtml(step, maxDurationMs);
+      if (rowNodes[i]) rowNodes[i].outerHTML = lt3RowHtml(step);
     }, cumulativeDelay);
   });
 }

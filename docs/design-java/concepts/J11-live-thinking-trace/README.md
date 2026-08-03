@@ -173,8 +173,11 @@ in the text trace; the new UI must not lose that).
 
 Reveal completed steps at a perceptible cadence (~250–400 ms floor — Nielsen's ~100 ms
 threshold means a 19 ms flash reads as a *glitch*; Buell & Norton's "labor illusion" finds
-instant answers to hard-looking work *reduce* trust), each row showing its **real** duration,
-with log-scale duration bars so 2 ms and 40 s share one visual language.
+instant answers to hard-looking work *reduce* trust), each row showing its **real** duration
+as text in the meta line. No per-row progress/duration bar (tried in an earlier version,
+removed per direct product feedback 2026-08-03): step count isn't always known ahead of a
+run, so a bar reads as a progress indicator it can't honestly be — the text duration already
+carries the same information without that implication.
 
 Frame wording must carry four load-bearing words — *replaying*, *completed*, *nothing is
 running now*, *real*:
