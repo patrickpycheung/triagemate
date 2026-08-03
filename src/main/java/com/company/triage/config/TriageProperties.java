@@ -82,10 +82,28 @@ public record TriageProperties(
 
     /** {@code triage.sumo.*} — the Sumo Logic bound (FND-20/38, J6/J8). */
     public record Sumo(
-            List<String> allowedScopes,
+            String sourceCategoryPattern,
+            java.util.Map<String, String> sourceCategoryOverrides,
+            String index,
+            List<String> allowedEnvironments,
             @Min(1) int maxResults,
             @Min(1) int maxWindowMinutes
-    ) {}
+    ) {
+        /**
+         * Composes the {@code _sourceCategory} for a project + environment. The model never
+         * supplies a category directly — it supplies these two fields and the app builds the
+         * rest, so an off-convention or wildcard category is unrepresentable rather than
+         * merely rejected. A per-project override wins over the default pattern.
+         */
+        public String sourceCategoryFor(String projectSlug, String environment) {
+            String pattern = sourceCategoryOverrides == null
+                    ? sourceCategoryPattern
+                    : sourceCategoryOverrides.getOrDefault(projectSlug, sourceCategoryPattern);
+            return pattern
+                    .replace("{project}", projectSlug == null ? "" : projectSlug)
+                    .replace("{environment}", environment == null ? "" : environment);
+        }
+    }
 
     /** {@code triage.gitlab.*} — the GitLab project allowlist (FND-38, J6/J8). */
     public record GitLab(List<String> allowedProjects) {}

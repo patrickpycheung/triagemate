@@ -47,7 +47,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
     private final GitLabGateway gitLab;
-    private final List<String> sumoScopeAllowlist;
+    private final TriageProperties.Sumo sumoProps;
+    private final List<String> sumoAllowedEnvironments;
+    private final String sumoDefaultEnvironment;
     private final List<String> gitLabProjectAllowlist;
 
     public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
@@ -57,13 +59,18 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         this.confluence = confluence;
         this.sumo = sumo;
         this.gitLab = gitLab;
-        // FND-40: previously a hardcoded copy of the same list TriageMateTools reads
-        // from triage.sumo.allowed-scopes (config) — the two lists happened to agree
-        // only by coincidence; a config change would silently affect the ADK path but
-        // not this one. This engine doesn't take model-chosen scope (it's a fixed
-        // script), so there was no guardrail-bypass risk, but "which scope is default"
-        // now has one source of truth instead of two independently-maintained copies.
-        this.sumoScopeAllowlist = props.sumo().allowedScopes();
+        // FND-40: the Sumo settings come from config, not a hardcoded copy — the two paths
+        // (this engine and TriageMateTools) previously held independently-maintained lists
+        // that agreed only by coincidence. Now both compose their _sourceCategory from the
+        // same configured pattern, so there is one source of truth.
+        this.sumoProps = props.sumo();
+        this.sumoAllowedEnvironments = props.sumo().allowedEnvironments();
+        // "prod" when it's a configured environment, else the first one, so a deployment
+        // that renames its environments still gets a valid category rather than a blank.
+        this.sumoDefaultEnvironment =
+                sumoAllowedEnvironments == null || sumoAllowedEnvironments.isEmpty() ? "prod"
+                        : sumoAllowedEnvironments.contains("prod") ? "prod"
+                        : sumoAllowedEnvironments.get(0);
         // FND-62: the GitLab project was a hardcoded literal here, so this engine ignored
         // triage.gitlab.allowed-projects while the ADK path enforced it — the same
         // two-sources-of-truth split FND-40 fixed for Sumo scopes and missed here.
@@ -156,36 +163,30 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         emitStep(sink, stepSeq, "confluence.search", traceConfluenceSearch);
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
-        // FND-62: was always allowedScopes.get(0) — the first configured scope, whatever the
-        // incident was about. Now: rank the allowlist by relevance to the affected app, then
-        // sweep it in that order, stopping at the first scope that yields an ERROR line.
-        // Ranking alone would be a guess, and this incident is precisely the case where the
-        // guess is wrong: the CI says "Order Portal" but the failure is downstream in Payment
-        // Service. Sweeping is affordable here in a way it isn't for the ADK path — the
-        // allowlist is small and config-bounded, and there is no per-call LLM budget.
+        // The _sourceCategory is COMPOSED, not chosen: project slug (from the affected app)
+        // + environment (from the incident's own environment field) expanded through the
+        // configured pattern. This replaced a literal scope allowlist that we swept in
+        // relevance order — that allowlist held demo-fixture values that exist in no real
+        // Sumo, and scopes were never an access boundary anyway (any credential that can
+        // search sees every environment). One derived category also means one query instead
+        // of a sweep, since there is no longer a list of candidates to guess between.
         String logQuery = signals.logQuery();
-        List<String> scopesToTry = IncidentSignals.rankAllowlist(signals.app(), sumoScopeAllowlist);
-        String scope = scopesToTry.isEmpty() ? null : scopesToTry.get(0);
-        List<LogEvidence> logs = List.of();
-        LogEvidence errorLine = null;
-        for (String candidateScope : scopesToTry) {
-            List<LogEvidence> hits = sumo.search(new LogSearchRequest(candidateScope, logQuery,
-                    inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), 20));
-            LogEvidence err = hits.stream().filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
-            if (!hits.isEmpty() && (logs.isEmpty() || err != null)) {
-                logs = hits;
-                scope = candidateScope;
-            }
-            if (err != null) { errorLine = err; scope = candidateScope; break; }
-        }
+        String projectSlug = IncidentSignals.projectSlug(signals.app());
+        String environment = IncidentSignals.environmentCode(
+                inc.environment(), sumoAllowedEnvironments, sumoDefaultEnvironment);
+        String scope = sumoProps.sourceCategoryFor(projectSlug, environment);
+        List<LogEvidence> logs = sumo.search(new LogSearchRequest(scope, sumoProps.index(), logQuery,
+                inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), sumoProps.maxResults()));
+        LogEvidence errorLine = logs.stream()
+                .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
         String errorToken = errorLine == null ? null : firstMatch(ERROR_TOKEN, errorLine.message());
         if (errorLine != null) {
             evidence.add(new Evidence("e-log", "sumo",
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),
                     scope));
         }
-        String traceSumoSearch = "sumo.search(query=\"%s\", scopes=%s → %s, window=±10m, max=20) → %d line(s); errorToken=%s"
-                .formatted(logQuery, scopesToTry, scope, logs.size(), errorToken);
+        String traceSumoSearch = "sumo.search(scope=%s, query=\"%s\", window=±10m, max=%d) → %d line(s); errorToken=%s"
+                .formatted(scope, logQuery, sumoProps.maxResults(), logs.size(), errorToken);
         trace.add(traceSumoSearch);
         emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
 

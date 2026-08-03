@@ -33,7 +33,11 @@ class TriageMateToolsSearchLogsTest {
     private RecordingSumo wireWith(int maxResults, int maxWindowMinutes) {
         RecordingSumo sumo = new RecordingSumo();
         TriageMateTools.wire(new NoopServiceNow(), new NoopConfluence(), sumo, new NoopGitLab(),
-                List.of("prod/payment"), maxResults, maxWindowMinutes,
+                new com.company.triage.config.TriageProperties.Sumo(
+                        "IDT/ITServices/Tomcat/{project}/{environment}/AppEvt_{project}",
+                        java.util.Map.of(), "Global_Standard_Infrequent",
+                        List.of("pdev", "ptest", "stest", "vtest", "prod"),
+                        maxResults, maxWindowMinutes),
                 List.of("order-payments/payment-service"));
         return sumo;
     }
@@ -44,7 +48,7 @@ class TriageMateToolsSearchLogsTest {
         OffsetDateTime to = OffsetDateTime.parse("2026-07-30T12:00:00Z");
         OffsetDateTime from = to.minusHours(6);   // model asked for a 6-hour window
 
-        TriageMateTools.searchLogs("prod/payment", "ORD-4031", from.toString(), to.toString());
+        TriageMateTools.searchLogs("payment-service", "prod", "ORD-4031", from.toString(), to.toString());
 
         assertThat(sumo.lastRequest.toTime()).isEqualTo(to);              // end untouched
         assertThat(sumo.lastRequest.fromTime()).isEqualTo(to.minusMinutes(30));  // clamped, not the requested 6h
@@ -56,7 +60,7 @@ class TriageMateToolsSearchLogsTest {
         OffsetDateTime to = OffsetDateTime.parse("2026-07-30T12:00:00Z");
         OffsetDateTime from = to.minusMinutes(10);   // well within the 30-minute cap
 
-        TriageMateTools.searchLogs("prod/payment", "ORD-4031", from.toString(), to.toString());
+        TriageMateTools.searchLogs("payment-service", "prod", "ORD-4031", from.toString(), to.toString());
 
         assertThat(sumo.lastRequest.fromTime()).isEqualTo(from);
         assertThat(sumo.lastRequest.toTime()).isEqualTo(to);
@@ -69,7 +73,7 @@ class TriageMateToolsSearchLogsTest {
         OffsetDateTime later = OffsetDateTime.parse("2026-07-30T12:00:00Z");
 
         // fromIso/toIso reversed — a model-supplied pair could be malformed this way.
-        TriageMateTools.searchLogs("prod/payment", "ORD-4031", later.toString(), earlier.toString());
+        TriageMateTools.searchLogs("payment-service", "prod", "ORD-4031", later.toString(), earlier.toString());
 
         assertThat(sumo.lastRequest.fromTime()).isEqualTo(earlier);
         assertThat(sumo.lastRequest.toTime()).isEqualTo(later);
@@ -80,18 +84,51 @@ class TriageMateToolsSearchLogsTest {
         RecordingSumo sumo = wireWith(3, 30);   // deliberately NOT the old hardcoded 20
         OffsetDateTime to = OffsetDateTime.now();
 
-        TriageMateTools.searchLogs("prod/payment", "q", to.minusMinutes(5).toString(), to.toString());
+        TriageMateTools.searchLogs("payment-service", "prod", "q", to.minusMinutes(5).toString(), to.toString());
 
         assertThat(sumo.lastRequest.maxResults()).isEqualTo(3);
     }
 
     @Test
-    void outOfAllowlistScopeIsStillRejected() {
+    void outOfAllowlistEnvironmentIsStillRejected() {
         wireWith(20, 30);
         assertThatThrownBy(() -> TriageMateTools.searchLogs(
-                "prod/not-allowed", "q", "2026-07-30T11:00:00Z", "2026-07-30T12:00:00Z"))
+                "payment-service", "not-an-env", "q", "2026-07-30T11:00:00Z", "2026-07-30T12:00:00Z"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not allowlisted");
+                .hasMessageContaining("environment not allowed");
+    }
+
+    /**
+     * The model supplies a project slug + environment, never a raw _sourceCategory — the app
+     * composes it. A malformed slug (a path, a wildcard, anything that isn't a plain slug)
+     * must be rejected rather than interpolated into the category.
+     */
+    @Test
+    void malformedProjectSlugIsRejectedRatherThanInterpolated() {
+        wireWith(20, 30);
+        for (String bad : List.of("prod/payment", "*", "Delivery Hazards", "../etc")) {
+            assertThatThrownBy(() -> TriageMateTools.searchLogs(
+                    bad, "prod", "q", "2026-07-30T11:00:00Z", "2026-07-30T12:00:00Z"))
+                    .as("slug %s", bad)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("projectSlug");
+        }
+    }
+
+    /** The composed category follows the configured pattern, and carries the index clause. */
+    @Test
+    void sourceCategoryIsComposedFromTheConfiguredPattern() {
+        RecordingSumo sumo = wireWith(20, 30);
+        OffsetDateTime to = OffsetDateTime.parse("2026-07-30T12:00:00Z");
+
+        TriageMateTools.searchLogs("delivery-hazards", "ptest", "ORD-1",
+                to.minusMinutes(5).toString(), to.toString());
+
+        assertThat(sumo.lastRequest.sourceCategory())
+                .isEqualTo("IDT/ITServices/Tomcat/delivery-hazards/ptest/AppEvt_delivery-hazards");
+        assertThat(sumo.lastRequest.toSumoQuery())
+                .isEqualTo("_sourceCategory=IDT/ITServices/Tomcat/delivery-hazards/ptest/"
+                        + "AppEvt_delivery-hazards and _index=Global_Standard_Infrequent ORD-1");
     }
 
     /**
@@ -112,7 +149,8 @@ class TriageMateToolsSearchLogsTest {
     void allowlistedGitLabProjectIsPassedThrough() {
         RecordingGitLab gitLab = new RecordingGitLab();
         TriageMateTools.wire(new NoopServiceNow(), new NoopConfluence(), new RecordingSumo(), gitLab,
-                List.of("prod/payment"), 20, 30, List.of("order-payments/payment-service"));
+                com.company.triage.config.TriagePropertiesFixture.sumo(),
+                List.of("order-payments/payment-service"));
 
         TriageMateTools.searchCode("order-payments/payment-service", "TOKEN");
 

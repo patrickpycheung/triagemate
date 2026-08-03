@@ -165,6 +165,43 @@ record IncidentSignals(
         return List.copyOf(ranked);
     }
 
+    /**
+     * The project slug used to compose a Sumo {@code _sourceCategory} — the affected
+     * application, lowercased and hyphenated ("Delivery Hazards" → "delivery-hazards"),
+     * which is the convention the log estate's category names follow.
+     */
+    static String projectSlug(String app) {
+        String slug = text(app).toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")     // spaces, slashes, punctuation → one hyphen
+                .replaceAll("(^-+)|(-+$)", "");    // no leading/trailing hyphens
+        return slug;
+    }
+
+    /**
+     * Maps the incident's free-text environment onto one of the deployment codes the log
+     * categories use ({@code pdev/ptest/stest/vtest/prod}).
+     *
+     * <p>Best-effort by design: the field is human-entered and its vocabulary isn't fixed,
+     * so anything unrecognised falls back to {@code prod}. That default is the safe one —
+     * an incident worth triaging is overwhelmingly a production incident, and guessing a
+     * lower environment would search a category with no relevant logs in it. The caller can
+     * always pass an explicit environment instead (the ADK tool exposes it as a parameter).
+     */
+    static String environmentCode(String environment, List<String> allowed, String fallback) {
+        String e = text(environment).toLowerCase(Locale.ROOT);
+        String guess = null;
+        if (e.contains("prod")) guess = "prod";
+        else if (e.contains("vat") || e.contains("uat") || e.contains("vtest")) guess = "vtest";
+        else if (e.contains("stag") || e.contains("stest")) guess = "stest";
+        else if (e.contains("dev") || e.contains("pdev")) guess = "pdev";
+        else if (e.contains("test") || e.contains("sit") || e.contains("qa")) guess = "ptest";
+        // Only honour the guess if it's actually a configured environment.
+        if (guess != null && (allowed == null || allowed.isEmpty() || allowed.contains(guess))) {
+            return guess;
+        }
+        return fallback;
+    }
+
     private static Set<String> tokens(String s) {
         Set<String> out = new LinkedHashSet<>();
         for (String t : text(s).toLowerCase(Locale.ROOT).split("[^a-z0-9]+")) {

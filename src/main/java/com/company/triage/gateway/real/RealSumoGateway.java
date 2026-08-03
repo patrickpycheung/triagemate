@@ -45,7 +45,8 @@ public class RealSumoGateway implements SumoGateway {
     public List<LogEvidence> search(LogSearchRequest req) {
         log.info("[Sumo] searching scope={} for \"{}\" between {} and {}",
                 req.sourceCategory(), req.query(), req.fromTime(), req.toTime());
-        String query = "_sourceCategory=" + req.sourceCategory() + " " + req.query();
+        String query = req.toSumoQuery();
+        log.debug("[Sumo] query: {}", query);
         String body = """
             {"query":%s,"from":"%s","to":"%s","timeZone":"UTC"}
             """.formatted(json(query), req.fromTime(), req.toTime());

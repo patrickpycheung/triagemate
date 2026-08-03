@@ -105,14 +105,38 @@ triage:
     #   comments   — "Additional comments", customer-facing
     write-field: work_notes
 
-  # Bounded Sumo scopes the agent may search (J8 allowlist). FND-20: max-results and
-  # max-window-minutes are now actually read and enforced in TriageMateTools.searchLogs
-  # (server-side) — previously max-results was declared here but the code hardcoded 20,
-  # and the time window came straight from the model with no span check at all.
+  # FND-20: max-results and max-window-minutes are actually read and enforced in
+  # TriageMateTools.searchLogs (server-side) — previously max-results was declared here
+  # but the code hardcoded 20, and the time window came straight from the model with no
+  # span check at all.
   sumo:
-    allowed-scopes:
-      - prod/payment
-      - prod/order-api
+    # The J8 guardrail is a TEMPLATE, not a list of literal scopes.
+    #
+    # It used to be `allowed-scopes: [prod/payment, prod/order-api]` — the model typed a
+    # _sourceCategory and we checked it against that list. That was wrong for the real
+    # estate twice over: those two values were demo fixtures that exist in no real Sumo,
+    # and scopes aren't an access boundary here anyway (any credential that can search
+    # can see every environment). Keeping a literal list would have meant hand-maintaining
+    # one entry per project × environment, and a stale list silently returns zero results.
+    #
+    # Instead the model supplies a project slug + an environment, and the APP composes the
+    # category from this pattern. That is a stronger bound than the allowlist was: the
+    # model cannot type `_sourceCategory=*` or anything off-convention, because it never
+    # supplies the category at all — only two narrow fields, one of which is allowlisted.
+    source-category-pattern: "IDT/ITServices/Tomcat/{project}/{environment}/AppEvt_{project}"
+    # Projects that don't fit the pattern above (e.g. non-Tomcat estate). Key is the
+    # project slug; value is a full pattern that still supports {project}/{environment}.
+    source-category-overrides: {}
+    # Appended as `and _index=<value>`. Blank disables the clause entirely.
+    index: Global_Standard_Infrequent
+    # The {environment} allowlist — the one part of the composed category the model
+    # genuinely chooses, so it stays bounded to real environment codes.
+    allowed-environments:
+      - pdev
+      - ptest
+      - stest
+      - vtest
+      - prod
     max-results: 20
     max-window-minutes: 30
 

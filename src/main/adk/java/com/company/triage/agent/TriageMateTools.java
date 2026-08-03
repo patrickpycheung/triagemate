@@ -24,7 +24,7 @@ public final class TriageMateTools {
     private static ConfluenceGateway confluence;
     private static SumoGateway sumo;
     private static GitLabGateway gitLab;
-    private static List<String> sumoAllowlist = List.of("prod/payment", "prod/order-api");
+    private static com.company.triage.config.TriageProperties.Sumo sumoProps;
     // FND-20: these two were previously not real bounds — max-results was a hardcoded
     // 20 (triage.sumo.max-results was declared in application.yml and never read), and
     // the time window was taken verbatim from the model with no span check at all. A
@@ -53,10 +53,10 @@ public final class TriageMateTools {
     private TriageMateTools() {}
 
     static void wire(ServiceNowGateway sn, ConfluenceGateway cf, SumoGateway su,
-                     GitLabGateway gl, List<String> allowlist, int maxResults, int maxWindowMinutes,
+                     GitLabGateway gl, com.company.triage.config.TriageProperties.Sumo sumoConfig,
                      List<String> gitLabProjectAllowlist) {
-        serviceNow = sn; confluence = cf; sumo = su; gitLab = gl; sumoAllowlist = allowlist;
-        sumoMaxResults = maxResults; sumoMaxWindowMinutes = maxWindowMinutes;
+        serviceNow = sn; confluence = cf; sumo = su; gitLab = gl; sumoProps = sumoConfig;
+        sumoMaxResults = sumoConfig.maxResults(); sumoMaxWindowMinutes = sumoConfig.maxWindowMinutes();
         gitLabAllowlist = gitLabProjectAllowlist;
     }
 
@@ -102,21 +102,36 @@ public final class TriageMateTools {
     }
 
     @Schema(name = "search_logs",
-            description = "Run ONE bounded Sumo Logic search. scope must be an allowlisted _sourceCategory; "
-                    + "the time window and result count are capped by the app regardless of what is asked "
-                    + "for. Do not attempt broad queries.")
+            description = "Run ONE bounded Sumo Logic search. Supply the project slug (the "
+                    + "affected application, lowercase and hyphenated, e.g. 'delivery-hazards') "
+                    + "and the environment; the app builds the _sourceCategory from them. The "
+                    + "time window and result count are capped by the app regardless of what is "
+                    + "asked for. Do not attempt broad queries.")
     public static List<LogEvidence> searchLogs(
-            @Schema(name = "scope") String scope,
+            @Schema(name = "projectSlug") String projectSlug,
+            @Schema(name = "environment") String environment,
             @Schema(name = "query") String query,
             @Schema(name = "fromIso") String fromIso,
             @Schema(name = "toIso") String toIso) {
-        if (!sumoAllowlist.contains(scope)) {
+        // The model no longer supplies a _sourceCategory at all — it supplies two narrow
+        // fields and the app composes the category from the configured pattern. That makes
+        // an off-convention or wildcard scope unrepresentable rather than merely rejected,
+        // which is a stronger bound than the literal allowlist this replaced.
+        String slug = projectSlug == null ? "" : projectSlug.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!slug.matches("[a-z0-9][a-z0-9-]*")) {
+            throw new IllegalArgumentException("projectSlug must be a lowercase hyphenated "   // J8 guardrail
+                    + "slug (e.g. 'delivery-hazards'), got: " + projectSlug);
+        }
+        List<String> allowedEnvs = sumoProps.allowedEnvironments();
+        String env = environment == null ? "" : environment.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!allowedEnvs.contains(env)) {
             // FND-60: name the valid values in the error too. The instruction already lists
             // them, but if the model still gets it wrong this lets it self-correct within its
             // remaining budget instead of re-guessing blind.
-            throw new IllegalArgumentException("scope not allowlisted: " + scope   // J8 guardrail
-                    + " — must be exactly one of: " + String.join(", ", sumoAllowlist));
+            throw new IllegalArgumentException("environment not allowed: " + environment   // J8 guardrail
+                    + " — must be exactly one of: " + String.join(", ", allowedEnvs));
         }
+        String scope = sumoProps.sourceCategoryFor(slug, env);
         OffsetDateTime from = OffsetDateTime.parse(fromIso);
         OffsetDateTime to = OffsetDateTime.parse(toIso);
         if (from.isAfter(to)) {
@@ -130,7 +145,7 @@ public final class TriageMateTools {
         if (from.isBefore(earliestAllowed)) {
             from = earliestAllowed;
         }
-        return sumo.search(new LogSearchRequest(scope, query, from, to, sumoMaxResults));
+        return sumo.search(new LogSearchRequest(scope, sumoProps.index(), query, from, to, sumoMaxResults));
     }
 
     @Schema(name = "search_code",

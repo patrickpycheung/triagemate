@@ -28,7 +28,9 @@ class AdkLiveRoundTripTest {
         var base = TriagePropertiesFixture.adk();
         return new TriageProperties(base.engine(), base.writeback(), base.orchestrator(),
                 new TriageProperties.Agent(maxToolCalls), base.trigger(), base.servicenow(),
-                new TriageProperties.Sumo(sumoScopes, maxResults, maxWindowMinutes),
+                new TriageProperties.Sumo(TriagePropertiesFixture.sumo().sourceCategoryPattern(),
+                        java.util.Map.of(), TriagePropertiesFixture.sumo().index(),
+                        TriagePropertiesFixture.sumo().allowedEnvironments(), maxResults, maxWindowMinutes),
                 new TriageProperties.GitLab(gitLabProjects));
     }
 

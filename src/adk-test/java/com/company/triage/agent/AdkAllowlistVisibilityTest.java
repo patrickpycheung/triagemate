@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AdkAllowlistVisibilityTest {
 
-    private static final List<String> SCOPES = List.of("prod/payment", "prod/order-api");
+    private static final List<String> ENVIRONMENTS = List.of("pdev", "ptest", "stest", "vtest", "prod");
     private static final List<String> PROJECTS = List.of("order-payments/payment-service");
 
     private static TriageProperties props() {
@@ -35,7 +35,7 @@ class AdkAllowlistVisibilityTest {
                 new TriageProperties.Agent(10),
                 new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, false)),
                 new TriageProperties.ServiceNow("work_notes"),
-                new TriageProperties.Sumo(SCOPES, 20, 30),
+                com.company.triage.config.TriagePropertiesFixture.sumo(),
                 new TriageProperties.GitLab(PROJECTS));
     }
 
@@ -45,12 +45,11 @@ class AdkAllowlistVisibilityTest {
     }
 
     @Test
-    void instructionNamesEveryAllowlistedScopeAndProject() {
+    void instructionNamesEveryAllowlistedEnvironmentAndProject() {
         String instruction = engine().instruction();
 
         // The exact strings the tools will accept — verbatim, so the model never has to guess.
-        assertThat(instruction).contains("prod/payment");
-        assertThat(instruction).contains("prod/order-api");
+        ENVIRONMENTS.forEach(env -> assertThat(instruction).contains(env));
         assertThat(instruction).contains("order-payments/payment-service");
     }
 
@@ -68,15 +67,16 @@ class AdkAllowlistVisibilityTest {
                 new TriageProperties.Agent(10),
                 new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, false)),
                 new TriageProperties.ServiceNow("work_notes"),
-                new TriageProperties.Sumo(List.of("prod/some-other-scope"), 20, 30),
+                new TriageProperties.Sumo("Custom/{project}/{environment}", java.util.Map.of(),
+                        "Custom_Index", List.of("sandbox"), 20, 30),
                 new TriageProperties.GitLab(List.of("team/other-repo")));
 
         String instruction = new AdkDiagnosisEngine(new MockServiceNowGateway(),
                 new MockConfluenceGateway(), new MockSumoGateway(), new MockGitLabGateway(),
                 custom).instruction();
 
-        assertThat(instruction).contains("prod/some-other-scope").contains("team/other-repo");
-        assertThat(instruction).doesNotContain("prod/order-api");
+        assertThat(instruction).contains("sandbox").contains("team/other-repo");
+        assertThat(instruction).doesNotContain("pdev");
     }
 
     /**
@@ -107,10 +107,11 @@ class AdkAllowlistVisibilityTest {
         engine();   // wires TriageMateTools with the allowlists above
 
         assertThatThrownBy(() -> TriageMateTools.searchLogs(
-                "prod/not-a-real-scope", "q", "2026-07-31T00:00:00Z", "2026-07-31T00:10:00Z"))
+                "delivery-hazards", "not-an-environment", "q",
+                "2026-07-31T00:00:00Z", "2026-07-31T00:10:00Z"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("prod/payment")
-                .hasMessageContaining("prod/order-api");
+                .hasMessageContaining("pdev")
+                .hasMessageContaining("prod");
 
         assertThatThrownBy(() -> TriageMateTools.searchCode("someone/guessed-wrong", "TOKEN"))
                 .isInstanceOf(IllegalArgumentException.class)

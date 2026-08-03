@@ -47,7 +47,7 @@ class AdkToolEdgeSafetyTest {
         var base = TriagePropertiesFixture.adk();
         return new TriageProperties(base.engine(), base.writeback(), base.orchestrator(),
                 new TriageProperties.Agent(maxToolCalls), base.trigger(), base.servicenow(),
-                new TriageProperties.Sumo(sumoScopes, 20, 30),
+                TriagePropertiesFixture.sumo(),
                 new TriageProperties.GitLab(gitLabProjects));
     }
 
