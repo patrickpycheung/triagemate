@@ -40,16 +40,6 @@
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
       --crit:#c9184a;
     }
-    /* Australia Post, dark room — same red, survives a dim projector. */
-    [data-theme="auspost-dark"] {
-      --bg:#14100f; --card:#1f1816; --ink:#f5ece9; --muted:#b09a95;
-      --acc:#ff4b57; --ok:#3ecf8e; --warn:#ffb454;
-      --border:#3a2b28; --input-bg:#120e0d; --input-border:#4a3733;
-      --chip:#3d1f22; --inset:#191211; --btn-ink:#1a0405; --trace:#c9b3ae;
-      --banner-bg:#2e1c0a; --banner-ink:#ffb454;
-      --sn:#5fd96a; --cf:#5b9bff; --sl:#4fc3f7; --gl:#ff9d54;
-      --crit:#ff2f4d;
-    }
     /* Australia Post's own ServiceNow instance — colours extracted directly from a
        screenshot of the real DAP DP dashboard (theme-AusPost-ServiceNow.png, repo root).
        That screenshot's chrome (top bar, side nav) is a near-black navy/indigo, but
@@ -60,39 +50,23 @@
        and --ink set to the screenshot's own navy chrome colour (#181826) — dark enough
        to read clearly on both --bg and --card, which is the one thing every theme here
        must guarantee (a single --ink shared by both surfaces; see the token-block note
-       above). The Australia Post red (#dc1928) is a precise match to the other two
-       AusPost themes' accent — sampled straight off the logo mark, not a coincidence.
-       --chip/--inset carry a faint purple tint as the one nod to that indigo side nav.
-       --ok/--warn/--crit are the alert list's own green "Closed" / amber "Major" dots,
-       darkened just enough to stay legible as small-text pills on a light background. */
+       above). The accent is the instance's own link/action blue (#3c59e7 — the colour
+       of every record link in that alert list), NOT the Australia Post red: red is
+       already the "Australia Post" theme's whole identity, and this instance simply
+       doesn't lead with it (the logo mark is the only red on the page). Blue-on-white
+       is what the screenshot actually reads as, and it keeps the two AusPost themes
+       visually distinguishable. --chip/--inset/--border carry the indigo side nav's
+       (#302f4b) tint at low saturation. --ok/--warn/--crit are the alert list's own
+       green "Closed" / amber "Major" status dots, darkened enough to stay legible as
+       small-text pills on a light background. */
     [data-theme="auspost-servicenow"] {
-      --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#64748b;
-      --acc:#dc1928; --ok:#1f9254; --warn:#cc7a00;
-      --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
-      --chip:#eeeef8; --inset:#f7f7fb; --btn-ink:#ffffff; --trace:#4a5a6a;
+      --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#5f6480;
+      --acc:#3c59e7; --ok:#1f9254; --warn:#cc7a00;
+      --border:#dcdcea; --input-bg:#ffffff; --input-border:#c2c3d8;
+      --chip:#e7e9fb; --inset:#f4f4fa; --btn-ink:#ffffff; --trace:#4c5170;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
-      --crit:#b0122f;
-    }
-    /* Hackathon — purple/blue, the "this is a demo day build" read. */
-    [data-theme="hackathon"] {
-      --bg:#120c26; --card:#1c1440; --ink:#ece8ff; --muted:#a396d4;
-      --acc:#8b5cf6; --ok:#34d399; --warn:#fbbf24;
-      --border:#2f2360; --input-bg:#0e0920; --input-border:#3d2f75;
-      --chip:#2c2160; --inset:#160f33; --btn-ink:#0f0824; --trace:#b3a5e0;
-      --banner-bg:#2b1e08; --banner-ink:#fbbf24;
-      --sn:#4ade80; --cf:#60a5fa; --sl:#22d3ee; --gl:#fb923c;
-      --crit:#f43f5e;
-    }
-    /* ServiceNow — the system we're writing back into. */
-    [data-theme="servicenow"] {
-      --bg:#0c1a17; --card:#12251f; --ink:#e6f4ee; --muted:#8fb3a5;
-      --acc:#62d84e; --ok:#62d84e; --warn:#ffb454;
-      --border:#1e3d33; --input-bg:#0a1512; --input-border:#274d40;
-      --chip:#17352b; --inset:#0e1f1a; --btn-ink:#04160c; --trace:#9dc4b4;
-      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
-      --sn:#62d84e; --cf:#5b9bff; --sl:#4fd1e8; --gl:#ffa057;
-      --crit:#ff5c4d;
+      --crit:#d32f2f;
     }
     /* Paper — neutral light, for screenshots and printed handouts. */
     [data-theme="paper"] {
@@ -226,8 +200,8 @@
        pulsed blue on every theme including auspost red and projector
        yellow). color-mix() re-derives on every theme switch automatically,
        no JS recompute needed — verified by inspection across midnight,
-       auspost, hackathon, paper and projector (all 7 data-theme values
-       reference var(--acc) here; grepped for hex/rgba in this block — none). */
+       auspost, auspost-servicenow, paper and projector (all 5 data-theme
+       values reference var(--acc) here; grepped for hex/rgba here — none). */
     @keyframes tt-pulse {
       0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--acc) 0%, transparent); }
       50% { box-shadow:0 0 0 5px color-mix(in srgb, var(--acc) 22%, transparent); transform:scale(1.06); }
@@ -328,8 +302,9 @@
 <body>
 
 <!-- Theme picker. Deliberately a plain corner control: the brand direction
-     (Australia Post red vs hackathon purple) is still undecided, so ship all
-     the candidates and let a look at them settle it rather than guessing. -->
+     is still undecided, so ship the shortlist and let a look at them settle
+     it rather than guessing. Three earlier candidates (hackathon purple,
+     ServiceNow green, AusPost dark) were cut as too extreme. -->
 <button class="theme-btn" id="themeBtn" title="Change theme"
         aria-haspopup="true" aria-expanded="false" aria-controls="themeMenu">
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -371,11 +346,8 @@
 */
 const THEMES = [
   { id:'auspost',      name:'Australia Post',   sw:'#dc1928' },
-  { id:'auspost-servicenow', name:'Aus Post ServiceNow', sw:'#dc1928' },
-  { id:'hackathon',    name:'Hackathon',        sw:'#8b5cf6' },
-  { id:'auspost-dark', name:'Aus Post (dark)',  sw:'#ff4b57' },
+  { id:'auspost-servicenow', name:'Aus Post ServiceNow', sw:'#3c59e7' },
   { id:'midnight',     name:'Midnight',         sw:'#5aa9ff' },
-  { id:'servicenow',   name:'ServiceNow',       sw:'#62d84e' },
   { id:'paper',        name:'Paper (light)',    sw:'#0969da' },
   { id:'projector',    name:'Projector',        sw:'#ffd400' },
 ];
