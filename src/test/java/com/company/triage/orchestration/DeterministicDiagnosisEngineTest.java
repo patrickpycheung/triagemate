@@ -221,9 +221,10 @@ class DeterministicDiagnosisEngineTest {
         List<TraceStep> steps = collector.steps();
         assertThat(steps).isNotEmpty();
 
-        // Every emitted step must be DONE (this engine runs synchronously — nothing should
-        // ever be left stuck ACTIVE) or, for the conditional gitlab.searchCode path, simply
-        // absent. FAILED/ABANDONED are not reachable on this engine's happy path.
+        // Every emitted step must be DONE — this engine runs synchronously, so nothing
+        // should ever be left stuck ACTIVE. FAILED/ABANDONED are not reachable on this
+        // engine's happy path. (gitlab.searchCode used to be conditionally absent here;
+        // it now always emits — see everyPlatformAppearsInTheTraceEvenWhenACallIsSkipped.)
         assertThat(steps).allSatisfy(step -> assertThat(step.state()).isIn(StepState.DONE));
 
         // callId follows the synthetic "det-<seq>" convention (LT1 §67), one per emitted
@@ -265,5 +266,68 @@ class DeterministicDiagnosisEngineTest {
         // the DETERMINISTIC engine.
         assertThat(steps).allMatch(step -> step.attempt() == 0);
         assertThat(steps).allMatch(step -> step.engine() == DiagnosisResult.Engine.DETERMINISTIC);
+    }
+
+    /**
+     * All four connected systems must be visible in the trace of a normal run — the demo's
+     * whole point is showing which systems were consulted, and a system that silently
+     * contributes nothing to the trace reads as one the product doesn't integrate with.
+     *
+     * <p>Three separate gaps used to break this: {@code gitlab.searchCode} emitted nothing
+     * at all when the log lines carried no error token to search for, and BOTH contact
+     * lookups ({@code confluence.contributors}, {@code gitlab.recentCommitters}) were real
+     * integration calls folded invisibly into the single TRIAGEMATE {@code contacts:} row —
+     * one internal step standing in for two external systems actually being consulted.
+     */
+    @Test
+    void everyPlatformAppearsInTheTraceOnANormalRun() {
+        TraceCollector collector = new TraceCollector();
+        engine.diagnose("INC0010005", collector.forAttempt(0));
+
+        assertThat(collector.steps()).extracting(TraceStep::platform)
+                .contains(Platform.SERVICENOW, Platform.CONFLUENCE, Platform.SUMO, Platform.GITLAB);
+
+        // Specifically: both GitLab calls, each as its own row rather than one standing in
+        // for the other.
+        assertThat(collector.steps()).extracting(TraceStep::tool)
+                .contains("gitlab.searchCode", "gitlab.recentCommitters", "confluence.contributors");
+    }
+
+    /**
+     * The skipped-call path: when the logs carry no error token there is nothing to search
+     * code for, so no GitLab call is made — but the row must still appear, saying plainly
+     * that it was skipped and why. The honesty contract cuts both ways: never claim a call
+     * that didn't happen, but never hide the decision either.
+     */
+    @Test
+    void everyPlatformAppearsInTheTraceEvenWhenACallIsSkipped() {
+        // A Sumo gateway whose log lines contain no ERROR_TOKEN-shaped word, so the engine
+        // takes the "no error token" branch and never calls gitLab.searchCode.
+        DeterministicDiagnosisEngine noTokenEngine = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                request -> List.of(new com.company.triage.model.LogEvidence(
+                        "2026-01-01T00:00:00Z", "INFO", "payment_service",
+                        "nothing notable happened here")),
+                new MockGitLabGateway(),
+                TriagePropertiesFixture.deterministic());
+
+        TraceCollector collector = new TraceCollector();
+        noTokenEngine.diagnose("INC0010005", collector.forAttempt(0));
+
+        List<TraceStep> steps = collector.steps();
+
+        // GitLab is still represented, and the row states it was skipped — it does NOT
+        // claim a search happened.
+        assertThat(steps).extracting(TraceStep::platform).contains(Platform.GITLAB);
+        assertThat(steps).anySatisfy(step -> {
+            assertThat(step.tool()).isEqualTo("gitlab.searchCode");
+            assertThat(step.platform()).isEqualTo(Platform.GITLAB);
+            assertThat(step.result()).contains("skipped");
+        });
+        // ...and so is the committer lookup, which had no code file to work from.
+        assertThat(steps).anySatisfy(step -> {
+            assertThat(step.tool()).isEqualTo("gitlab.recentCommitters");
+            assertThat(step.result()).contains("skipped");
+        });
     }
 }

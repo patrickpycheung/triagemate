@@ -105,6 +105,14 @@ public final class StepCatalog {
                 new Entry(Platform.SUMO, "Searching Sumo Logic for related log lines…"));
         entries.put("gitlab.searchCode",
                 new Entry(Platform.GITLAB, "Searching GitLab for the code path…"));
+        // The two contact-lookup calls (J9). Both are real integration calls that used to
+        // be invisible — folded into the single TRIAGEMATE "contacts:" row, which
+        // understated the evidence trail by showing one internal step where two external
+        // systems were actually consulted.
+        entries.put("confluence.contributors",
+                new Entry(Platform.CONFLUENCE, "Looking up who wrote the runbook…"));
+        entries.put("gitlab.recentCommitters",
+                new Entry(Platform.GITLAB, "Looking up recent committers…"));
 
         // ---- Non-platform deterministic lines: internal to this app, not a real ----
         // ---- integration call, so they map to the TRIAGEMATE pseudo-platform. ------

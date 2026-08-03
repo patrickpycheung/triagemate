@@ -212,6 +212,18 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     .formatted(errorToken, projectsToTry, codeHits.size());
             trace.add(traceGitLabSearch);
             emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSearch);
+        } else {
+            // The code search is only meaningful with an error token to search FOR — the
+            // whole point is the log↔code citation, and there is no log line to cite.
+            // Previously this branch emitted nothing at all, so GitLab silently vanished
+            // from the trace for any incident whose logs carried no error token, making a
+            // four-system triage look like a three-system one. Emit the row and say
+            // plainly that it was skipped and why: the honesty contract cuts both ways —
+            // don't claim a call that didn't happen, but don't hide the decision either.
+            String traceGitLabSkipped =
+                    "gitlab.searchCode → skipped (no error token in the log lines to search code for)";
+            trace.add(traceGitLabSkipped);
+            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSkipped);
         }
 
         // ---- Step 7: who to talk to (J9) --------------------------------------
@@ -232,7 +244,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // suppressed as a consequence — an accepted precision-over-recall trade, and the
         // caller is captured structurally below regardless.
         if (inc.shortDescription() != null) knownSystemNames.add(inc.shortDescription());
-        List<Contact> contacts = gatherContacts(inc, docs, codeHits, knownSystemNames);
+        List<Contact> contacts = gatherContacts(inc, docs, codeHits, knownSystemNames,
+                sink, stepSeq, trace);
         String traceContacts = "contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
                 .formatted(contacts.size(), docs.size(), codeHits.size());
         trace.add(traceContacts);
@@ -403,7 +416,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      */
     private List<Contact> gatherContacts(IncidentContext inc, List<KnowledgeDoc> docs,
                                          List<CodeSearchResult> codeHits,
-                                         java.util.Set<String> knownSystemNames) {
+                                         java.util.Set<String> knownSystemNames,
+                                         TraceSink sink, AtomicInteger stepSeq,
+                                         List<String> trace) {
         List<Contact> raw = new ArrayList<>();
         // FND-64: ServiceNow was contributing NO names at all, though the ticket is where a
         // human already wrote down who else is involved — whoever left each comment, and
@@ -412,15 +427,37 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         raw.addAll(MentionedPeople.fromIncident(inc.number(), inc.description(),
                 inc.shortDescription(), inc.comments(), inc.workNotes(), knownSystemNames,
                 inc.caller()));
+        // Both loops below make REAL integration calls (Confluence contributors, GitLab
+        // committers). They used to be invisible — folded into the one TRIAGEMATE
+        // "contacts:" row emitted by the caller — which showed a single internal step
+        // where two external systems were actually consulted. Each now emits its own
+        // platform row, so the trace reflects every system that was genuinely touched.
+        int contributorCount = 0;
         for (KnowledgeDoc d : docs) {
-            raw.addAll(confluence.contributors(d));      // page author / last editor (metadata)
+            List<Contact> pageContributors = confluence.contributors(d);  // author / last editor
+            contributorCount += pageContributors.size();
+            raw.addAll(pageContributors);
             // FND-64: ...and anyone the page NAMES. A runbook's escalation contact is often
             // more relevant than whoever last fixed a typo on it.
             raw.addAll(MentionedPeople.fromPageBody(d.title(), d.url(), d.snippet(), knownSystemNames));
         }
+        String traceContributors = "confluence.contributors(%d page(s)) → %d author/editor name(s)"
+                .formatted(docs.size(), contributorCount);
+        trace.add(traceContributors);
+        emitStep(sink, stepSeq, "confluence.contributors", traceContributors);
+
+        int committerCount = 0;
         for (CodeSearchResult h : codeHits) {
-            raw.addAll(gitLab.recentCommitters(h.project(), h.filePath()));
+            List<Contact> committers = gitLab.recentCommitters(h.project(), h.filePath());
+            committerCount += committers.size();
+            raw.addAll(committers);
         }
+        String traceCommitters = codeHits.isEmpty()
+                ? "gitlab.recentCommitters → skipped (no code file was located to look up committers for)"
+                : "gitlab.recentCommitters(%d file(s)) → %d committer name(s)"
+                        .formatted(codeHits.size(), committerCount);
+        trace.add(traceCommitters);
+        emitStep(sink, stepSeq, "gitlab.recentCommitters", traceCommitters);
 
         // Merge, preserving first-seen order.
         //
