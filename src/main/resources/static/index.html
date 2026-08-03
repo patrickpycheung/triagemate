@@ -50,6 +50,30 @@
       --sn:#5fd96a; --cf:#5b9bff; --sl:#4fc3f7; --gl:#ff9d54;
       --crit:#ff2f4d;
     }
+    /* Australia Post's own ServiceNow instance — colours extracted directly from a
+       screenshot of the real DAP DP dashboard (theme-AusPost-ServiceNow.png, repo root).
+       That screenshot's chrome (top bar, side nav) is a near-black navy/indigo, but
+       every actual piece of content — the list panels, tables, status text — sits on
+       white/light-grey, which is what this app's card-on-page layout actually mirrors
+       (no separate nav/sidebar surface to put the dark chrome on). So: light page
+       background sampled from the screenshot's content area (#f6f6f8), white panels,
+       and --ink set to the screenshot's own navy chrome colour (#181826) — dark enough
+       to read clearly on both --bg and --card, which is the one thing every theme here
+       must guarantee (a single --ink shared by both surfaces; see the token-block note
+       above). The Australia Post red (#dc1928) is a precise match to the other two
+       AusPost themes' accent — sampled straight off the logo mark, not a coincidence.
+       --chip/--inset carry a faint purple tint as the one nod to that indigo side nav.
+       --ok/--warn/--crit are the alert list's own green "Closed" / amber "Major" dots,
+       darkened just enough to stay legible as small-text pills on a light background. */
+    [data-theme="auspost-servicenow"] {
+      --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#64748b;
+      --acc:#dc1928; --ok:#1f9254; --warn:#cc7a00;
+      --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
+      --chip:#eeeef8; --inset:#f7f7fb; --btn-ink:#ffffff; --trace:#4a5a6a;
+      --banner-bg:#fff5e6; --banner-ink:#a35a00;
+      --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
+      --crit:#b0122f;
+    }
     /* Hackathon — purple/blue, the "this is a demo day build" read. */
     [data-theme="hackathon"] {
       --bg:#120c26; --card:#1c1440; --ink:#ece8ff; --muted:#a396d4;
@@ -347,6 +371,7 @@
 */
 const THEMES = [
   { id:'auspost',      name:'Australia Post',   sw:'#dc1928' },
+  { id:'auspost-servicenow', name:'Aus Post ServiceNow', sw:'#dc1928' },
   { id:'hackathon',    name:'Hackathon',        sw:'#8b5cf6' },
   { id:'auspost-dark', name:'Aus Post (dark)',  sw:'#ff4b57' },
   { id:'midnight',     name:'Midnight',         sw:'#5aa9ff' },
