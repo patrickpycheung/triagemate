@@ -16,7 +16,7 @@
   <style>
     /* ---- Theme tokens -------------------------------------------------------
        Every colour the page paints comes from one of these. Adding a theme
-       below means overriding these 15 vars — no rule outside :root/[data-theme]
+       below means overriding these 16 vars — no rule outside :root/[data-theme]
        may hardcode a hex, or that theme silently half-applies. Theme choice is
        cosmetic only: it never changes what the page reports (see the FND-16/25
        notes in render() — those read real DiagnosisResult fields, not colours).
@@ -28,6 +28,7 @@
       --chip:#243350; --inset:#0e1626; --btn-ink:#04122b; --trace:#9fb3d0;
       --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
       --sn:#5fd96a; --cf:#4d9fff; --sl:#38bdf8; --gl:#ff8a4d;
+      --crit:#ff5c5c;
     }
     /* Australia Post — the corporate read: red on white, high-key. */
     [data-theme="auspost"] {
@@ -37,6 +38,7 @@
       --chip:#fdeaec; --inset:#fbf7f7; --btn-ink:#ffffff; --trace:#4a5a6a;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
       --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
+      --crit:#c9184a;
     }
     /* Australia Post, dark room — same red, survives a dim projector. */
     [data-theme="auspost-dark"] {
@@ -46,6 +48,7 @@
       --chip:#3d1f22; --inset:#191211; --btn-ink:#1a0405; --trace:#c9b3ae;
       --banner-bg:#2e1c0a; --banner-ink:#ffb454;
       --sn:#5fd96a; --cf:#5b9bff; --sl:#4fc3f7; --gl:#ff9d54;
+      --crit:#ff2f4d;
     }
     /* Hackathon — purple/blue, the "this is a demo day build" read. */
     [data-theme="hackathon"] {
@@ -55,6 +58,7 @@
       --chip:#2c2160; --inset:#160f33; --btn-ink:#0f0824; --trace:#b3a5e0;
       --banner-bg:#2b1e08; --banner-ink:#fbbf24;
       --sn:#4ade80; --cf:#60a5fa; --sl:#22d3ee; --gl:#fb923c;
+      --crit:#f43f5e;
     }
     /* ServiceNow — the system we're writing back into. */
     [data-theme="servicenow"] {
@@ -64,6 +68,7 @@
       --chip:#17352b; --inset:#0e1f1a; --btn-ink:#04160c; --trace:#9dc4b4;
       --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
       --sn:#62d84e; --cf:#5b9bff; --sl:#4fd1e8; --gl:#ffa057;
+      --crit:#ff5c4d;
     }
     /* Paper — neutral light, for screenshots and printed handouts. */
     [data-theme="paper"] {
@@ -73,6 +78,7 @@
       --chip:#ddf4ff; --inset:#f6f8fa; --btn-ink:#ffffff; --trace:#57606a;
       --banner-bg:#fff8c5; --banner-ink:#7d4e00;
       --sn:#157347; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
+      --crit:#cf222e;
     }
     /* Projector — max contrast, thick accents. Answers the J11 legibility
        question the hard way: if it reads at the back of the room here, it reads. */
@@ -83,6 +89,7 @@
       --chip:#333300; --inset:#141400; --btn-ink:#000000; --trace:#e0e0e0;
       --banner-bg:#2e2000; --banner-ink:#ffd400;
       --sn:#3ddc72; --cf:#4da6ff; --sl:#22e0ff; --gl:#ff8a3d;
+      --crit:#ff2b2b;
     }
     * { box-sizing:border-box; }
     body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
@@ -96,9 +103,7 @@
     .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
     .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
     .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
-    .bar { height:7px; background:var(--chip); border-radius:5px; overflow:hidden; margin-top:4px; }
-    .bar > i { display:block; height:100%; background:var(--acc); }
-    .cand { margin-bottom:12px; }
+    .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
     .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:var(--inset); margin-bottom:7px; border-radius:0 6px 6px 0; }
     .ev b { color:var(--acc); text-transform:uppercase; font-size:11px; }
     .src { color:var(--muted); }
@@ -106,6 +111,21 @@
     .trace { font:12px/1.5 ui-monospace,monospace; color:var(--trace); white-space:pre-wrap; }
     .advisory { color:var(--warn); font-size:12px; }
     .link { color:var(--acc); text-decoration:underline; }
+
+    /* ---- Diagnosis card: logical grouping (initial problem / context facts /
+       confidence), so the top-of-page report reads as distinct blocks instead
+       of two run-on paragraphs. */
+    .diag-label {
+      display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--muted); margin-bottom:3px; font-weight:600;
+    }
+    .diag-problem {
+      font-size:14px; line-height:1.5; padding:10px 14px; margin-bottom:14px;
+      border-left:4px solid var(--acc); background:var(--inset); border-radius:0 8px 8px 0;
+    }
+    .diag-problem .diag-label { color:var(--acc); }
+    .diag-facts { display:flex; flex-wrap:wrap; gap:14px 32px; }
+    .diag-fact { font-size:13px; }
 
     /* ---- LT5: trace-row visual vocabulary (J11) ------------------------------
        CSS-only building blocks for step-row rendering. LT3's replay renderer
@@ -848,11 +868,46 @@ function provenanceChipsHtml(data) {
   </div>`;
 }
 
+// Confidence -> colour. HIGH is the most actionable signal (the diagnosis is
+// confident there's a real match) so it gets the most attention-grabbing
+// colour, walking the opposite of what "confidence" might suggest at a
+// glance: LOW is calm (--ok, green), MEDIUM is amber (--warn), HIGH is red
+// (--crit) — never a hardcoded value, all three vars are theme-derived (see
+// the :root token block) so this stays correct across every theme, same
+// discipline as the trace-row state colours.
+function confidenceColorVar(level) {
+  const key = String(level || '').toUpperCase();
+  if (key === 'HIGH') return 'var(--crit)';
+  if (key === 'MEDIUM') return 'var(--warn)';
+  return 'var(--ok)'; // LOW or unrecognised
+}
+function confidencePillHtml(level) {
+  const key = String(level || '').toUpperCase() || '—';
+  const color = confidenceColorVar(key);
+  return `<span class="pill" style="color:${color}">${esc(key)}</span>`;
+}
+// CandidateSystem.confidence is a raw 0..1 double (CandidateSystem.java has
+// no LOW/MEDIUM/HIGH enum here, unlike DiagnosisReport.confidenceOverall and
+// SuggestedAssignment.confidence, which are the Confidence enum already).
+// Bucketing here is a UI-only display judgment call, not a value the backend
+// asserts — thresholds picked to roughly split "this is probably it" (HIGH)
+// from "plausible, keep it on the shortlist" (LOW), same 3-way split the
+// backend already applies to overall/assignment confidence.
+function bucketConfidence(fraction) {
+  const f = Number(fraction) || 0;
+  if (f >= 0.75) return 'HIGH';
+  if (f >= 0.45) return 'MEDIUM';
+  return 'LOW';
+}
+
 function render(data) {
   const r = data.report, t = data.trace || [];
-  const cands = r.candidateSystems.map(c => `
-    <div class="cand"><div>${esc(c.name)} <span class="src">${Math.round(c.confidence*100)}%</span></div>
-    <div class="bar"><i style="width:${Math.round(c.confidence*100)}%"></i></div></div>`).join('');
+  // No percentage, no progress bar (direct product feedback): just which
+  // systems are implicated and how confident the diagnosis is in each —
+  // the LOW/MEDIUM/HIGH pill, same visual language as confidenceOverall.
+  const cands = r.candidateSystems.map(c =>
+    `<div class="cand"><span>${esc(c.name)}</span>${confidencePillHtml(bucketConfidence(c.confidence))}</div>`
+  ).join('');
   // FND-25: J7 always claimed "source badges + links" here; the link half was never
   // rendered (only the reconstructed sources-comment preview below had it).
   const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</div>`).join('');
@@ -935,8 +990,15 @@ function render(data) {
   document.getElementById('out').innerHTML = `
     ${banner}
     <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
-      <p><b>Symptom:</b> ${esc(r.reportedSymptom)}</p>
-      <p><b>Affected function:</b> ${esc(r.affectedFunction)} &nbsp; <b>Env:</b> ${esc(r.environment)} &nbsp; <b>Overall confidence:</b> ${esc(r.confidenceOverall)}</p>
+      <div class="diag-problem">
+        <span class="diag-label">Reported symptom</span>
+        ${esc(r.reportedSymptom)}
+      </div>
+      <div class="diag-facts">
+        <div class="diag-fact"><span class="diag-label">Affected function</span>${esc(r.affectedFunction)}</div>
+        <div class="diag-fact"><span class="diag-label">Environment</span>${esc(r.environment)}</div>
+        <div class="diag-fact"><span class="diag-label">Overall confidence</span>${confidencePillHtml(r.confidenceOverall)}</div>
+      </div>
     </div>
     <div class="card"><h2>Candidate systems</h2>${cands}</div>
     <div class="card"><h2>Suggested assignment</h2>
