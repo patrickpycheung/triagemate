@@ -28,6 +28,13 @@ server:
   port: 8080
 
 triage:
+  # Cosmetic demo convenience — pre-fills the incident-number field in the browser so
+  # whoever's running the demo doesn't retype it every time. Edit the value below to
+  # change it; never read by any diagnosis path. Blank leaves the field empty. NOT a
+  # secret, so it lives here rather than in secrets.properties.
+  ui:
+    default-incident-number: INC0010005
+
   # Per-connector data source: mock (offline demo data) or real (live system).
   # Mix freely — e.g. servicenow=real writes the two advisory comments to a REAL dev
   # ticket while the evidence stays mock/curated.
