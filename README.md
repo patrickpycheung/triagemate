@@ -37,6 +37,36 @@ mvn spring-boot:run
 Wait for `Started TriageMateApplication in ~1.3 seconds`, then open
 **http://localhost:8080**. Stop with `Ctrl+C`.
 
+### The four run scripts
+
+Two independent axes — which **engine** reasons, and whether the **data** is mock or
+live. Both `-real` scripts are thin wrappers that add `--spring.profiles.active=real`
+to the mock script beside them.
+
+| | Mock data (offline, guaranteed) | Real data (live systems) |
+|---|---|---|
+| **Deterministic** (no LLM) | `./run-deterministic.sh` | `./run-deterministic-real.sh` |
+| **ADK** (live agent) | `./run-adk.sh` | `./run-adk-real.sh` |
+
+**ADK + mock data is not a scripted replay.** The mocks fix what the *tools return*;
+ADK still calls the real model through the Copilot proxy, so the reasoning, the
+tool-choice decisions and the ~8s thinking pauses in the trace are all genuine, and
+two runs won't be identical. That combination — live agent, guaranteed data, no
+connector network — is usually the best one to demo: it shows the real thing working
+without depending on four systems being reachable.
+
+Rough order of risk on stage: `run-deterministic.sh` (nothing can fail) →
+`run-adk.sh` (needs the proxy) → `run-deterministic-real.sh` (needs four connectors) →
+`run-adk-real.sh` (needs both).
+
+Each `-real` script flips **all four** connectors. For a partial mix, pass the
+individual key to the mock script instead — e.g. real ServiceNow, everything else
+curated:
+
+```bash
+./run-deterministic.sh --triage.connectors.servicenow=real
+```
+
 ## How to use it
 
 **From the UI** (recommended for the demo)
