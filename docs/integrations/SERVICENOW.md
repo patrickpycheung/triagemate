@@ -60,7 +60,7 @@ triage.integrations.servicenow.user=svc-triagemate
 triage.integrations.servicenow.secret=<the password from step 2>
 ```
 
-Then run with the `snow-live` profile — see the main [README](../../README.md) →
+Then run with `-Dtriage.connectors.servicenow=real` — see the main [README](../../README.md) →
 "Optional: post the comments to a REAL ServiceNow ticket".
 
 ## Notes

@@ -61,7 +61,7 @@ live in ServiceNow), switch just the ServiceNow connector to real
 
 ```bash
 cp secrets.properties.example secrets.properties   # fill in triage.integrations.servicenow.*
-mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+mvn spring-boot:run -Dtriage.connectors.servicenow=real
 ```
 
 Type a real incident number → the *Sources consulted* and *First-pass diagnosis* entries

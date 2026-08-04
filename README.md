@@ -73,8 +73,12 @@ auto-imports) — copy the template, fill it in, and just run. No shell `export`
 cp secrets.properties.example secrets.properties
 # fill in triage.integrations.servicenow.{base-url,user,secret}
 
-mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+mvn spring-boot:run -Dtriage.connectors.servicenow=real
 ```
+
+(There are only two named profiles — the default, all-mock config, and `real`, which
+flips **every** connector live at once. For just one connector, as here, override its
+`triage.connectors.*` key directly rather than using a profile.)
 
 Don't have a ServiceNow service account yet? See
 [`docs/integrations/SERVICENOW.md`](docs/integrations/SERVICENOW.md) for how to get

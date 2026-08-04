@@ -5,7 +5,7 @@ How to obtain the keys/tokens for each real connector. All of these fill in
 Java properties file that Spring Boot auto-imports at startup. See the main
 [README](../../README.md) for how the app loads them.
 
-- [ServiceNow](SERVICENOW.md) — required for the live demo (`snow-live` profile)
+- [ServiceNow](SERVICENOW.md) — required for the live demo (`-Dtriage.connectors.servicenow=real`)
 - [Confluence](CONFLUENCE.md)
 - [Sumo Logic](SUMOLOGIC.md)
 - [GitLab](GITLAB.md)

@@ -185,14 +185,21 @@ logging:
     com.google.adk.tools.FunctionCallingUtils: ERROR
 
 ---
-# Convenience profile: write the two comments to a REAL ServiceNow dev ticket while
-# the evidence stays mock/curated. Put the servicenow creds in secrets.properties
-# (triage.integrations.servicenow.*), then run:
-#   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+# 'real' profile: every connector live against the real system (needs every
+# credential in secrets.properties — see secrets.properties.example). One flag flips
+# all four; there is no separate profile for a partial mix. To run with only SOME
+# connectors real (e.g. ServiceNow live, everything else mock), don't use a profile at
+# all — override the individual triage.connectors.* keys directly, e.g.:
+#   mvn spring-boot:run -Dtriage.connectors.servicenow=real
+# Activate this profile with:
+#   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=real
 spring:
   config:
     activate:
-      on-profile: snow-live
+      on-profile: real
 triage:
   connectors:
     servicenow: real
+    confluence: real
+    sumo: real
+    gitlab: real
