@@ -23,6 +23,24 @@ set -uo pipefail
 DEFAULT_HOST="triagemate.auspost.local"
 MARKER="# added by TriageMate setup-custom-domain.sh"
 
+# Linux reserves ports below 1024 for root, so an unprivileged `./run-*.sh` cannot
+# bind 80 and falls back to 8080 — which defeats the whole point of the nice
+# hostname. Lowering ip_unprivileged_port_start to 80 fixes that for every user on
+# the machine, permanently, with no root needed at RUN time.
+#
+# Chosen over the alternatives deliberately:
+#   sudo ./run-*.sh      leaves root-owned files in target/ and ~/.m2, breaking
+#                        later non-root builds — a genuinely annoying thing to debug
+#   setcap on java       breaks on every JDK update, and grants the capability to
+#                        every Java process on the box, not just this app
+#   iptables REDIRECT    more moving parts, and invisible when someone later wonders
+#                        why :80 behaves oddly
+# This is one file, greppable, and reversible with --remove.
+# TRIAGEMATE_SYSCTL_FILE overrides the target for testing, same reason as
+# TRIAGEMATE_HOSTS_FILE above — this writes to /etc and must not ship untested.
+SYSCTL_FILE="${TRIAGEMATE_SYSCTL_FILE:-/etc/sysctl.d/99-triagemate-unprivileged-port.conf}"
+SYSCTL_KEY="net.ipv4.ip_unprivileged_port_start"
+
 ACTION="add"
 HOSTNAME_ARG=""
 for arg in "$@"; do
@@ -67,6 +85,49 @@ echo
 
 already_present() { grep -qiE "^[^#]*[[:space:]]$(printf '%s' "$HOST" | sed 's/\./\\./g')([[:space:]]|$)" "$HOSTS"; }
 
+# --- unprivileged port 80 (Linux only) ---------------------------------------
+# On macOS there is no equivalent knob (and no ip_unprivileged_port_start), so these
+# are no-ops there; on Windows port 80 is already bindable unprivileged.
+port80_supported() {
+  [ "$PLATFORM" = "test" ] && return 0    # exercised via TRIAGEMATE_SYSCTL_FILE
+  [ "$PLATFORM" = "unix" ] && [ -d /etc/sysctl.d ] \
+    && [ -e "/proc/sys/net/ipv4/ip_unprivileged_port_start" ]
+}
+
+port80_current() { cat /proc/sys/net/ipv4/ip_unprivileged_port_start 2>/dev/null || echo "?"; }
+
+port80_enabled() { [ "$(port80_current)" -le 80 ] 2>/dev/null; }
+
+port80_enable() {
+  port80_supported || return 0
+  if port80_enabled && [ -f "$SYSCTL_FILE" ]; then
+    echo "Unprivileged port 80: already enabled."
+    return 0
+  fi
+  printf '# Lets TriageMate (and anything else) bind port 80 without root.\n# Added by bin/setup-custom-domain.sh — remove with --remove.\n%s=80\n' \
+    "$SYSCTL_KEY" > "$SYSCTL_FILE"
+  # Apply now as well as persisting, so this shell session benefits immediately
+  # rather than only after the next reboot.
+  sysctl -q -w "$SYSCTL_KEY=80" 2>/dev/null
+  if port80_enabled; then
+    echo "Unprivileged port 80: enabled (now, and persisted in $SYSCTL_FILE)."
+  else
+    echo "WARNING: wrote $SYSCTL_FILE but $SYSCTL_KEY is still $(port80_current)." >&2
+    echo "         ./run-*.sh will keep falling back to 8080." >&2
+  fi
+}
+
+port80_disable() {
+  port80_supported || return 0
+  [ -f "$SYSCTL_FILE" ] || { echo "Unprivileged port 80: nothing to undo."; return 0; }
+  rm -f "$SYSCTL_FILE"
+  # Back to the kernel default. Not simply "whatever it was before" — we only ever
+  # set it from a default system, and guessing a prior custom value would be worse
+  # than restoring the documented default.
+  sysctl -q -w "$SYSCTL_KEY=1024" 2>/dev/null
+  echo "Unprivileged port 80: disabled (removed $SYSCTL_FILE, reset to 1024)."
+}
+
 # --- check -------------------------------------------------------------------
 if [ "$ACTION" = "check" ]; then
   if already_present; then
@@ -82,6 +143,15 @@ if [ "$ACTION" = "check" ]; then
     echo "    resolves OK"
   else
     echo "    does NOT resolve"
+  fi
+  if port80_supported; then
+    echo
+    echo "Unprivileged port 80:"
+    if port80_enabled; then
+      echo "    ENABLED ($SYSCTL_KEY = $(port80_current)) — ./run-*.sh can bind 80"
+    else
+      echo "    disabled ($SYSCTL_KEY = $(port80_current)) — ./run-*.sh will use 8080"
+    fi
   fi
   exit 0
 fi
@@ -122,6 +192,7 @@ if [ "$ACTION" = "remove" ]; then
     cat "$TMP" > "$HOSTS" && rm -f "$TMP"
     echo "Removed $HOST (the entry this script added)."
   fi
+  port80_disable
   if already_present; then
     echo
     echo "NOTE: $HOST is still mapped by an entry this script did not add:"
@@ -144,6 +215,9 @@ else
   echo "Added: 127.0.0.1  $HOST"
 fi
 
+echo
+port80_enable
+
 # --- verify ------------------------------------------------------------------
 echo
 echo "Verifying..."
@@ -165,12 +239,12 @@ cat <<EOF
 
 Done. Now start the app and open the name:
 
-  ./run-deterministic.sh --server.port=80      # then http://$HOST
-  ./run-deterministic.sh                       # then http://$HOST:8080
+  ./run-deterministic.sh        # serves on port 80 → http://$HOST
 
-Port 80 needs elevation on macOS/Linux (use sudo, or just keep :8080 — the
-hostname is doing most of the work visually either way). If port 80 is already
-taken by IIS/Docker/another server, stay on 8080.
+On Linux this script also lowered the unprivileged-port floor, so ./run-*.sh binds
+port 80 as your normal user — no sudo needed to RUN, only to set up (just now).
+That persists across reboots. If port 80 is already taken by another server, pass
+--server.port=N instead.
 
 Undo:  $0 --remove
 More:  docs/design-java/CUSTOM-DOMAIN.md

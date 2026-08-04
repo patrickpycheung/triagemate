@@ -17,7 +17,10 @@ sudo ./bin/setup-custom-domain.sh          # macOS / Linux
 ./bin/setup-custom-domain.sh               # Windows: Git Bash "Run as administrator"
 ```
 
-Idempotent, backs the file up first, and verifies the name resolves.
+Idempotent, backs the file up first, and verifies the name resolves. **On Linux it
+also lowers the unprivileged-port floor** (`net.ipv4.ip_unprivileged_port_start=80`,
+persisted in `/etc/sysctl.d/`) so `./run-*.sh` can bind port 80 as your normal user —
+sudo is needed to set up, never to run.
 `--check` reports status without changing anything; `--remove` undoes it (and only
 ever deletes the line the script itself added). The rest of this document is the
 manual equivalent, plus the port and no-admin details the script points at.

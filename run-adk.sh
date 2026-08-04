@@ -144,10 +144,11 @@ if [ -z "$PORT" ]; then
     echo "  Port 80 is not bindable here, so falling back to 8080." >&2
     echo "  (Windows binds 80 without elevation; macOS/Linux reserve ports below 1024.)" >&2
     echo "" >&2
-    echo "  To actually get port 80 on Linux, lift the reservation once per boot:" >&2
-    echo "      sudo sysctl net.ipv4.ip_unprivileged_port_start=80" >&2
-    echo "  then re-run this script normally. Preferred over 'sudo ./run-*.sh', which" >&2
-    echo "  would leave root-owned files in target/ and ~/.m2 and break later builds." >&2
+    echo "  To get port 80 on Linux, run the one-time setup (persists across reboots):" >&2
+    echo "      sudo ./bin/setup-custom-domain.sh" >&2
+    echo "  It lowers the unprivileged-port floor so ./run-*.sh binds 80 as your normal" >&2
+    echo "  user. Preferred over 'sudo ./run-*.sh', which would leave root-owned files" >&2
+    echo "  in target/ and ~/.m2 and break later non-root builds." >&2
     echo "" >&2
     PORT="8080"
   fi

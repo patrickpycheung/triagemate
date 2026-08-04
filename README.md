@@ -61,11 +61,18 @@ to the mock script beside them.
 | **ADK** (live agent) | `./run-adk.sh` | `./run-adk-real.sh` |
 
 All four serve on **port 80** by default (as does `application.yml`), so the URL is
-just `http://localhost`. Port 80 is privileged on macOS/Linux — if it can't be bound
-(no elevation, or something else already has it) the script prints a note and falls
-back to 8080 rather than failing, and the startup banner shows whichever port it
-actually got. Pass `--server.port=N` to pin one explicitly; that is never
-second-guessed.
+just `http://localhost`. Linux reserves ports below 1024 for root, so run the one-time
+setup once per machine:
+
+```bash
+sudo ./bin/setup-custom-domain.sh
+```
+
+That maps `triagemate.auspost.local` **and** lowers the unprivileged-port floor
+(persisted in `/etc/sysctl.d/`), after which `./run-*.sh` binds 80 as your normal user
+— sudo to set up, never to run. Until then the scripts fall back to 8080 with a note
+rather than failing, and the startup banner always shows whichever port it actually
+got. Pass `--server.port=N` to pin one explicitly; that is never second-guessed.
 
 **ADK + mock data is not a scripted replay.** The mocks fix what the *tools return*;
 ADK still calls the real model through the Copilot proxy, so the reasoning, the
