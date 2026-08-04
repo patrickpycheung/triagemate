@@ -40,14 +40,14 @@ Wait for `Started TriageMateApplication in ~1.3 seconds`, then open
 ## How to use it
 
 **From the UI** (recommended for the demo)
-1. Open http://localhost:8080 — the incident number **`INC0012345`** is pre-filled.
+1. Open http://localhost:8080 — the incident number **`INC0010005`** is pre-filled.
 2. Click **Diagnose**.
 3. You'll see the full diagnosis and, under *"Posted to ServiceNow — automatically,"*
    the two advisory comments it writes back (sources first, then the diagnosis).
 
 **From the API** (same thing, headless)
 ```bash
-curl -X POST http://localhost:8080/api/diagnose/INC0012345 | jq
+curl -X POST http://localhost:8080/api/diagnose/INC0010005 | jq
 ```
 
 **What happens on each run** — one bounded pass: read the ticket → clarify the real

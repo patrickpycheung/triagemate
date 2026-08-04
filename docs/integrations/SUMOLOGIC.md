@@ -51,3 +51,54 @@ triage.integrations.sumo.secret=<access key from step 1>
   collectors, sources, or dashboards. A read-only/search-scoped role is sufficient.
 - Access keys can be revoked individually from the same Access Keys page without
   affecting your login credentials.
+
+## 5. Query shape (important)
+
+The app composes the query from `triage.sumo.source-category-pattern` + `index`
+(`application.yml`), producing:
+
+```
+_sourceCategory=IDT/ITServices/Tomcat/<project>/<env>/AppEvt_<project> and _index=Global_Standard_Infrequent
+```
+
+**Both clauses matter.** Without `_index` the corporate instance returns **zero rows** for
+a query that is otherwise perfectly well-formed — which reads as "no logs for this
+incident" rather than as a broken query. Pinned by `LogSearchRequestQueryTest`.
+
+Timestamps go as second-precision UTC with no offset (`2026-08-03T04:16:40`), paired with
+`"timeZone":"UTC"`. `OffsetDateTime.toString()` is rejected with
+`400 searchjob.invalid.timestamp.from`. Pinned by `RealSumoGatewayTimeFormatTest`.
+
+## 6. Verifying against the live API
+
+`RealSumoGatewayLiveTest` hits the real API. It is **opt-in**: with no
+`triage.integrations.sumo.*` values in `secrets.properties` it skips, so `mvn test` stays
+green and offline on a machine without credentials.
+
+```bash
+mvn test -Dtest=RealSumoGatewayLiveTest
+```
+
+The project/environment it probes is **injectable** — the target is only a means to reach
+the API, so it isn't baked in. Resolution order: system property → `secrets.properties` →
+default (`delivery-hazards` / `ptest`).
+
+```bash
+mvn test -Dtest=RealSumoGatewayLiveTest \
+    -Dsumo.probe.project=my-app -Dsumo.probe.environment=prod
+```
+
+or, to set it once per machine, in `secrets.properties` (gitignored, alongside the
+credentials):
+
+```properties
+sumo.probe.project=my-app
+sumo.probe.environment=prod
+```
+
+If the default probe project ever stops logging, the failure message names it and tells
+you which flags to override — the test fails loudly rather than silently testing nothing.
+
+Measured on the AU instance (2026-08-03): a 30-minute window over one project completes in
+~4s; a 24-hour window was still gathering at 24s. The app caps the window at
+`max-window-minutes` (30), so it stays in the fast case.

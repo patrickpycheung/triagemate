@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LT5 — projector legibility test card</title>
+<style>
+  /* Theme tokens copied verbatim from src/main/resources/static/index.html so this
+     tests the REAL palettes, not approximations of them. */
+  :root, [data-theme="midnight"] {
+    --bg:#0f1420; --card:#182030; --ink:#e8edf6; --muted:#93a1b5;
+    --acc:#5aa9ff; --ok:#3ecf8e; --warn:#ffb454; --border:#24304a; --chip:#243350;
+  }
+  [data-theme="auspost"] {
+    --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
+    --acc:#dc1928; --ok:#0a7d54; --warn:#b45309; --border:#dfe3e8; --chip:#fdeaec;
+  }
+  [data-theme="hackathon"] {
+    --bg:#120c26; --card:#1c1440; --ink:#ece8ff; --muted:#a396d4;
+    --acc:#8b5cf6; --ok:#34d399; --warn:#fbbf24; --border:#2f2360; --chip:#2c2160;
+  }
+  [data-theme="paper"] {
+    --bg:#fbfbfa; --card:#ffffff; --ink:#1f2328; --muted:#656d76;
+    --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --border:#d1d9e0; --chip:#ddf4ff;
+  }
+  [data-theme="projector"] {
+    --bg:#000000; --card:#0d0d0d; --ink:#ffffff; --muted:#c9c9c9;
+    --acc:#ffd400; --ok:#00e676; --warn:#ff9100; --border:#4a4a4a; --chip:#333300;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px 20px 60px}
+  h1{font-size:19px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+
+  .bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+       background:var(--card);border:1px solid var(--border);border-radius:10px;
+       padding:10px 12px;margin-bottom:18px;position:sticky;top:0;z-index:5}
+  .bar label{font-size:13px;color:var(--muted)}
+  select,input[type=range]{accent-color:var(--acc)}
+  select{background:var(--card);color:var(--ink);border:1px solid var(--border);
+         border-radius:7px;padding:5px 8px;font:inherit}
+  kbd{background:var(--chip);border:1px solid var(--border);border-radius:5px;
+      padding:1px 6px;font:12px ui-monospace,monospace;color:var(--acc)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+            color:var(--muted);margin:0 0 3px}
+  .panel .why{font-size:12px;color:var(--muted);margin:0 0 12px;min-height:32px}
+  .verdict{margin-top:12px;display:flex;gap:6px}
+  .verdict button{flex:1;padding:6px;border:1px solid var(--border);border-radius:7px;
+    background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}
+  .verdict button:hover{border-color:var(--acc);color:var(--acc)}
+  .verdict button[aria-pressed="true"]{background:var(--chip);color:var(--acc);
+    border-color:var(--acc);font-weight:600}
+
+  /* ---- the trace row under test ---- */
+  .row{display:flex;gap:12px;align-items:center;padding:10px 12px;position:relative;
+       border-left:3px solid transparent;border-radius:0 8px 8px 0;overflow:hidden;
+       background:rgba(128,128,128,.05);margin-bottom:8px}
+  .badge{flex:0 0 auto;width:32px;height:32px;border-radius:8px;display:grid;
+         place-items:center;background:var(--chip);color:var(--acc);font-weight:700;
+         font-size:13px}
+  .txt{flex:1;min-width:0}
+  .lbl{font-size:14px}
+  .meta{font-size:11px;color:var(--muted)}
+
+  .row.active{border-left-color:var(--acc)}
+  .row.done{border-left-color:var(--ok)}
+  .row.done .badge{color:var(--ok)}
+
+  /* A — glow-pulse ONLY (the sketch's badge treatment, isolated) */
+  .A.active .badge{animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(128,128,128,0)}
+                   50%{box-shadow:0 0 0 5px var(--pulse);transform:scale(1.08)}}
+
+  /* B — spinner ONLY (solid accent, full alpha) */
+  .B.active .badge::after{content:"";position:absolute;width:30px;height:30px;
+    border-radius:50%;border:3px solid transparent;border-top-color:var(--acc);
+    animation:spin .9s linear infinite}
+  .B .badge{position:relative}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* C — the sketch as actually written: border + shimmer + glow together */
+  .C.active .badge{animation:pulse 1.4s ease-in-out infinite}
+  .C.active::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:38%;
+    background:linear-gradient(90deg,transparent,var(--acc),transparent);
+    animation:shimmer 1.5s linear infinite}
+  @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
+
+  /* D — spinner + border, no glow (the "high contrast only" candidate) */
+  .D.active .badge::after{content:"";position:absolute;width:30px;height:30px;
+    border-radius:50%;border:3px solid transparent;border-top-color:var(--acc);
+    animation:spin .9s linear infinite}
+  .D .badge{position:relative}
+
+  @media (prefers-reduced-motion:reduce){
+    .badge,.badge::after,.row::after{animation:none!important}
+    .A.active .badge,.C.active .badge{box-shadow:0 0 0 3px var(--pulse-static)}
+    .B.active .badge::after,.D.active .badge::after{border-top-color:var(--acc);
+      border-right-color:var(--acc)}
+  }
+  .scaler{transform-origin:top left}
+  .note{margin-top:22px;font-size:12.5px;color:var(--muted);line-height:1.6;
+        border-top:1px solid var(--border);padding-top:14px}
+  .note b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LT5 — projector legibility test card</h1>
+  <p class="sub">Which in-progress affordance still reads from the back of the room?
+     Four candidates, real palettes, real 32&nbsp;px badge size.</p>
+
+  <div class="bar">
+    <label>Theme
+      <select id="theme">
+        <option value="midnight">Midnight</option>
+        <option value="auspost">Australia Post</option>
+        <option value="hackathon">Hackathon</option>
+        <option value="paper">Paper</option>
+        <option value="projector">Projector</option>
+      </select>
+    </label>
+    <label>Distance proxy
+      <input id="scale" type="range" min="25" max="100" value="100" step="5"/>
+      <span id="scaleVal">100%</span>
+    </label>
+    <span style="color:var(--muted);font-size:12px">
+      Keys: <kbd>1</kbd>–<kbd>5</kbd> theme · <kbd>R</kbd> restart animations
+    </span>
+  </div>
+
+  <div class="scaler" id="scaler">
+    <div class="grid">
+      <div class="panel">
+        <h2>A · Glow-pulse only</h2>
+        <p class="why">The sketch's badge treatment in isolation. Ring is the accent at
+           <b>alpha .22</b> — measured 1.31–1.69:1 against the card.</p>
+        <div class="row A active"><div class="badge">SN</div>
+          <div class="txt"><div class="lbl">Reading the incident…</div>
+          <div class="meta">servicenow · in progress</div></div></div>
+        <div class="row done"><div class="badge">CF</div>
+          <div class="txt"><div class="lbl">Runbook found</div>
+          <div class="meta">confluence · 7.1 s</div></div></div>
+        <div class="verdict" data-c="A">
+          <button data-v="reads">Reads</button><button data-v="marginal">Marginal</button
+          ><button data-v="invisible">Can't tell</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>B · Spinner only</h2>
+        <p class="why">Solid accent arc, <b>alpha 1.0</b> — measured 4.05–13.58:1. The
+           high-contrast comparison candidate.</p>
+        <div class="row B active"><div class="badge">SN</div>
+          <div class="txt"><div class="lbl">Reading the incident…</div>
+          <div class="meta">servicenow · in progress</div></div></div>
+        <div class="row done"><div class="badge">CF</div>
+          <div class="txt"><div class="lbl">Runbook found</div>
+          <div class="meta">confluence · 7.1 s</div></div></div>
+        <div class="verdict" data-c="B">
+          <button data-v="reads">Reads</button><button data-v="marginal">Marginal</button
+          ><button data-v="invisible">Can't tell</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>C · Sketch as written <span style="color:var(--acc)">(current design)</span></h2>
+        <p class="why">Accent left border + travelling shimmer bar + glow-pulse. Three
+           signals at once — two of them full-alpha.</p>
+        <div class="row C active"><div class="badge">SN</div>
+          <div class="txt"><div class="lbl">Reading the incident…</div>
+          <div class="meta">servicenow · in progress</div></div></div>
+        <div class="row done"><div class="badge">CF</div>
+          <div class="txt"><div class="lbl">Runbook found</div>
+          <div class="meta">confluence · 7.1 s</div></div></div>
+        <div class="verdict" data-c="C">
+          <button data-v="reads">Reads</button><button data-v="marginal">Marginal</button
+          ><button data-v="invisible">Can't tell</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>D · Spinner + border, no glow</h2>
+        <p class="why">Drops the low-contrast layer entirely and keeps only what the
+           contrast math says survives.</p>
+        <div class="row D active"><div class="badge">SN</div>
+          <div class="txt"><div class="lbl">Reading the incident…</div>
+          <div class="meta">servicenow · in progress</div></div></div>
+        <div class="row done"><div class="badge">CF</div>
+          <div class="txt"><div class="lbl">Runbook found</div>
+          <div class="meta">confluence · 7.1 s</div></div></div>
+        <div class="verdict" data-c="D">
+          <button data-v="reads">Reads</button><button data-v="marginal">Marginal</button
+          ><button data-v="invisible">Can't tell</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>The one question to answer:</b> standing where the back row will stand, can you tell
+    <i>which row is currently running</i> — without being told, and without walking closer?
+    Everything else is secondary.<br><br>
+    <b>Distance proxy</b> shrinks the card so you can pre-screen at your desk. It is a rough
+    stand-in for viewing distance, <b>not</b> a substitute — it cannot reproduce a projector's
+    contrast loss, ambient light wash, or colour shift, which is exactly what is expected to
+    kill the low-alpha candidate.<br><br>
+    <b>Verdicts you click are printed to the console</b> as a one-line summary you can paste
+    back.
+  </p>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const themes = ['midnight','auspost','hackathon','paper','projector'];
+  const sel = document.getElementById('theme');
+
+  // The pulse ring must follow the theme accent, not a hardcoded blue. The sketch
+  // hardcoded rgba(90,169,255,…) — i.e. it would have stayed midnight-blue on every
+  // theme, including the black/yellow projector one. Worth knowing before the test.
+  function applyTheme(t) {
+    root.setAttribute('data-theme', t);
+    sel.value = t;
+    const acc = getComputedStyle(root).getPropertyValue('--acc').trim();
+    root.style.setProperty('--pulse', hexA(acc, .22));
+    root.style.setProperty('--pulse-static', hexA(acc, .35));
+  }
+  function hexA(hex, a) {
+    const h = hex.replace('#','');
+    const n = parseInt(h.length === 3 ? h.split('').map(c=>c+c).join('') : h, 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+  sel.addEventListener('change', e => applyTheme(e.target.value));
+
+  const scale = document.getElementById('scale');
+  const scaler = document.getElementById('scaler');
+  const scaleVal = document.getElementById('scaleVal');
+  scale.addEventListener('input', () => {
+    const v = scale.value / 100;
+    scaler.style.transform = `scale(${v})`;
+    scaler.style.width = `${100 / v}%`;
+    scaleVal.textContent = scale.value + '%';
+  });
+
+  const verdicts = {};
+  document.querySelectorAll('.verdict').forEach(g => {
+    g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed','false'));
+      b.setAttribute('aria-pressed','true');
+      verdicts[g.dataset.c] = b.dataset.v;
+      const line = Object.entries(verdicts).sort()
+        .map(([k,v]) => `${k}=${v}`).join('  ');
+      console.log(`[LT5 ${sel.value}] ${line}`);
+    }));
+  });
+
+  addEventListener('keydown', e => {
+    if (e.key >= '1' && e.key <= '5') applyTheme(themes[+e.key - 1]);
+    if (e.key.toLowerCase() === 'r') {
+      document.querySelectorAll('.row.active').forEach(r => {
+        const c = r.className; r.className = ''; void r.offsetWidth; r.className = c;
+      });
+    }
+  });
+
+  applyTheme('midnight');
+</script>
+</body>
+</html>

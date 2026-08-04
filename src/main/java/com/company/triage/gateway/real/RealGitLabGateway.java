@@ -29,6 +29,9 @@ import java.util.Map;
 @ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "real")
 public class RealGitLabGateway implements GitLabGateway {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(RealGitLabGateway.class);
+
     private final RestClient http;
 
     public RealGitLabGateway(IntegrationProperties props) {
@@ -42,6 +45,7 @@ public class RealGitLabGateway implements GitLabGateway {
 
     @Override
     public List<CodeSearchResult> searchCode(String project, String searchTerm) {
+        log.info("[GitLab] searching {} for code matching \"{}\"", project, searchTerm);
         String projectId = URLEncoder.encode(project, StandardCharsets.UTF_8);   // group/name → group%2Fname
         JsonNode hits = http.get()
                 .uri(uri -> uri.path("/api/v4/projects/{id}/search")
@@ -66,6 +70,7 @@ public class RealGitLabGateway implements GitLabGateway {
      */
     @Override
     public List<Contact> recentCommitters(String project, String filePath) {
+        log.info("[GitLab] looking up recent committers for {}:{}", project, filePath);
         String projectId = URLEncoder.encode(project, StandardCharsets.UTF_8);
         try {
             // 1. newest tag → its committed date (the "last release" boundary)

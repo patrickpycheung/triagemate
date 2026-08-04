@@ -2,6 +2,7 @@ package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import org.slf4j.Logger;
@@ -16,7 +17,7 @@ import java.util.Optional;
 
 /**
  * Ground-truth demo dataset (J7) for the offline demo. Models one deliberately
- * vague incident — INC0012345 / order INC-ORD-4471 — whose real cause is the seeded
+ * vague incident — INC0010005 / order INC-ORD-4471 — whose real cause is the seeded
  * payment reconcile bug (discount applied after tax). Reuses the S3′ fixture universe
  * so the log↔code citation lands on payment_service.py:44.
  */
@@ -27,8 +28,25 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private static final Logger log = LoggerFactory.getLogger(MockServiceNowGateway.class);
     private final List<String> postedNotes = new ArrayList<>();
 
+    /** One-shot: lets the offline K1 poller see a single "new" incident. See below. */
+    private final java.util.concurrent.atomic.AtomicBoolean newIncidentAvailable =
+            new java.util.concurrent.atomic.AtomicBoolean(true);
+
+    /** The one incident this ground-truth dataset actually models (J7). */
+    static final String KNOWN_INCIDENT = "INC0010005";
+
     @Override
     public IncidentContext getIncident(String number) {
+        // FND-54: previously this echoed ANY number into the seeded context, so a typo on
+        // stage returned HTTP 200 with a complete, confident diagnosis of the payment-reconcile
+        // bug headed with an incident that does not exist — writeback logged, trace full, no
+        // warning. That is strictly worse than the TypeError FND-48 replaced, and it is the
+        // FND-8 failure class (asserting something untrue) in its purest form. It also made
+        // FND-48's 404 path unreachable in the demo config, since only the REAL gateway threw.
+        // The dataset models exactly one incident (J7); say so rather than fabricate.
+        if (!KNOWN_INCIDENT.equalsIgnoreCase(number == null ? "" : number.trim())) {
+            throw new com.company.triage.gateway.IncidentNotFoundException(number);
+        }
         return new IncidentContext(
                 number,
                 "Orders sometimes don't go through at checkout",
@@ -41,11 +59,36 @@ public class MockServiceNowGateway implements ServiceNowGateway {
                 OffsetDateTime.parse("2026-07-23T09:20:00+10:00"),
                 "Production",
                 "Service Desk",
-                List.of("Caller: 'it worked yesterday, now some checkouts error out'"),
-                List.of(),
+                // FND-64: journal entries carry their author (as RealServiceNowGateway now
+                // renders them, "sys_created_by: text"), and the work note names a person —
+                // so the J9 name extraction has real ServiceNow signal to find, matching what
+                // a real ticket looks like.
+                List.of("jane.customer: it worked yesterday, now some checkouts error out"),
+                List.of("m.chen: Escalated after speaking with Priya Nair in Payments — "
+                        + "she owns the reconcile path."),
                 "Order Portal",
                 List.of("Service Desk (initial)")
         );
+    }
+
+    /**
+     * Simulates <b>exactly one newly-arrived incident</b>, then nothing.
+     *
+     * <p>The fixture incident's {@code openedAt} is a fixed date in the past, so comparing
+     * it against the poller's "started just now" cursor would return empty forever and the
+     * K1 poller could never be exercised offline. Instead the first call reports
+     * {@code INC0010005} as new and every later call reports nothing — which is precisely
+     * the behaviour that matters to verify: the poller triages a new incident <b>once</b>
+     * and then goes quiet, even though the run posts work notes (FND-1).
+     */
+    @Override
+    public List<NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) {
+        if (limit <= 0 || !newIncidentAvailable.compareAndSet(true, false)) {
+            return List.of();
+        }
+        log.info("mock: reporting INC0010005 as newly created (one-shot, offline poller demo)");
+        // createdAt just after the cursor: what a genuinely-new incident looks like.
+        return List.of(new NewIncident("INC0010005", since.plusSeconds(1)));
     }
 
     @Override

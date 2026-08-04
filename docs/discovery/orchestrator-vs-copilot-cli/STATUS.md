@@ -3,6 +3,13 @@
 **Phase**: 4 COMPLETE — operator confirmed **Option 1 (D1+D2+D3)** (2026-07-29).
 **Rigor**: RAPID (Claude + WebSearch).
 
+> ⚠️ **`D1`–`D4` here are DEMO PATHS** (FND-6) — D1 our orchestration on a high model,
+> D2 the deterministic offline fallback, D3 the no-tools Copilot CLI contrast, D4 the
+> evidence trail. **This is the namespace `DEMO-RUNBOOK.md`, the J-cards and the
+> found-issues archive use.** DDS [[servicenow-triage-java]] has an unrelated `D1`–`D5`
+> meaning its own decision forks (agent engine, connector shape, …). Check the source
+> workspace before resolving a `Dn`.
+
 ## DECISION (operator-confirmed)
 Demo runs on **our orchestration driving a high Copilot-served model** (D1), with the
 **deterministic engine as the guaranteed offline fallback** (D2), and an **optional 30s

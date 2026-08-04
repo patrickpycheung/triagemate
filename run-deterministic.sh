@@ -17,6 +17,22 @@ command -v mvn >/dev/null 2>&1 || {
   exit 1
 }
 
+# Extra arguments are forwarded to the APPLICATION (not to Maven) — the
+# spring-boot plugin needs them comma-joined in one -D property, which is why
+# they can't just be appended to the mvn command line. Lets you do e.g.
+#   ./run-deterministic.sh --server.port=80
+# See docs/design-java/CUSTOM-DOMAIN.md.
+APP_ARGS="$(IFS=,; echo "$*")"
+
+PORT="8080"
+for arg in "$@"; do
+  case "$arg" in --server.port=*) PORT="${arg#--server.port=}" ;; esac
+done
+
 echo "=== TriageMate — deterministic engine (D2), no LLM, offline ==="
-echo "    http://localhost:8080"
-exec mvn spring-boot:run "$@"
+echo "    http://localhost:$PORT"
+if [ -n "$APP_ARGS" ]; then
+  exec mvn spring-boot:run -Dspring-boot.run.arguments="$APP_ARGS"
+else
+  exec mvn spring-boot:run
+fi

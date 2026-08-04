@@ -1,14 +1,16 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -40,25 +42,48 @@ public class RealServiceNowGateway implements ServiceNowGateway {
     private final RestClient http;
     private final String writeField;   // "work_notes" (internal) or "comments" (customer-facing)
 
-    public RealServiceNowGateway(IntegrationProperties props,
-                                 @Value("${triage.servicenow.write-field:work_notes}") String writeField) {
-        var sn = props.servicenow();
+    public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties integrationProps,
+                                 TriageProperties props) {
+        var sn = integrationProps.servicenow();
         String basic = Base64.getEncoder()
                 .encodeToString((sn.user() + ":" + sn.secret()).getBytes());
-        this.http = RestClient.builder()
+        // Injected RestClient.Builder (Spring Boot autoconfigures a fresh prototype per
+        // injection point) rather than RestClient.builder() directly, so tests can bind a
+        // MockRestServiceServer to it (see RealServiceNowGatewayTest) — FND-14 needed a
+        // real regression test against actual HTTP request/response shapes, not just a
+        // unit test of an extracted predicate.
+        this.http = builder
                 .baseUrl(sn.baseUrl())
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
                 .build();
-        this.writeField = writeField;
+        // FND-51/FND-57: writeField used to be checked here with a manual constructor throw,
+        // which only ran when THIS bean was constructed — i.e. never under the default mock
+        // connector config. It's now a @Pattern on TriageProperties, validated unconditionally
+        // at boot regardless of connector mode, so a bad value fails before serving traffic
+        // rather than the first time `triage.connectors.servicenow=real` is set on stage.
+        this.writeField = props.servicenow().writeField();
     }
 
     @Override
     public IncidentContext getIncident(String number) {
+        // FND-47: u_environment was read below but never requested here — ServiceNow
+        // returns only requested fields, so IncidentContext.environment was always null
+        // against a real instance. Mock-only testing hid this completely.
         JsonNode row = firstRow("/api/now/table/incident",
                 "number=" + number, "sys_id,number,short_description,description,caller_id,"
-                        + "category,subcategory,opened_at,cmdb_ci,assignment_group");
-        if (row == null) throw new IllegalStateException("incident not found: " + number);
+                        + "category,subcategory,opened_at,cmdb_ci,assignment_group,u_environment");
+        // FND-53: a dedicated type, not a bare IllegalStateException — see
+        // IncidentNotFoundException's javadoc for why the old mapping was unsafe.
+        if (row == null) throw new com.company.triage.gateway.IncidentNotFoundException(number);
+        // FND-61: comments and workNotes were hardcoded empty here while
+        // MockServiceNowGateway populated them — so the demo showed the agent reasoning over
+        // the caller's follow-ups ("it worked yesterday, now some checkouts error out": the
+        // timing/scope detail the description omits) and a real instance silently dropped
+        // exactly that signal. Same mock-only-testing blind spot as FND-47's u_environment.
+        // Journal entries live in sys_journal_field, not on the incident row, so they need
+        // their own query — the same table alreadyPosted() already reads for idempotency.
+        String sysId = text(row, "sys_id");
         return new IncidentContext(
                 text(row, "number"),
                 text(row, "short_description"),
@@ -69,10 +94,36 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 parseTime(text(row, "opened_at")),
                 text(row, "u_environment"),
                 text(row, "assignment_group"),
-                List.of(),
-                List.of(),
+                journal(sysId, "comments"),
+                journal(sysId, "work_notes"),
                 text(row, "cmdb_ci"),
-                List.of());
+                List.of());   // reassignmentHistory: needs sys_audit; not wired (see J5)
+    }
+
+    /**
+     * FND-61: one incident's journal entries for a field, oldest first (reading order).
+     * Best-effort — the triage is still useful without the conversation, so a journal
+     * failure degrades to "no comments" rather than failing the whole diagnosis.
+     */
+    private List<String> journal(String sysId, String element) {
+        if (sysId == null || sysId.isBlank()) return List.of();
+        try {
+            JsonNode entries = rows("/api/now/table/sys_journal_field",
+                    "element_id=" + sysId + "^element=" + element + "^ORDERBYsys_created_on",
+                    "value,sys_created_by,sys_created_on");
+            if (entries == null) return List.of();
+            List<String> out = new ArrayList<>();
+            entries.forEach(e -> {
+                String value = text(e, "value");
+                if (value == null || value.isBlank()) return;
+                String who = text(e, "sys_created_by");
+                out.add(who == null ? value : who + ": " + value);
+            });
+            return out;
+        } catch (Exception e) {
+            log.warn("could not read {} journal for {} — continuing without it", element, sysId, e);
+            return List.of();
+        }
     }
 
     @Override
@@ -100,18 +151,104 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 text(row, "support_group"), text(row, "business_criticality"), "cmdb_ci_service"));
     }
 
-    /** Appends the note to the incident's work_notes (or comments) journal. Advisory only. */
+    /**
+     * Appends the note to the incident's work_notes (or comments) journal. Advisory only.
+     *
+     * <p><b>Idempotent (FND-14).</b> {@code MockServiceNowGateway} always skipped an
+     * identical AI note; this connector previously PATCHed unconditionally — a real
+     * safety layer that J5/J10 both document and only actually existed against the mock.
+     * A retried request (a flaky proxy, a manual re-trigger, K1 re-selecting an incident
+     * after a cursor edge case) posted duplicate advisory comments onto a real,
+     * customer-visible ticket. Checked against actual history for that field via
+     * {@code sys_journal_field} — exact match only, same semantics as the mock.
+     */
     @Override
     public void addWorkNote(String number, String workNote) {
         JsonNode row = firstRow("/api/now/table/incident", "number=" + number, "sys_id");
         if (row == null) { log.warn("cannot post note; incident {} not found", number); return; }
         String sysId = text(row, "sys_id");
+
+        if (alreadyPosted(sysId, workNote)) {
+            log.info("[ServiceNow] identical AI work note already present on {} — skipping", number);
+            return;
+        }
+
         http.patch()
                 .uri("/api/now/table/incident/{sysId}", sysId)
                 .header("Content-Type", "application/json")
                 .body("{\"" + writeField + "\":" + jsonString(workNote) + "}")
                 .retrieve().toBodilessEntity();
         log.info("posted advisory {} to {}", writeField, number);
+    }
+
+    /** Recent journal entries for this field, exact-string-compared against {@code workNote}. */
+    private boolean alreadyPosted(String sysId, String workNote) {
+        JsonNode entries = rows("/api/now/table/sys_journal_field",
+                "element_id=" + sysId + "^element=" + writeField + "^ORDERBYDESCsys_created_on",
+                "value");
+        if (entries == null) return false;
+        for (JsonNode entry : entries) {
+            if (workNote.equals(text(entry, "value"))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * K1 poller feed. Queries {@code sys_created_on > since}, oldest first.
+     *
+     * <p>Deliberately <b>created</b>, not <b>updated</b> (FND-1): {@code addWorkNote} bumps
+     * {@code sys_updated_on}, so an updated-since query would re-select every incident this
+     * app comments on and re-run its diagnosis forever. {@code sys_created_on} is immutable.
+     *
+     * <p>ServiceNow compares dates in the <b>instance's UTC</b> representation, so the
+     * cursor is converted to UTC and formatted {@code yyyy-MM-dd HH:mm:ss}.
+     */
+    @Override
+    public List<NewIncident> findIncidentsCreatedSince(OffsetDateTime since, int limit) {
+        if (limit <= 0) return List.of();
+        String utc = since.atZoneSameInstant(java.time.ZoneOffset.UTC).format(SNOW_DATETIME);
+        String query = "sys_created_on>" + utc + "^ORDERBYsys_created_on";
+
+        JsonNode resp = http.get()
+                .uri(uri -> uri.path("/api/now/table/incident")
+                        .queryParam("sysparm_query", query)
+                        .queryParam("sysparm_fields", "number,sys_created_on")
+                        // Raw values, NOT display values: sys_created_on must come back in
+                        // the parseable UTC form, not the instance's user-facing date format.
+                        .queryParam("sysparm_display_value", "false")
+                        .queryParam("sysparm_limit", limit).build())
+                .retrieve().body(JsonNode.class);
+        JsonNode result = resp == null ? null : resp.get("result");
+        if (result == null || !result.isArray()) return List.of();
+
+        List<NewIncident> found = new ArrayList<>();
+        result.forEach(row -> {
+            String n = text(row, "number");
+            if (n == null || n.isBlank()) return;
+            OffsetDateTime createdAt = parseSnowDateTime(text(row, "sys_created_on"));
+            // A row we can't date is worse than useless for a high-water-mark cursor:
+            // including it with a guessed timestamp risks skipping real incidents.
+            if (createdAt == null) {
+                log.warn("poll: skipping {} — unparseable sys_created_on {}", n, text(row, "sys_created_on"));
+                return;
+            }
+            found.add(new NewIncident(n, createdAt));
+        });
+        log.debug("poll: {} incident(s) created after {}", found.size(), utc);
+        return found;
+    }
+
+    private static final java.time.format.DateTimeFormatter SNOW_DATETIME =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** ServiceNow returns raw datetimes as {@code yyyy-MM-dd HH:mm:ss} in UTC. */
+    private static OffsetDateTime parseSnowDateTime(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return java.time.LocalDateTime.parse(raw.trim(), SNOW_DATETIME).atOffset(java.time.ZoneOffset.UTC);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // --- helpers ----------------------------------------------------------------
@@ -145,7 +282,17 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         catch (Exception e) { return null; }
     }
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    // FND-51: the hand-rolled escaping here only covered \, ", \n — a \r or tab in an
+    // evidence summary (plausible: pasted log text) produced invalid JSON on a real PATCH.
+    // Jackson is already a transitive dependency; use it instead of re-deriving the
+    // escaping rules.
     private static String jsonString(String s) {
-        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+        try {
+            return JSON.writeValueAsString(s);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize work note text", e);
+        }
     }
 }

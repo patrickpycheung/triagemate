@@ -18,10 +18,12 @@
 >   claim appears again in the "Bottom line" near the end of THIS file — also superseded.
 >
 > Flow Designer mechanics and the `POST /api/diagnose/{number}` contract remain valid.
-> **The C-T\* constraints remain valid as constraints, but C-T3 ("insert-only") is
-> *violated* by the superseding K1 design** — K1 polls on `sys_updated_on > cursor`, and
-> J5's own work-note writes bump that field. That unresolved clash is logged as
-> **FND-1** in `/FOUND-ISSUES.md`; it is a live design issue, not a settled one.
+> **The C-T\* constraints remain valid — and C-T3 ("insert-only") was vindicated.** The
+> superseding K1 design initially specified an `sys_updated_on > cursor` poll, which J5's
+> own work-note writes would have re-triggered in a loop. ✅ **Resolved 2026-07-30**: the
+> built poller queries **`sys_created_on`** (immutable), which is exactly what C-T3
+> intended. See CDS `J10-incident-poller` and FND-1 in
+> [`docs/audit/found-issues-archive.md`](../../audit/found-issues-archive.md).
 
 **Current Phase**: ✅ Lean DDS complete → **auto-trigger DEFERRED for the demo**
 (operator decision 2026-07-24: cloud dev instance can't reach the corp-network laptop;

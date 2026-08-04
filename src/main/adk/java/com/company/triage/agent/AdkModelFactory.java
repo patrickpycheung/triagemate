@@ -27,7 +27,11 @@ public final class AdkModelFactory {
     public static LangChain4j fromEnv() {
         String baseUrl = require("LLM_BASE_URL", "triage.integrations.llm.base-url");
         String apiKey  = require("LLM_API_KEY",  "triage.integrations.llm.api-key");
-        String model   = cfg("LLM_MODEL", "triage.integrations.llm.model", "gpt-4o-mini");
+        // No default on purpose. A silent fallback to a mini model is the FND-8 failure
+        // class: D1's pitch is "a high Copilot-served model, on rails" and D3's contrast
+        // asserts it is the SAME frontier model Copilot CLI runs — both are false on a mini
+        // model, and nothing on screen would say so. Fail loudly instead.
+        String model   = require("LLM_MODEL", "triage.integrations.llm.model");
 
         OpenAiChatModel chat = OpenAiChatModel.builder()
                 .baseUrl(baseUrl)

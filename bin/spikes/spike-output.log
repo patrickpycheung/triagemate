@@ -1,0 +1,109 @@
+$ ./scripts/e2-proxy-spike.sh
+=== E2 proxy spike ===
+base-url: http://localhost:4000/v1
+model:    gpt-4o-mini
+
+[1/4] GET /models
+  ✅ proxy answered; 31 model(s) exposed
+       claude-opus-4.6
+       claude-sonnet-4.6
+       claude-sonnet-5
+       gemini-3.5-flash
+       gpt-5.3-codex
+       gpt-5.4-mini
+       gpt-5.4
+       trajectory-compaction
+       gpt-5-mini
+       gpt-4o-mini-2024-07-18
+       gpt-4o-2024-11-20
+       gpt-4o-2024-08-06
+       text-embedding-3-small
+       text-embedding-3-small-inference
+       claude-sonnet-4.5
+       claude-opus-4.5
+       claude-haiku-4.5
+       gemini-2.5-pro
+       gpt-4.1-2025-04-14
+       gpt-41-copilot
+       gpt-3.5-turbo-0613
+       gpt-4
+       gpt-4-0613
+       gpt-4-0125-preview
+       gpt-4o-2024-05-13
+       gpt-4-o-preview
+       gpt-4.1
+       gpt-3.5-turbo
+       gpt-4o-mini
+       gpt-4o
+       text-embedding-ada-002
+
+[2/4] configured model is served
+  ✅ 'gpt-4o-mini' is in the served list
+
+[3/4] POST /chat/completions (plain)
+  ✅ completion returned
+  ·  "content":"PROXY-OK"
+
+[4/4] POST /chat/completions (TOOL CALLING — the one that matters)
+  ✅ proxy returned tool_calls — the ADK agent loop (D1) will work
+
+=== 4 passed, 0 failed ===
+E2 validated — set base-url/model in secrets.properties and run: mvn -Padk spring-boot:run
+
+$ curl -s http://localhost:4000/v1/models | jq -r '.data[].id'
+claude-opus-4.6
+claude-sonnet-4.6
+claude-sonnet-5
+gemini-3.5-flash
+gpt-5.3-codex
+gpt-5.4-mini
+gpt-5.4
+trajectory-compaction
+gpt-5-mini
+gpt-4o-mini-2024-07-18
+gpt-4o-2024-11-20
+gpt-4o-2024-08-06
+text-embedding-3-small
+text-embedding-3-small-inference
+claude-sonnet-4.5
+claude-opus-4.5
+claude-haiku-4.5
+gemini-2.5-pro
+gpt-4.1-2025-04-14
+gpt-41-copilot
+gpt-3.5-turbo-0613
+gpt-4
+gpt-4-0613
+gpt-4-0125-preview
+gpt-4o-2024-05-13
+gpt-4-o-preview
+gpt-4.1
+gpt-3.5-turbo
+gpt-4o-mini
+gpt-4o
+text-embedding-ada-002
+
+$ curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
+{
+  "group": "Payments Platform Support",
+  "confidence": "MEDIUM",
+  "evidenceRefs": [
+    "e-cmdb",
+    "e-sim-INC0011902",
+    "e-kb-KB001234"
+  ]
+}
+[
+  "⚠ primary engine did not converge (IllegalStateException: Missing required config: LLM_API_KEY — set it in secrets.properties as triage.integrations.llm.api-key, or as an env var / -DLLM_API_KEY before running with -Padk / triage.engine=adk) — degraded to the deterministic engine",
+  "servicenow.getIncident(INC0012345) → CI=Order Portal, env=Production",
+  "understand: symptom clarified; orderId=INC-ORD-4471",
+  "servicenow.findSimilarIncidents → 2 hits",
+  "servicenow.findOwnership(Order Portal) → Payments Platform Support",
+  "confluence.search → 1 page(s)",
+  "sumo.search(scope=prod/payment, window=±10m, max=20) → 4 line(s); errorToken=PAYMENT_RECONCILE_MISMATCH",
+  "gitlab.searchCode('PAYMENT_RECONCILE_MISMATCH') → 1 hit(s) (log↔code citation)",
+  "contacts: 3 suggested (from 1 doc(s) + 1 code file(s), merged across sources)",
+  "report assembled: 2 candidates, 6 evidence items, assignment=Payments Platform Support",
+  "servicenow.addWorkNote → posted 'Sources consulted' comment",
+  "servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)"
+]

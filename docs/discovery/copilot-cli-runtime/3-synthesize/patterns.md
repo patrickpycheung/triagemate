@@ -36,3 +36,19 @@ E3 (does the **corporate** Copilot agreement allow programmatic / unattended use
 **E2 (Copilot-as-LLM-backend via LiteLLM/copilot-api), keeping our orchestration**, with
 E1 reconsidered only if we deliberately want Copilot to own planning for an *interactive*
 experience. Headless remains gated on the E3 ToS answer.
+
+## Traceability note (added 2026-07-30 by `/doc-test dds`, gap G3)
+
+Two loose ends this file had left implicit:
+
+- **E4 (`E4-control-guardrails`) is not cited above.** The synthesis draws on E1/E2/E3/E5
+  only. E4's contribution is nonetheless real and *is* carried forward — it is the reason
+  the recommended direction keeps **our** orchestration and J8's guardrails rather than
+  handing control to Copilot CLI (E1). Recording that here so E4 is not read as an
+  abandoned exploration.
+- **C3 (rate-limit / quota guard) has no pattern behind it in this file.** It was extracted
+  in `4-decide/concepts-extracted.md` from the practical seat-protection concern raised in
+  E2/E4, and it lands in the CDS only as an unlabelled parenthetical in
+  `docs/design-java/DEMO-RUNBOOK.md` ("built-in usage dashboard + rate-limit guard"). If C3
+  is meant to be a tracked concept it needs an explicit home; if it is really just an
+  attribute of the chosen proxy (`copilot-api`'s built-in guard), say so and drop the id.

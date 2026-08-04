@@ -4,38 +4,403 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>TriageMate</title>
+  <!-- Apply the saved theme before first paint. Without this the page renders in
+       the default dark theme for a frame and then repaints — very visible on a
+       projector, and the exact kind of flicker you don't want mid-demo. -->
+  <script>
+    try {
+      var t = localStorage.getItem('triagemate.theme');
+      if (t) document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* private mode — fall through to the default theme */ }
+  </script>
   <style>
-    :root { --bg:#0f1420; --card:#182030; --ink:#e8edf6; --muted:#93a1b5; --acc:#5aa9ff; --ok:#3ecf8e; --warn:#ffb454; }
+    /* ---- Theme tokens -------------------------------------------------------
+       Every colour the page paints comes from one of these. Adding a theme
+       below means overriding these 17 vars — no rule outside :root/[data-theme]
+       may hardcode a hex, or that theme silently half-applies. Theme choice is
+       cosmetic only: it never changes what the page reports (see the FND-16/25
+       notes in render() — those read real DiagnosisResult fields, not colours).
+    */
+    /* Every theme here is a variation on ONE identity: Australia Post. The earlier
+       mixed set (midnight blue, hackathon purple, ServiceNow green, neutral paper) was
+       cut — this is an Australia Post hackathon, so the palette should say so, and a
+       theme picker offering an unrelated purple only invited someone to demo in it.
+       What varies between these six is the SURFACE the red sits on (light, dark, warm,
+       max-contrast) and, in one case, the accent the real corporate ServiceNow instance
+       actually uses. --brand is Australia Post red in all of them without exception:
+       the company doesn't change with the room. */
+
+    /* Australia Post — the corporate read: red on white, high-key. Also :root, so it is
+       what an unknown/legacy saved theme falls back to rather than a blank page. */
+    :root, [data-theme="auspost"] {
+      --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
+      --acc:#dc1928; --ok:#0a7d54; --warn:#b45309;
+      --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
+      --chip:#fdeaec; --inset:#fbf7f7; --btn-ink:#ffffff; --trace:#4a5a6a;
+      --banner-bg:#fff5e6; --banner-ink:#a35a00;
+      --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
+      --crit:#c9184a;
+      --brand:#dc1928;
+    }
+
+    /* Variation 1 — Dark. The same red on a warm near-black, for a dim room where the
+       high-key white theme glares. Red lifted to #ff4b57 because #dc1928 on near-black
+       sits under the contrast floor for small text. */
+    [data-theme="auspost-dark"] {
+      --bg:#14100f; --card:#1f1816; --ink:#f5ece9; --muted:#b09a95;
+      --acc:#ff4b57; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#3a2b28; --input-bg:#120e0d; --input-border:#4a3733;
+      --chip:#3d1f22; --inset:#191211; --btn-ink:#1a0405; --trace:#c9b3ae;
+      --banner-bg:#2e1c0a; --banner-ink:#ffb454;
+      --sn:#5fd96a; --cf:#5b9bff; --sl:#4fc3f7; --gl:#ff9d54;
+      --crit:#ff2f4d;
+      --brand:#ff4b57;
+    }
+
+    /* Variation 2 — Ink. Corporate dark done in navy rather than black: softer than the
+       Dark variation, and closer to the chrome of the real ServiceNow instance. */
+    [data-theme="auspost-ink"] {
+      --bg:#151827; --card:#1e2236; --ink:#e9ecf5; --muted:#98a1bd;
+      --acc:#ff5468; --ok:#3ecf8e; --warn:#ffb454;
+      --border:#2c3350; --input-bg:#11141f; --input-border:#39415f;
+      --chip:#33203a; --inset:#191d2e; --btn-ink:#14060a; --trace:#a9b3cc;
+      --banner-bg:#2a1e0c; --banner-ink:#f2b25c;
+      --sn:#5fd96a; --cf:#7aa7ff; --sl:#4fd1e8; --gl:#ff9d54;
+      --crit:#ff4257;
+      --brand:#ff4b57;
+    }
+
+    /* Variation 3 — ServiceNow. Colours sampled from the real DAP DP dashboard
+       (theme-AusPost-ServiceNow.png). Its content sits on white/light-grey, so this is a
+       light theme; --ink is the screenshot's own navy chrome colour. The accent is the
+       instance's link/action blue (#3c59e7), NOT the red — red is the base theme's whole
+       identity, and that instance simply doesn't lead with it (the logo is the only red
+       on the page). The mark stays red regardless, via --brand. */
+    [data-theme="auspost-servicenow"] {
+      --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#5f6480;
+      --acc:#3c59e7; --ok:#1f9254; --warn:#cc7a00;
+      --border:#dcdcea; --input-bg:#ffffff; --input-border:#c2c3d8;
+      --chip:#e7e9fb; --inset:#f4f4fa; --btn-ink:#ffffff; --trace:#4c5170;
+      --banner-bg:#fff5e6; --banner-ink:#a35a00;
+      --sn:#1f9254; --cf:#0052cc; --sl:#0b7285; --gl:#b8511c;
+      --crit:#d32f2f;
+      --brand:#dc1928;
+    }
+
+    /* Variation 4 — Warm. Cream paper rather than clinical white: reads well in print
+       and in screenshots pasted into a deck, where pure #fff blows out. */
+    [data-theme="auspost-warm"] {
+      --bg:#faf6f1; --card:#fffdfa; --ink:#2b2119; --muted:#6d6055;
+      --acc:#c41425; --ok:#0a7d54; --warn:#a75d0a;
+      --border:#e6dcd0; --input-bg:#fffdfa; --input-border:#cfc2b3;
+      --chip:#f7e3e0; --inset:#f5efe7; --btn-ink:#ffffff; --trace:#5b4f45;
+      --banner-bg:#fdf0da; --banner-ink:#8a5000;
+      --sn:#1a7f4b; --cf:#12489e; --sl:#0b6273; --gl:#a8480f;
+      --crit:#b0122f;
+      --brand:#dc1928;
+    }
+
+    /* Variation 5 — Contrast. Max legibility for a projector or the back of a room:
+       pure black, pure white text, saturated red. Answers the J11 legibility question
+       the hard way — if it reads here, it reads anywhere. */
+    [data-theme="auspost-contrast"] {
+      --bg:#000000; --card:#0d0d0d; --ink:#ffffff; --muted:#cfcfcf;
+      --acc:#ff2b3d; --ok:#00e676; --warn:#ffab00;
+      --border:#4a4a4a; --input-bg:#000000; --input-border:#7a7a7a;
+      --chip:#3a0710; --inset:#140406; --btn-ink:#ffffff; --trace:#e6e6e6;
+      --banner-bg:#2e0a10; --banner-ink:#ffab00;
+      --sn:#3ddc72; --cf:#5fb0ff; --sl:#33e3ff; --gl:#ff9445;
+      --crit:#ff2b2b;
+      --brand:#ff2b3d;
+    }
+
     * { box-sizing:border-box; }
     body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
     .wrap { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
     h1 { font-size:22px; margin:0 0 4px; }
     .sub { color:var(--muted); margin:0 0 20px; }
+    /* Brand row: the Australia Post mark beside the app title. */
+    .brand { display:flex; align-items:flex-start; gap:14px; }
+    .brand-mark { flex:0 0 auto; width:40px; height:40px; color:var(--brand); margin-top:-2px; }
+    @media (max-width:520px) { .brand-mark { width:32px; height:32px; } }
     .row { display:flex; gap:10px; margin-bottom:22px; }
-    input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid #2a3550; background:#0d1220; color:var(--ink); font-size:15px; }
-    button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:#04122b; font-weight:600; cursor:pointer; }
+    input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid var(--input-border); background:var(--input-bg); color:var(--ink); font-size:15px; }
+    button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:var(--btn-ink); font-weight:600; cursor:pointer; }
     button:disabled { opacity:.5; cursor:default; }
-    .card { background:var(--card); border:1px solid #24304a; border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
     .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
-    .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:#243350; color:var(--acc); margin-left:6px; }
-    .bar { height:7px; background:#243350; border-radius:5px; overflow:hidden; margin-top:4px; }
-    .bar > i { display:block; height:100%; background:var(--acc); }
-    .cand { margin-bottom:12px; }
-    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:#0e1626; margin-bottom:7px; border-radius:0 6px 6px 0; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
+    .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:var(--inset); margin-bottom:7px; border-radius:0 6px 6px 0; }
     .ev b { color:var(--acc); text-transform:uppercase; font-size:11px; }
     .src { color:var(--muted); }
     ul { margin:6px 0 0; padding-left:18px; }
-    .trace { font:12px/1.5 ui-monospace,monospace; color:#9fb3d0; white-space:pre-wrap; }
+    .trace { font:12px/1.5 ui-monospace,monospace; color:var(--trace); white-space:pre-wrap; }
     .advisory { color:var(--warn); font-size:12px; }
+    .link { color:var(--acc); text-decoration:underline; }
+
+    /* ---- Diagnosis card: logical grouping (initial problem / context facts /
+       confidence), so the top-of-page report reads as distinct blocks instead
+       of two run-on paragraphs. */
+    .diag-label {
+      display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--muted); margin-bottom:3px; font-weight:600;
+    }
+    .diag-problem {
+      font-size:14px; line-height:1.5; padding:10px 14px; margin-bottom:14px;
+      border-left:4px solid var(--acc); background:var(--inset); border-radius:0 8px 8px 0;
+    }
+    .diag-problem .diag-label { color:var(--acc); }
+    .diag-facts { display:flex; flex-wrap:wrap; gap:14px 32px; }
+    .diag-fact { font-size:13px; }
+
+    /* ---- LT5: trace-row visual vocabulary (J11) ------------------------------
+       CSS-only building blocks for step-row rendering. LT3's replay renderer
+       and LT4's live poller both build rows from these classes via the
+       stepStateToDataState()/traceRowHtml() helpers in the script below.
+       Reuses the .ev left-rail idiom (accent border-left + inset background)
+       as its structural base. State lives purely in [data-state] on
+       .trace-row; motion (badge glow-pulse + rail shimmer) is layered on top
+       and is NEVER the only signal — border-left color/token conveys state
+       on its own. verification-lt5-projector/findings.md measured the glow
+       ring at 1.31-1.69:1 contrast, below WCAG's 3:1 non-text minimum in
+       EVERY theme — it's the weakest of three signals, decorative not
+       load-bearing, which is also why prefers-reduced-motion can drop it
+       without losing any information. */
+    .trace-row {
+      position:relative; overflow:hidden; display:flex; gap:10px; align-items:center;
+      padding:8px 10px; margin-bottom:7px; border-radius:0 6px 6px 0;
+      border-left:3px solid var(--border); background:var(--inset);
+    }
+    .trace-badge {
+      position:relative; flex:0 0 auto; width:32px; height:32px; border-radius:8px;
+      display:grid; place-items:center; background:var(--chip); color:var(--muted);
+      font-weight:700; font-size:12px;
+    }
+    .trace-body { flex:1; min-width:0; }
+    .trace-label { font-size:13px; color:var(--ink); }
+    .trace-meta { font-size:11px; color:var(--muted); margin-top:1px; }
+
+    /* -- state tokens: StepState -> data-state, NOT a lowercase of the Java
+       enum. queued/active/done/fail/warn are the 5 the design already names;
+       "abandoned" is this task's own extension for the ABANDONED enum value
+       the CDS table doesn't cover (segment-per-attempt / honesty contract —
+       see README.md lines 110-113). Mirrored 1:1 in stepStateToDataState()
+       below; keep the two in sync if either changes. */
+    .trace-row[data-state="queued"] { opacity:.6; }
+    .trace-row[data-state="queued"] .trace-badge { color:var(--muted); }
+
+    .trace-row[data-state="active"] { border-left-color:var(--acc); }
+    .trace-row[data-state="active"] .trace-label { color:var(--acc); }
+    .trace-row[data-state="active"] .trace-badge {
+      color:var(--acc); animation:tt-pulse 1.4s ease-in-out infinite;
+    }
+    .trace-row[data-state="active"]::after {
+      content:""; position:absolute; left:0; bottom:0; height:2px; width:38%;
+      background:linear-gradient(90deg, transparent, var(--acc), transparent);
+      animation:tt-shimmer 1.5s linear infinite;
+    }
+
+    .trace-row[data-state="done"] { border-left-color:var(--ok); }
+    .trace-row[data-state="done"] .trace-badge { color:var(--ok); }
+
+    /* FAILED and DENIED share --warn (the theme system has no dedicated
+       error/red var — see :root token list at the top of this file) and are
+       told apart by border style + icon glyph instead, so state is never
+       carried by color alone here either. */
+    .trace-row[data-state="fail"] { border-left-color:var(--warn); }
+    .trace-row[data-state="fail"] .trace-badge { color:var(--warn); }
+    .trace-row[data-state="fail"] .trace-label::before { content:"\2715 "; }
+
+    .trace-row[data-state="warn"] { border-left-color:var(--warn); border-left-style:dashed; }
+    .trace-row[data-state="warn"] .trace-badge { color:var(--warn); }
+    .trace-row[data-state="warn"] .trace-label::before { content:"\26A0 "; }
+
+    /* ABANDONED (J11 Invariant 1): frozen mid-run by an FND-7 degrade. Kept
+       visible — never deleted, per the honesty contract — but struck through
+       and dimmed so it reads as "this happened, then stopped mattering". */
+    .trace-row[data-state="abandoned"] { opacity:.5; border-left-color:var(--muted); }
+    .trace-row[data-state="abandoned"] .trace-badge { color:var(--muted); }
+    .trace-row[data-state="abandoned"] .trace-label { text-decoration:line-through; }
+
+    /* Glow ring and shimmer both derive their color from var(--acc) via
+       color-mix() — never a hardcoded rgba(), which is the exact LT5 bug
+       (sketch.html hardcoded rgba(90,169,255,…), the midnight blue, so it
+       pulsed blue on every theme including auspost red and projector
+       yellow). color-mix() re-derives on every theme switch automatically,
+       no JS recompute needed — verified by inspection across all six
+       auspost* themes (every one references var(--acc) here; grepped for
+       hex/rgba in this block — none). */
+    @keyframes tt-pulse {
+      0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--acc) 0%, transparent); }
+      50% { box-shadow:0 0 0 5px color-mix(in srgb, var(--acc) 22%, transparent); transform:scale(1.06); }
+    }
+    @keyframes tt-shimmer {
+      0% { transform:translateX(-100%); }
+      100% { transform:translateX(360%); }
+    }
+
+    /* Round-6 TRIAGEMATE decision (README.md lines 145-161): model-think and
+       other non-platform rows render SUBORDINATE — no vendor badge, dimmer,
+       slightly indented, connective rows rather than peers of real platform
+       rows. Badging them as equals would overstate the evidence trail (only
+       3 of 7 rows in the measured run touched a real system). */
+    .trace-row--subordinate {
+      opacity:.6; margin-left:20px; padding-left:10px;
+      border-left-width:2px; border-left-style:dotted;
+    }
+    .trace-row--subordinate .trace-badge { display:none; }
+    .trace-row--subordinate .trace-label { font-size:12.5px; }
+
+    /* Brand-tinted badges (the --sn/--cf/--sl/--gl vars added in TASK-012).
+       Identity only — which system, not what state it's in. State is always
+       carried separately by border-left/icon/animation above. */
+    .trace-row[data-platform="servicenow"] .trace-badge { color:var(--sn); }
+    .trace-row[data-platform="confluence"] .trace-badge { color:var(--cf); }
+    .trace-row[data-platform="sumologic"]  .trace-badge { color:var(--sl); }
+    .trace-row[data-platform="gitlab"]     .trace-badge { color:var(--gl); }
+
+    /* Per-platform row background — the same brand hue as the badge, mixed into
+       --inset at low strength so consecutive calls to the same system read as one
+       band and a switch of system is visible before you read a word.
+
+       Kept at 7% deliberately. This is a THIRD encoding of identity (badge colour,
+       logo, now background) and identity is not the important signal in a trace —
+       state is. A stronger tint would compete with the state colours on the
+       left border and, on the light themes, start eating the contrast the label
+       text needs. color-mix against --inset (not a fixed colour) means each theme
+       tints its OWN surface, so this works on the near-black Contrast variation
+       and the cream Warm one without a per-theme rule.
+
+       TRIAGEMATE rows deliberately get NO tint: they aren't a system, and giving
+       them a background of their own would make them look like a fifth vendor —
+       the exact thing the Round-6 subordinate treatment above exists to prevent. */
+    .trace-row[data-platform="servicenow"] { background:color-mix(in srgb, var(--sn) 7%, var(--inset)); }
+    .trace-row[data-platform="confluence"] { background:color-mix(in srgb, var(--cf) 7%, var(--inset)); }
+    .trace-row[data-platform="sumologic"]  { background:color-mix(in srgb, var(--sl) 7%, var(--inset)); }
+    .trace-row[data-platform="gitlab"]     { background:color-mix(in srgb, var(--gl) 7%, var(--inset)); }
+
+    /* Requirement 3: reduced motion removes ALL animation (glow-pulse AND
+       shimmer) — state is still conveyed, because border-left color/token,
+       the icon glyph and the label text above never depended on motion in
+       the first place. The static ring below is a bonus, not a requirement. */
+    @media (prefers-reduced-motion:reduce) {
+      .trace-row[data-state="active"] .trace-badge,
+      .trace-row[data-state="active"]::after { animation:none !important; }
+      .trace-row[data-state="active"] .trace-badge {
+        box-shadow:0 0 0 3px color-mix(in srgb, var(--acc) 35%, transparent);
+      }
+      .trace-row[data-state="active"]::after { display:none; }
+    }
+
+    /* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
+       Frame copy above the row list — the honesty-contract sentence carrying
+       the four load-bearing words (replaying/completed/nothing is running
+       now/real). See lt3FrameText() below; this rule is purely typographic. */
+    .lt3-frame { color:var(--muted); font-size:12.5px; margin:-4px 0 14px; line-height:1.5; }
+
+    /* ---- LT7: provenance chips (J11, TASK-016) -------------------------------
+       Two separate chips, reusing the existing .pill badge idiom (the same one
+       the "advisory" label by <h1> and the suggested-assignment confidence use)
+       rather than inventing a new visual language. Laid out via this wrapper
+       only — .pill itself is untouched, so every other .pill on the page keeps
+       its current look. See provenanceChipsHtml() below for why these are two
+       chips and never one. */
+    .lt7-chips { display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 16px; }
+    .lt7-chips .pill { margin-left:0; }
+
+    /* ---- Theme picker (corner) ---- */
+    .theme-btn {
+      position:fixed; top:14px; right:14px; z-index:20;
+      width:38px; height:38px; padding:0; display:grid; place-items:center;
+      border-radius:50%; background:var(--card); color:var(--ink);
+      border:1px solid var(--border); cursor:pointer;
+      -webkit-appearance:none; appearance:none;
+    }
+    .theme-btn:hover { border-color:var(--acc); color:var(--acc); background:var(--card); }
+    .theme-menu {
+      position:fixed; top:60px; right:14px; z-index:20; width:232px;
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+      padding:8px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    .theme-menu[hidden] { display:none; }
+    .theme-menu h3 {
+      font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--muted); margin:4px 8px 8px;
+    }
+    .theme-opt {
+      display:flex; align-items:center; gap:9px; width:100%; padding:7px 8px;
+      background:none; border:0; border-radius:8px; cursor:pointer;
+      color:var(--ink); font:inherit; font-size:13.5px; text-align:left;
+      -webkit-appearance:none; appearance:none;
+    }
+    /* Explicit color on every state, not just the base rule: a bare <button> picks up the
+       browser/OS's own hover/active darkening (most visible on Safari/WebKit) unless
+       appearance is reset AND color is re-asserted — otherwise the label text visibly
+       dims on hover even though nothing here intends that. */
+    .theme-opt:hover { background:var(--inset); color:var(--ink); }
+    .theme-opt:active { background:var(--inset); color:var(--ink); }
+    .theme-opt[aria-checked="true"] { background:var(--chip); color:var(--acc); font-weight:600; }
+    .theme-opt[aria-checked="true"]:hover,
+    .theme-opt[aria-checked="true"]:active { background:var(--chip); color:var(--acc); }
+    .sw { width:15px; height:15px; border-radius:50%; flex:none; border:1px solid rgba(128,128,128,.45); }
+    .theme-note { color:var(--muted); font-size:11.5px; margin:8px 8px 4px; line-height:1.45; }
+    @media print { .theme-btn, .theme-menu { display:none; } }
   </style>
 </head>
 <body>
+
+<!-- Theme picker. Deliberately a plain corner control: the brand direction
+     is still undecided, so ship the shortlist and let a look at them settle
+     it rather than guessing. Every entry is now a variation on Australia
+     Post; the earlier unrelated palettes (midnight, hackathon purple,
+     ServiceNow green, neutral paper) were cut. -->
+<button class="theme-btn" id="themeBtn" title="Change theme"
+        aria-haspopup="true" aria-expanded="false" aria-controls="themeMenu">
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="13.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="17.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="8.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="6.5" cy="12.5" r="1.2" fill="currentColor" stroke="none"/>
+    <path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.5-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/>
+  </svg>
+  <span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Change theme</span>
+</button>
+
+<div class="theme-menu" id="themeMenu" role="menu" aria-labelledby="themeBtn" hidden>
+  <h3>Theme</h3>
+  <div id="themeList"></div>
+  <p class="theme-note">Cosmetic only — never changes what the report says.
+     Saved locally; <b>Projector</b> is the max-contrast one to try on the real screen.</p>
+</div>
+
 <div class="wrap">
-  <h1>TriageMate <span class="pill">advisory</span></h1>
-  <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
+  <!-- Australia Post mark. Traced from the corporate ServiceNow instance's own header
+       (theme-AusPost-ServiceNow.png) as geometry — circle, vertical cut, elliptical
+       counter — rather than embedded as a bitmap, so it stays sharp at any size and
+       inherits its colour from the theme. `currentColor` on the fill means it picks up
+       --acc, which is the real Australia Post red (#dc1928) in both AusPost themes and
+       the theme's own accent elsewhere. Internal hackathon app; the mark is here to
+       identify whose system this is, not as third-party branding. -->
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 80 80" role="img" aria-label="Australia Post">
+      <mask id="auspost-mark">
+        <rect width="80" height="80" fill="black"/>
+        <circle cx="39" cy="41.5" r="27.5" fill="white"/>
+        <rect x="30" y="0" width="7.5" height="80" fill="black"/>
+        <ellipse cx="42.5" cy="34" rx="13" ry="16" fill="black"/>
+      </mask>
+      <rect width="80" height="80" fill="currentColor" mask="url(#auspost-mark)"/>
+    </svg>
+    <div>
+      <h1>TriageMate <span class="pill">advisory</span></h1>
+      <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
+    </div>
+  </div>
 
   <div class="row">
-    <input id="inc" value="INC0012345" placeholder="INC0012345"/>
+    <input id="inc" value="INC0010005" placeholder="INC0010005"/>
     <button id="go" onclick="run()">Diagnose</button>
   </div>
 
@@ -43,27 +408,618 @@
 </div>
 
 <script>
+/* ---- Theme picker -------------------------------------------------------
+   Themes are pure CSS-variable overrides (see <style>), applied by setting
+   data-theme on <html>. Nothing here touches report rendering — a theme can
+   never change what the page claims happened.
+   The list order is the review order: the two real candidates first.
+*/
+const THEMES = [
+  { id:'auspost',            name:'Australia Post',      sw:'#dc1928' },
+  { id:'auspost-dark',       name:'AP · Dark',           sw:'#ff4b57' },
+  { id:'auspost-ink',        name:'AP · Ink',            sw:'#ff5468' },
+  { id:'auspost-servicenow', name:'AP · ServiceNow',     sw:'#3c59e7' },
+  { id:'auspost-warm',       name:'AP · Warm',           sw:'#c41425' },
+  { id:'auspost-contrast',   name:'AP · Contrast',       sw:'#ff2b3d' },
+];
+const THEME_KEY = 'triagemate.theme';
+const DEFAULT_THEME = 'auspost';
+
+function applyTheme(id) {
+  const theme = THEMES.some(t => t.id === id) ? id : DEFAULT_THEME;
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode — fine */ }
+  document.querySelectorAll('.theme-opt').forEach(el =>
+    el.setAttribute('aria-checked', String(el.dataset.theme === theme)));
+}
+
+function initThemes() {
+  const list = document.getElementById('themeList');
+  const menu = document.getElementById('themeMenu');
+  const btn = document.getElementById('themeBtn');
+
+  list.innerHTML = THEMES.map(t =>
+    `<button class="theme-opt" role="menuitemradio" aria-checked="false" data-theme="${t.id}">
+       <span class="sw" style="background:${t.sw}"></span>${t.name}
+     </button>`).join('');
+  list.querySelectorAll('.theme-opt').forEach(el =>
+    el.addEventListener('click', () => { applyTheme(el.dataset.theme); close(); }));
+
+  const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', e => { e.stopPropagation(); menu.hidden ? open() : close(); });
+  menu.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+  let saved = DEFAULT_THEME;
+  try { saved = localStorage.getItem(THEME_KEY) || DEFAULT_THEME; } catch (e) { /* ignore */ }
+  applyTheme(saved);
+}
+initThemes();
+
 async function run() {
   const inc = document.getElementById('inc').value.trim();
   const btn = document.getElementById('go'); const out = document.getElementById('out');
   if (!inc) return;
   btn.disabled = true; out.innerHTML = '<div class="card">Investigating…</div>';
+
+  // LT4 (J11, TASK-015): mint a runId and send it as X-Triage-Run-Id BEFORE the
+  // POST — the only channel the client has to learn a runId before the run ends
+  // (README.md "The runId protocol"). Sent unconditionally, even though the
+  // engine isn't known yet: for a deterministic run this only costs a couple of
+  // cheap poll round-trips racing a POST that resolves synchronously anyway
+  // (the backend registers a buffer for it regardless of engine, per
+  // DiagnosisOrchestrator#runOnce), and for an ADK run it's the only way to show
+  // anything during the measured 37s-93s the POST takes to resolve. Whichever
+  // engine actually answers is decided later, in render() below — see its
+  // isReplay/isLive dispatch for how the two renderers never race.
+  const runId = mintRunId();
+  const lt4Card = document.createElement('div');
+  lt4Card.className = 'card';
+  out.appendChild(lt4Card);
+  // Poll loop starts immediately, independent of (not awaited by) the POST
+  // below — that's the whole point: an ADK run's POST won't resolve for tens
+  // of seconds, and this is what fills the screen in the meantime.
+  const lt4 = startLt4Poll(runId, lt4Card);
+
   try {
-    const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, { method:'POST' });
-    render(await res.json());
+    const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, {
+      method: 'POST',
+      headers: { 'X-Triage-Run-Id': runId },
+    });
+    // FND-48: render() dereferences data.report.candidateSystems immediately, so a non-2xx
+    // body (which has no `report`) used to surface as "TypeError: Cannot read properties of
+    // undefined". Guard on res.ok first.
+    // FND-52: and guard BEFORE parsing. The first cut of this fix called res.json() above
+    // the res.ok check, which only works while every error is one the advice maps. Anything
+    // it doesn't map still falls through to Spring's whitelabel page, and a browser fetch
+    // (Accept: */*) gets HTML — so res.json() threw and the user saw
+    // "SyntaxError: Unexpected token '<'". That just swapped one opaque parse error for
+    // another. Read as text, then parse defensively.
+    const raw = await res.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_) { /* non-JSON error page */ }
+    if (!res.ok) {
+      const msg = (body && body.error) || res.statusText || 'request failed';
+      out.innerHTML = `<div class="card">Error (${res.status}): ${esc(msg)}</div>`;
+      return;
+    }
+    if (!body) { out.innerHTML = '<div class="card">Error: server returned a non-JSON body</div>'; return; }
+    render(body);
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${e}</div>`;
-  } finally { btn.disabled = false; }
+  } finally {
+    // Requirement 4: stop on done:true (handled inside startLt4Poll itself) OR
+    // when the POST's own 200 resolves — whichever is first. This covers the
+    // "POST resolves first" half unconditionally (idempotent — a no-op if the
+    // poll loop already self-stopped on `done`).
+    lt4.stop();
+    btn.disabled = false;
+  }
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
+/* ---- LT5 visual vocabulary building blocks -------------------------------
+   Building blocks only — no live TraceStep wiring here (that's TASK-014/015).
+   This is deliberately a lookup table, not a naive .toLowerCase(): PENDING,
+   FAILED and DENIED all diverge from a lowercase mapping (see README.md
+   lines 341-343 for the original 5; ABANDONED is this task's own extension
+   for the enum value the design doc's table doesn't cover — struck-through
+   per the segment-per-attempt section, README.md lines 110-113).
+*/
+const STEP_STATE_TO_DATA_STATE = {
+  PENDING:   'queued',
+  ACTIVE:    'active',
+  DONE:      'done',
+  FAILED:    'fail',
+  DENIED:    'warn',
+  ABANDONED: 'abandoned',
+};
+function stepStateToDataState(stepState) {
+  return STEP_STATE_TO_DATA_STATE[stepState] || 'queued';
+}
+
+// Explicit self-check of all 6 mappings — no browser test runner exists for
+// this static HTML/JS, so this is the closest thing to "test all five (six)
+// explicitly" that runs automatically on every page load.
+console.assert(stepStateToDataState('PENDING')   === 'queued',    'LT5 state mapping: PENDING');
+console.assert(stepStateToDataState('ACTIVE')    === 'active',    'LT5 state mapping: ACTIVE');
+console.assert(stepStateToDataState('DONE')      === 'done',      'LT5 state mapping: DONE');
+console.assert(stepStateToDataState('FAILED')    === 'fail',      'LT5 state mapping: FAILED');
+console.assert(stepStateToDataState('DENIED')    === 'warn',      'LT5 state mapping: DENIED');
+console.assert(stepStateToDataState('ABANDONED') === 'abandoned', 'LT5 state mapping: ABANDONED');
+
+// Row template — the reusable markup block TASK-014/015 will call per
+// TraceStep to build the live-poll / replay list.
+//   step = {
+//     state:     StepState string ('PENDING'|'ACTIVE'|'DONE'|'FAILED'|'DENIED'|'ABANDONED'),
+//     platform:  'servicenow'|'confluence'|'sumologic'|'gitlab'|'triagemate',
+//     badgeSvg:  inline vendor logo SVG (empty for 'triagemate' — no badge is shown),
+//     label:     the in-progress/result label text,
+//     meta:      small secondary line (platform, plus state when notable)
+//   }
+// The small secondary line under a step's label: which system, plus the state —
+// but ONLY when the state is worth saying. A DONE row's outcome is already the
+// label text right above it, so appending "done" is noise.
+//
+// Deliberately carries NO duration. It used to read "servicenow · 12 ms": that is
+// developer debug detail, and on the deterministic path (every step ~0-1 ms) it was
+// also actively misleading — a wall of "0 ms" reads as "nothing happened". The
+// trace is for a human watching a demo follow which systems were consulted, not
+// for profiling. Removed per direct product feedback.
+function stepMetaText(platform, state) {
+  const key = String(state || '').toUpperCase();
+  const suffix = {
+    PENDING:   'queued',
+    ACTIVE:    'in progress',
+    FAILED:    'failed',
+    DENIED:    'blocked',
+    ABANDONED: 'abandoned — fallback started',
+  }[key];
+  return suffix ? `${platform} · ${suffix}` : platform;
+}
+
+function traceRowHtml(step) {
+  const dataState = stepStateToDataState(step.state);
+  const subordinate = step.platform === 'triagemate';
+  const cls = 'trace-row' + (subordinate ? ' trace-row--subordinate' : '');
+  // badgeSvg is trusted, static markup from PLATFORM_LOGO_SVG (bundled asset
+  // strings, never user input) — inlined raw (not esc()'d) so its
+  // fill="currentColor" path inherits .trace-badge's per-platform `color`
+  // (var(--sn)/--cf/--sl/--gl), same theming mechanism the badge text used.
+  const badge = subordinate ? '' : `<div class="trace-badge">${step.badgeSvg || ''}</div>`;
+  return `<div class="${cls}" data-state="${esc(dataState)}" data-platform="${esc(step.platform || '')}">
+    ${badge}
+    <div class="trace-body">
+      <div class="trace-label">${esc(step.label)}</div>
+      <div class="trace-meta">${esc(step.meta || '')}</div>
+    </div>
+  </div>`;
+}
+
+/* ---- LT3: replay renderer (J11, TASK-014) --------------------------------
+   Renders an animated post-hoc REPLAY of an already-complete deterministic
+   run. The deterministic engine (and its DEGRADED_TO_DETERMINISTIC fallback,
+   FND-7) runs synchronously, so `data.steps` (List<TraceStep>, STREAM-001/003)
+   arrives fully resolved in the same POST response — there is never a "live"
+   window to stream for that path (README.md LT3, lines 170-206). This is the
+   ONLY renderer for that path; the live ADK path (data.engine === 'ADK') is
+   TASK-015's job (LT4: no pacing at all, render on arrival) and this code
+   must never run for it.
+
+   Reuses stepStateToDataState()/traceRowHtml() from LT5 (TASK-013) — row
+   markup is built there, not reinvented here. Only new here: mapping the
+   backend Platform enum to the lowercase tokens traceRowHtml()/CSS expect,
+   the log-scale duration bar, the paced sequential reveal, and the frame
+   copy honesty-contract sentence.
+*/
+
+// Platform enum (SERVICENOW/CONFLUENCE/SUMO/GITLAB/TRIAGEMATE, per
+// TraceStep.java) -> the lowercase tokens traceRowHtml()/[data-platform] CSS
+// expect. Note SUMO -> 'sumologic', not a lowercase of the enum name.
+const STEP_PLATFORM_TO_LOWER = {
+  SERVICENOW: 'servicenow', CONFLUENCE: 'confluence',
+  SUMO: 'sumologic', GITLAB: 'gitlab', TRIAGEMATE: 'triagemate',
+};
+// Real vendor logos (static/logos/, LT6 — operator ruling 2026-07-30/31: use
+// real marks, not initials, so a badge identifies which system was actually
+// consulted). Inlined here (not <img src="logos/*.svg">) because an <img>'s
+// SVG document is a separate rendering context — fill="currentColor" inside
+// it would NOT inherit .trace-badge's CSS `color`. Inlining puts the <path>
+// directly in this document's DOM, so currentColor resolves against the
+// badge's own color (var(--sn)/--cf/--sl/--gl, set per [data-platform] —
+// see the CSS rules near .trace-badge above), giving every theme its own
+// tint of the same mark, exactly like the two-letter badges did before.
+const PLATFORM_LOGO_SVG = {
+  servicenow: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill-rule="evenodd" fill="currentColor" d="M32.195 3.312A32.267 32.267 0 0 0 9.949 58.883a6.346 6.346 0 0 0 8.264.43 23.035 23.035 0 0 1 27.445 0 6.364 6.364 0 0 0 8.389-.43A32.267 32.267 0 0 0 32.195 3.312m-.18 48.275a15.632 15.632 0 0 1-16.133-16.026 16.044 16.044 0 1 1 32.07 0 15.614 15.614 0 0 1-16.026 16.026"/></svg>',
+  confluence: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M.87 18.257c-.248.382-.53.875-.763 1.245a.764.764 0 0 0 .255 1.04l4.965 3.054a.764.764 0 0 0 1.058-.26c.199-.332.454-.763.733-1.221 1.967-3.247 3.945-2.853 7.508-1.146l4.957 2.337a.764.764 0 0 0 1.028-.382l2.364-5.346a.764.764 0 0 0-.382-1 599.851 599.851 0 0 1-4.965-2.361C10.911 10.97 5.224 11.185.87 18.257zM23.131 5.743c.249-.405.531-.875.764-1.25a.764.764 0 0 0-.256-1.034L18.675.404a.764.764 0 0 0-1.058.26c-.195.335-.451.763-.734 1.225-1.966 3.246-3.945 2.85-7.508 1.146L4.437.694a.764.764 0 0 0-1.027.382L1.046 6.422a.764.764 0 0 0 .382 1c1.039.49 3.105 1.467 4.965 2.361 6.698 3.246 12.392 3.029 16.738-4.04z"/></svg>',
+  sumologic: '<svg viewBox="22.84 23.58 64 64" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M33.095 24.188c-5.766 2.418-9.505 6.48-9.573 12.95l-.02 37.13c.05 7.43 6.05 13.283 13.5 13.293h35.582c7.48-.01 13.49-5.697 13.567-13.205V37.03c-.05-5.002-2.506-8.77-6.754-11.433-1.37-.86-5.08-1.556-6.735-1.645-13.47-.705-27.31-.196-36.708-.196-.303 0-2.623.333-2.858.43zm9.7 27.35l7.35.01c1.194.04 1.596-.43 1.576-1.576a242.45 242.45 0 0 1 0-7.547c.04-2.623 1.517-4.336 3.7-4.336 2.26 0 3.788 1.752 3.827 4.405.02 1.165 0 2.32 0 3.77.254 1.478-.822 3.73.45 4.904 1.145 1.067 3.328.255 5.05.333 1.35.06 2.712-.03 4.062.03 2.085.098 3.7 1.782 3.67 3.74s-1.654 3.72-3.66 3.778c-2.643.078-5.286.078-7.93.01-1.263-.03-1.713.41-1.664 1.684.078 2.447.04 4.904.02 7.35-.02 2.77-1.43 4.425-3.74 4.444-2.27.02-3.73-1.654-3.778-4.444-.04-2.447-.07-4.904.01-7.35.04-1.253-.362-1.723-1.645-1.684-2.447.078-4.904.04-7.35.01-2.672-.03-4.2-1.43-4.16-3.76.04-2.25 1.664-3.74 4.22-3.77z"/></svg>',
+  gitlab: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg>',
+  triagemate: '',
+};
+function stepPlatformToLower(platform) {
+  return STEP_PLATFORM_TO_LOWER[platform] || 'triagemate';
+}
+
+// One row. `step.state === 'PENDING'` is the pre-render skeleton state (see
+// renderLt3Replay) — real duration/result text is withheld until the row is
+// actually revealed, so the skeleton doesn't spoil the "nothing is running
+// now" framing by showing timings ahead of time.
+//
+// No duration bar: an earlier version paired each row with a log-scale width
+// bar, but with step count/timing not always known ahead of a run it read as a
+// progress indicator it could not honestly be — removed per direct product
+// feedback, as was the duration text that replaced it (see stepMetaText).
+/* ---- Shared trace-card shell (J11) ---------------------------------------
+   LT3 (deterministic replay) and LT4 (ADK live) render the SAME structure —
+   header with a running count, one caption line, then a growing row list —
+   so switching engines doesn't change the shape of what the audience sees.
+   They differ in exactly two places, both deliberate and both honesty-contract
+   requirements, not layout: the word replay/live in the header, and what the
+   caption says. Everything else (row markup, growth behaviour, count) is shared.
+*/
+function traceCardShell(cardEl, mode, captionText) {
+  cardEl.innerHTML = `<h2>Tool-call trace — ${mode} (<span class="tc-count">0</span>)</h2>
+    <p class="lt3-frame">${esc(captionText)}</p>
+    <div class="tc-rows"></div>`;
+  return {
+    rowsEl: cardEl.querySelector('.tc-rows'),
+    countEl: cardEl.querySelector('.tc-count'),
+  };
+}
+
+/** Appends rows and keeps the header count in step — the one growth path both use. */
+function appendTraceRows(shell, steps) {
+  if (!steps.length) return;
+  shell.rowsEl.insertAdjacentHTML('beforeend', steps.map(traceStepRowHtml).join(''));
+  shell.countEl.textContent = shell.rowsEl.children.length;
+}
+
+function traceStepRowHtml(step) {
+  const platform = stepPlatformToLower(step.platform);
+  // Un-resolved rows (queued on the replay path, in-flight on the live path) show the
+  // catalog's friendly label ("Searching Confluence for a runbook…"); resolved rows show
+  // what actually came back. Both paths use the SAME rule — the replay path used to fall
+  // back to step.tool here, so a pending row read as the raw dotted key
+  // "confluence.search" while the live path said the sentence. Same data, two voices.
+  const unresolved = step.state === 'PENDING' || step.state === 'ACTIVE';
+  const label = unresolved
+    ? (step.label || step.tool || '(step)')
+    : (step.result || step.label || step.tool || '(step)');
+  return traceRowHtml({
+    state: step.state,
+    platform,
+    badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
+    label,
+    meta: stepMetaText(platform, step.state),
+  });
+}
+
+// The honesty-contract frame copy (README.md LT3, lines 177-181): must carry
+// all four load-bearing words verbatim — replaying, completed, "nothing is
+// running now", real — so the UI can never be mistaken for something live.
+function lt3FrameText(steps) {
+  // Still carries the four load-bearing words the design mandates — *replaying*,
+  // *completed*, *nothing is running now*, *real* — but no longer quotes a total
+  // duration, and claims the ORDER AND RESULTS are real rather than the "timings":
+  // durations are no longer shown per row, so promising them would point at
+  // something the reader can't see (and "0 ms total" read as a bug, not a fact).
+  const n = steps.length;
+  return `↺ Replaying a completed run — ${n} step${n === 1 ? '' : 's'}. `
+    + `Nothing is running now; steps are revealed at ~0.4 s each so they're readable. `
+    + `The order and the results below are real.`;
+}
+
+// Fills an already-inserted empty card element with the LT3 replay:
+// frame copy + a paced, sequential reveal of each step.
+//
+// Pre-render only the unconditional step prefix, and only when engine !=
+// ADK (README.md LT3, line 183): this replay is of an ALREADY-FINISHED run,
+// so the full `steps` array from the response IS the unconditional truth —
+// we never guess at a conditional step (e.g. gitlab.searchCode) that may not
+// have run; we only ever pre-render placeholders for steps that actually
+// happened, straight from real data. Guarded again here (not just by the
+// caller) as defense in depth: this function must never activate the replay
+// path for engine === 'ADK' (that path is TASK-015's, and it never paces).
+function renderLt3Replay(cardEl, data) {
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  const t = data.trace || [];
+  if (data.engine === 'ADK' || !steps.length) {
+    // Not this renderer's path (or no structured steps to replay) — fall
+    // back to the plain trace list so nothing regresses.
+    cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
+    return;
+  }
+
+  const shell = traceCardShell(cardEl, 'replay', lt3FrameText(steps));
+
+  // Paced sequential reveal — a REPLAY-ONLY rule (README.md LT3 pacing table):
+  // reveal step N after max(realDuration, ~0.4s). The live path never paces.
+  //
+  // Rows are APPENDED one at a time, exactly as the live path appends them on
+  // arrival. This used to pre-render every step as a grey PENDING skeleton and
+  // flip them in place — which made the two engines look like different
+  // products: deterministic showed a full list filling in, ADK showed a list
+  // growing. Appending is the only motion BOTH can do (the live path can't know
+  // its steps ahead of time), so it's the one they now share. The pacing stays
+  // the difference in TIMING, not in shape.
+  let cumulativeDelay = 0;
+  steps.forEach((step) => {
+    const realDuration = typeof step.durationMs === 'number' ? step.durationMs : 0;
+    cumulativeDelay += Math.max(realDuration, 400);
+    setTimeout(() => appendTraceRows(shell, [step]), cumulativeDelay);
+  });
+}
+
+/* ---- LT4: live poll renderer (J11, TASK-015) -----------------------------
+   Renders the ADK path (data.engine === 'ADK') while the run is still IN FLIGHT —
+   the counterpart to LT3's replay of an already-finished deterministic run.
+   Measured 37s-93s per real agentic run (README.md LT4), so replay-only would
+   leave the screen blank for that entire window; this is the fix.
+
+   The protocol (README.md "The runId protocol", Round 3): the client mints a
+   runId BEFORE the POST (the only channel to learn one before the run ends),
+   sends it as X-Triage-Run-Id, and polls GET /api/runs/{runId}/steps?since={n}
+   concurrently with the in-flight POST. `since` is a GLOBAL flattened-position
+   index (RunStepsController's javadoc), not a per-attempt seq — tracked here as
+   a running total of steps received so far (see startLt4Poll).
+
+   NO PACING — the exact opposite of LT3's renderLt3Replay. A live step is
+   measured 8.0s +/- 2.6 apart, far above any perceptible pacing floor, so
+   "pacing" it would only ever mean artificially delaying something the
+   audience is already waiting on (README.md lines 190-206, the pacing table).
+   Every row here renders the instant its poll response arrives.
+
+   Reuses traceRowHtml()/stepStateToDataState()/stepPlatformToLower() from LT5
+   (TASK-013) and PLATFORM_LOGO_SVG from LT3 (TASK-014) — row markup and the
+   platform/badge lookup are never reimplemented here.
+*/
+// The live counterpart of lt3FrameText — same caption slot, opposite claim, so the
+// two engines share a structure while each stays honest about what it is showing.
+const LT4_FRAME_TEXT = '▶ Live run — each step appears the moment that call returns. '
+  + 'Nothing here is paced or replayed; the order and the results below are real.';
+const LT4_POLL_INTERVAL_MS = 750; // within the design's ~500ms-1s window
+// The first poll is fired before the POST that creates the run is even sent
+// (see run(): "Poll loop starts immediately, independent of ... the POST
+// below"), so it routinely wins the race against the server registering the
+// run buffer — a bare fetch()+dispatch is comparable to or slower than one
+// poll tick. A 404 in that window is not "this run doesn't exist", it's
+// "this run doesn't exist YET". Only treat 404 as the endpoint's documented
+// terminal signal (RunNotFoundException: unknown/evicted) once that many
+// consecutive 404s have been seen with no successful poll in between —
+// enough grace for the registration race, still bounded so a genuinely
+// gone/evicted run doesn't poll forever.
+const LT4_NOT_FOUND_GRACE_ATTEMPTS = 5;
+
+// Client-minted runId (UUID). Only ever used as an opaque poll-buffer key
+// (X-Triage-Run-Id / RunTraceRegistry) — never parsed, so a strict RFC4122
+// generator isn't required, just a fresh unpredictable-enough string per call.
+function mintRunId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback for a context without crypto.randomUUID (older browser, or a
+  // non-secure context that isn't localhost) — v4-shaped is enough here.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// One row, built for immediate (unpaced) display — no duration bar, no PENDING
+// skeleton like LT3's traceStepRowHtml: a live step only ever arrives once it's a
+// real event (ACTIVE at the earliest), so there's nothing to pre-render.
+
+// Starts polling runId's live buffer and appending new rows into cardEl as
+// soon as each poll returns them. Returns { stop() } — idempotent — so the
+// caller can halt it from either governing condition (README.md requirement
+// 4): done:true from the poll response, or the original POST's own 200
+// resolving, whichever comes first.
+//
+// Requirement 6 (FND-7 mid-run degrade): no special-casing is needed here.
+// abandonAndStartFallback() re-tags attempt 0's un-consumed rows ABANDONED
+// in place and appends a synthetic FALLBACK_STARTED boundary row (platform
+// TRIAGEMATE, state DONE, label "Falling back to the deterministic engine")
+// as a genuinely NEW step — so it arrives through this same poll loop and
+// renders through this same traceStepRowHtml/traceRowHtml path: ABANDONED steps get
+// TASK-013's existing struck-through/dimmed treatment (stepStateToDataState
+// maps ABANDONED -> 'abandoned' already), and the boundary row's own label
+// text visibly announces the transition, rather than either being silently
+// dropped or requiring a bespoke second code path.
+function startLt4Poll(runId, cardEl) {
+  // Same shell the replay path uses — header with a running count, one caption
+  // line, then the growing row list. The caption is the live counterpart of
+  // LT3's replay frame: same slot, same styling, opposite claim.
+  const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
+  let since = -1; // -1 == "send everything so far" (RunStepsController default)
+  let stopped = false;
+  let timer = null;
+  let everSawData = false;
+  let notFoundStreak = 0;
+
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    if (timer) clearTimeout(timer);
+  }
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/steps?since=${since}`);
+      if (res.status === 404) {
+        notFoundStreak++;
+        // Once the run has been seen alive, a later 404 is the endpoint's
+        // documented terminal signal (RunNotFoundException: evicted) — stop
+        // immediately. Before that, it's most likely the startup
+        // registration race (see LT4_NOT_FOUND_GRACE_ATTEMPTS above) — keep
+        // polling until the grace budget is spent. Either way the POST's own
+        // response remains the authoritative final answer regardless of what
+        // polling did or didn't see.
+        if (everSawData || notFoundStreak >= LT4_NOT_FOUND_GRACE_ATTEMPTS) {
+          stop();
+          return;
+        }
+        if (!stopped) timer = setTimeout(poll, LT4_POLL_INTERVAL_MS);
+        return;
+      }
+      if (res.ok) {
+        everSawData = true;
+        notFoundStreak = 0;
+        const data = await res.json();
+        let newCount = 0;
+        for (const attempt of (data.attempts || [])) {
+          const steps = attempt.steps || [];
+          if (steps.length) {
+            appendTraceRows(shell, steps);
+            newCount += steps.length;
+          }
+        }
+        // since indexes a POSITION in the flattened, strictly-append-only step
+        // list (RunStepsController javadoc) — every step index > since was just
+        // delivered, contiguously, so advancing by the count received is exact.
+        since += newCount;
+        if (data.done) { stop(); return; }
+      }
+      // A non-404, non-ok response (transient 5xx) is swallowed here rather
+      // than stopping the loop — the POST is still the run's actual owner and
+      // this is just its progress feed; one bad poll shouldn't blind the rest.
+    } catch (e) {
+      // Network hiccup — same reasoning: keep polling, don't crash the UI.
+    }
+    if (!stopped) timer = setTimeout(poll, LT4_POLL_INTERVAL_MS);
+  }
+  poll();
+  return { stop };
+}
+
+// Fills cardEl with the run's FINAL, fully-settled steps once the POST's own
+// 200 has landed — data.steps (DiagnosisResult, always populated regardless
+// of engine) is the ground truth. This corrects any staleness the poll loop
+// could not see: RunStepsController's since-index scheme only ever re-sends
+// a genuinely NEW position, so a step whose row resolved (ACTIVE -> DONE)
+// AFTER an earlier poll had already delivered its ACTIVE row at that index
+// never gets a live update (its javadoc calls this "bounded and
+// self-healing") — this settle-render is exactly that healing step. Also
+// still governed by "no pacing, ever": rendered in one shot, no setTimeout.
+function renderLt4Final(cardEl, data) {
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  const t = data.trace || [];
+  if (!steps.length) {
+    cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
+    return;
+  }
+  const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
+  appendTraceRows(shell, steps);
+}
+
+/* ---- LT7: provenance chips (J11, TASK-016) --------------------------------
+   TWO separate chips, NEVER collapsed into one "mock (no network)"-style
+   label (design doc §LT7): a single combined chip would be untruthful twice
+   over — (1) connector selection is per-connector and mixable (FND-10), e.g.
+   servicenow=real while confluence/sumo/gitlab stay mock is a valid,
+   already-supported run, which one chip can't represent; (2) "no network" is
+   FALSE on the ADK path even when every connector is mock, because the ADK
+   engine still talks to the Copilot proxy over the network — a combined chip
+   claiming "no network" would be lying about the LLM call itself. Scoping the
+   no-network implication to *connector* network only (never the engine as a
+   whole) is exactly why these stay two chips.
+
+   Built once here and rendered once in render()'s own shared template (below)
+   rather than inside renderLt3Replay()/renderLt4Final() — provenance is a
+   run-level property of `data`, not a renderer-specific one, and both the
+   LT3 replay path and the LT4 live path call render() for the same `data`.
+*/
+
+// data.connectors (TASK-016, DiagnosisResult#connectors) is a per-connector
+// map, e.g. { servicenow: "real", confluence: "mock", sumo: "mock", gitlab: "mock" }
+// — reflects the ACTUAL triage.connectors.* config for this run (read live by
+// ConnectorModeProvider server-side), never a hardcoded demo string.
+function connectorChipText(connectors) {
+  const entries = Object.entries(connectors || {});
+  if (!entries.length) return 'connectors: unknown';
+  const label = mode => (mode === 'real' ? 'real' : 'fixtures');
+  const allSameMode = entries.every(([, mode]) => mode === entries[0][1]);
+  if (allSameMode) return `connectors: all ${label(entries[0][1])}`;
+  // Mixed (FND-10, not allSameMode): every entry is either 'real' or a
+  // fixture-ish mode, so the non-real remainder is uniformly "fixtures" by
+  // construction — name every real connector explicitly, then group the rest
+  // as "others=fixtures", the design doc's own example format (README.md
+  // LT7: "servicenow=real, others=fixtures").
+  const realNames = entries.filter(([, mode]) => mode === 'real').map(([name]) => name);
+  if (realNames.length) {
+    return `connectors: ${realNames.map(name => `${name}=real`).join(', ')}, others=fixtures`;
+  }
+  // No connector reported exactly 'real' yet modes differ (e.g. an unexpected
+  // string value) — fall back to a fully explicit per-connector listing
+  // rather than asserting a grouping that wasn't actually verified.
+  return 'connectors: ' + entries.map(([name, mode]) => `${name}=${label(mode)}`).join(', ');
+}
+
+// data.engine scopes what "no network" can mean: DETERMINISTIC and its FND-7
+// DEGRADED_TO_DETERMINISTIC fallback never touch a model/LLM at all (offline);
+// ADK always talks to the Copilot proxy over the network to reach the model,
+// regardless of what the connector chip says. Same field render() already
+// reads for the degraded banner (FND-16) — no new data plumbing here either.
+function engineChipText(engine) {
+  return engine === 'ADK' ? 'ADK · via Copilot proxy' : 'deterministic · offline';
+}
+
+function provenanceChipsHtml(data) {
+  const connectorText = connectorChipText(data.connectors);
+  const engineText = engineChipText(data.engine);
+  return `<div class="lt7-chips">
+    <span class="pill" title="Per-connector real vs fixture status for this run — mixable per FND-10">${esc(connectorText)}</span>
+    <span class="pill" title="Which engine produced this report — scopes any 'no network' claim to connectors only">${esc(engineText)}</span>
+  </div>`;
+}
+
+// Confidence -> colour. HIGH is the most actionable signal (the diagnosis is
+// confident there's a real match) so it gets the most attention-grabbing
+// colour, walking the opposite of what "confidence" might suggest at a
+// glance: LOW is calm (--ok, green), MEDIUM is amber (--warn), HIGH is red
+// (--crit) — never a hardcoded value, all three vars are theme-derived (see
+// the :root token block) so this stays correct across every theme, same
+// discipline as the trace-row state colours.
+function confidenceColorVar(level) {
+  const key = String(level || '').toUpperCase();
+  if (key === 'HIGH') return 'var(--crit)';
+  if (key === 'MEDIUM') return 'var(--warn)';
+  return 'var(--ok)'; // LOW or unrecognised
+}
+function confidencePillHtml(level) {
+  const key = String(level || '').toUpperCase() || '—';
+  const color = confidenceColorVar(key);
+  return `<span class="pill" style="color:${color}">${esc(key)}</span>`;
+}
+// CandidateSystem.confidence is a raw 0..1 double (CandidateSystem.java has
+// no LOW/MEDIUM/HIGH enum here, unlike DiagnosisReport.confidenceOverall and
+// SuggestedAssignment.confidence, which are the Confidence enum already).
+// Bucketing here is a UI-only display judgment call, not a value the backend
+// asserts — thresholds picked to roughly split "this is probably it" (HIGH)
+// from "plausible, keep it on the shortlist" (LOW), same 3-way split the
+// backend already applies to overall/assignment confidence.
+function bucketConfidence(fraction) {
+  const f = Number(fraction) || 0;
+  if (f >= 0.75) return 'HIGH';
+  if (f >= 0.45) return 'MEDIUM';
+  return 'LOW';
+}
+
 function render(data) {
   const r = data.report, t = data.trace || [];
-  const cands = r.candidateSystems.map(c => `
-    <div class="cand"><div>${esc(c.name)} <span class="src">${Math.round(c.confidence*100)}%</span></div>
-    <div class="bar"><i style="width:${Math.round(c.confidence*100)}%"></i></div></div>`).join('');
-  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}</div>`).join('');
+  // No percentage, no progress bar (direct product feedback): just which
+  // systems are implicated and how confident the diagnosis is in each —
+  // the LOW/MEDIUM/HIGH pill, same visual language as confidenceOverall.
+  const cands = r.candidateSystems.map(c =>
+    `<div class="cand"><span>${esc(c.name)}</span>${confidencePillHtml(bucketConfidence(c.confidence))}</div>`
+  ).join('');
+  // FND-25: J7 always claimed "source badges + links" here; the link half was never
+  // rendered (only the reconstructed sources-comment preview below had it).
+  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</li>`).join('');
@@ -73,23 +1029,32 @@ function render(data) {
       <div style="margin-top:3px">${esc(c.reason)}</div>
       ${c.signal?`<div class="src" style="margin-top:2px;font-size:12px">${esc(c.signal)}</div>`:''}
     </div>`).join('');
-  const cmt = 'border-left:3px solid var(--acc);background:#0e1626;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
+  const cmt = 'border-left:3px solid var(--acc);background:var(--inset);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
   const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc);display:block;margin-bottom:8px';
-  document.getElementById('out').innerHTML = `
-    <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
-      <p><b>Symptom:</b> ${esc(r.reportedSymptom)}</p>
-      <p><b>Affected function:</b> ${esc(r.affectedFunction)} &nbsp; <b>Env:</b> ${esc(r.environment)} &nbsp; <b>Overall confidence:</b> ${esc(r.confidenceOverall)}</p>
-    </div>
-    <div class="card"><h2>Candidate systems</h2>${cands}</div>
-    <div class="card"><h2>Suggested assignment</h2>
-      <p>${esc(r.suggestedAssignment.group)} <span class="pill">${esc(r.suggestedAssignment.confidence)}</span></p></div>
-    <div class="card"><h2>Who to talk to</h2>
-      <p style="color:var(--muted);margin:-4px 0 12px;font-size:13px">People with recent context — wiki authors of the runbooks consulted and recent committers to the implicated file. Advisory; shown here only, not posted to the ticket.</p>
-      ${contacts||'<p class="src">— no contacts found for this incident</p>'}</div>
-    <div class="card"><h2>Evidence</h2>${ev}</div>
-    <div class="card"><h2>Contradicting evidence</h2><ul>${contra||'<li>—</li>'}</ul></div>
-    <div class="card"><h2>Missing information</h2><ul>${miss||'<li>—</li>'}</ul></div>
-    <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
+  // Which engine actually produced this report? The orchestrator degrades from the live
+  // ADK agent to the deterministic engine on failure (FND-7) and discloses it via
+  // data.engine — a real field on DiagnosisResult, not prose. Read that field directly
+  // (FND-16): matching the trace line's wording was never a contract (FND-8's own
+  // resolution says so), and it would have silently broken the moment that line's text
+  // changed. Mistaking a degraded run for a live one means narrating "frontier model
+  // reasoning" over deterministic output, so say it loudly, at the top, off a real signal.
+  const degraded = data.engine === 'DEGRADED_TO_DETERMINISTIC';
+  const degradedLine = t.find(s => /degraded to the deterministic engine/i.test(s || ''));
+  const banner = degraded ? `
+    <div class="card" style="border:1px solid var(--banner-ink);background:var(--banner-bg)">
+      <h2 style="color:var(--banner-ink);margin-top:0">⚠ Degraded run — this is NOT the live agent</h2>
+      <p style="margin:0 0 8px">The live ADK agent failed, so this report was produced by the
+      <b>offline deterministic engine</b>. The output below is real and complete, but
+      <b>no LLM was involved</b> — do not describe it as model reasoning.</p>
+      ${degradedLine ? `<div class="trace" style="color:var(--banner-ink)">${esc(degradedLine)}</div>` : ''}
+    </div>` : '';
+
+  // FND-25: this card previously rendered unconditionally, reconstructed client-side
+  // from the report, regardless of whether writeback actually ran — with
+  // triage.writeback.enabled=false the audience was told comments were posted when
+  // none were. data.writebackPosted is set by DiagnosisOrchestrator AFTER the write
+  // decision, the only place that actually knows.
+  const writebackCard = data.writebackPosted ? `
     <div class="card"><h2>Posted to ServiceNow — automatically</h2>
       <p style="color:var(--muted);margin:-4px 0 14px;font-size:13px">Two advisory comments, sources first. It only comments — never reassigns, closes, or changes the ticket.</p>
       <div style="${cmt}"><span style="${badge}">AI TRIAGE &middot; SOURCES CONSULTED</span><ul style="margin:0;padding-left:18px">${sources||'<li>—</li>'}</ul></div>
@@ -98,8 +1063,68 @@ function render(data) {
         <p style="margin:0 0 5px"><b>Likely system:</b> ${esc((r.candidateSystems[0]||{}).name||'—')} &nbsp; <b>Likely team:</b> ${esc(r.suggestedAssignment.group)} (${esc(r.suggestedAssignment.confidence)})</p>
         <p style="margin:0 0 5px"><b>Next check:</b> ${esc(r.recommendedNextAction)}</p>
         <p class="advisory" style="margin:0">Advisory only — no reassignment or changes made. The assigned engineer decides.</p></div>
+    </div>` : `
+    <div class="card"><h2>ServiceNow write-back — NOT posted</h2>
+      <p style="color:var(--muted);margin:-4px 0 0;font-size:13px"><code>triage.writeback.enabled=false</code> — the diagnosis below is real, but nothing was written to the ticket. This is a config toggle, not a failure.</p>
+    </div>`;
+
+  // LT3 (TASK-014): the deterministic engine (and its DEGRADED_TO_DETERMINISTIC
+  // fallback) finishes synchronously with a full `steps` array already in
+  // this response — replay it, paced. The live ADK path (engine === 'ADK')
+  // gets none of this pre-rendering; that's LT4 below (TASK-015, no pacing).
+  //
+  // LT4 (TASK-015): engine === 'ADK' means this response is the tail end of the
+  // run startLt4Poll() has been progressively rendering into its own card since
+  // before this POST was even sent. isReplay and isLive are mutually exclusive
+  // (data.engine !== 'ADK' vs === 'ADK') and each owns a DIFFERENT card id
+  // (lt3Card vs lt4Card) that only exists after this innerHTML write below — so
+  // there is exactly one render call for exactly one fresh element per run;
+  // they can never both fire, race, or double-render the same node. The
+  // progressive DOM startLt4Poll() built (inside run()'s now-detached lt4Card)
+  // is simply discarded here in favour of renderLt4Final()'s one-shot render
+  // straight from data.steps — the settled, authoritative picture (see
+  // renderLt4Final's own comment for why a fresh render, not a patch, is
+  // needed to heal any staleness the poll loop couldn't see).
+  const isReplay = data.engine !== 'ADK' && Array.isArray(data.steps) && data.steps.length > 0;
+  const isLive = data.engine === 'ADK';
+  let traceCardHtml;
+  if (isReplay) {
+    traceCardHtml = '<div class="card" id="lt3Card"></div>';
+  } else if (isLive) {
+    traceCardHtml = '<div class="card" id="lt4Card"></div>';
+  } else {
+    traceCardHtml = `<div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+  }
+
+  document.getElementById('out').innerHTML = `
+    ${banner}
+    <div class="card"><h2>Diagnosis — ${esc(r.incidentNumber)} <span class="advisory">${r.advisory?'ADVISORY ONLY — no reassignment performed':''}</span></h2>
+      <div class="diag-problem">
+        <span class="diag-label">Reported symptom</span>
+        ${esc(r.reportedSymptom)}
+      </div>
+      <div class="diag-facts">
+        <div class="diag-fact"><span class="diag-label">Affected function</span>${esc(r.affectedFunction)}</div>
+        <div class="diag-fact"><span class="diag-label">Environment</span>${esc(r.environment)}</div>
+        <div class="diag-fact"><span class="diag-label">Overall confidence</span>${confidencePillHtml(r.confidenceOverall)}</div>
+      </div>
     </div>
-    <div class="card"><h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div></div>`;
+    <div class="card"><h2>Candidate systems</h2>${cands}</div>
+    <div class="card"><h2>Suggested assignment</h2>
+      <p>${esc(r.suggestedAssignment.group)} <span class="pill">${esc(r.suggestedAssignment.confidence)}</span></p></div>
+    <div class="card"><h2>Who to talk to</h2>
+      <p style="color:var(--muted);margin:-4px 0 12px;font-size:13px">People with recent context — wiki authors of the runbooks consulted and recent committers to the implicated file. Advisory; shown here only, not posted to the ticket.</p>
+      ${contacts||'<p class="src">— no contacts found for this incident</p>'}</div>
+    <div class="card"><h2>Evidence</h2>${ev}</div>
+    ${contra ? `<div class="card"><h2>Contradicting evidence</h2><ul>${contra}</ul></div>` : ''}
+    ${miss ? `<div class="card"><h2>Missing information</h2><ul>${miss}</ul></div>` : ''}
+    <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
+    ${writebackCard}
+    ${provenanceChipsHtml(data)}
+    ${traceCardHtml}`;
+
+  if (isReplay) renderLt3Replay(document.getElementById('lt3Card'), data);
+  else if (isLive) renderLt4Final(document.getElementById('lt4Card'), data);
 }
 </script>
 </body>

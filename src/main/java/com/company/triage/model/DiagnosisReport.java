@@ -29,6 +29,29 @@ public record DiagnosisReport(
         boolean advisory
 ) {
     /**
+     * Prefix on every work note this app writes. Both notes below start with it, and it is
+     * the marker that lets a LATER run recognise its own output when it reads the ticket's
+     * journal back.
+     *
+     * <p>FND-67: without this, the app fed on itself. Once FND-61 made the real gateway read
+     * comments/work notes, a second diagnosis of the same incident saw the first one's notes
+     * as ordinary ticket conversation — so its keywords, identifiers and contact names were
+     * partly extracted from its own prior diagnosis, and drifted further from the human's
+     * actual words on every re-run. The first real-ServiceNow run surfaced it immediately:
+     * "AI Triage" was suggested as a person to talk to, extracted from this very prefix.
+     */
+    public static final String AI_NOTE_PREFIX = "[AI Triage ·";
+
+    /**
+     * Is this journal entry one this app wrote (as opposed to a human's)? Matched anywhere in
+     * the entry, not just at position 0, because {@code RealServiceNowGateway} prefixes each
+     * journal line with its author ({@code "sys_created_by: <text>"}).
+     */
+    public static boolean isAiAuthoredNote(String journalEntry) {
+        return journalEntry != null && journalEntry.contains(AI_NOTE_PREFIX);
+    }
+
+    /**
      * Comment 1 of the automatic write-back (J5): the SOURCES the triage consulted,
      * posted first so the diagnosis that follows is auditable — every claim is one
      * click from its evidence. Each line links to the document / log / file / ticket.

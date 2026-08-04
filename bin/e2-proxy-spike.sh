@@ -43,7 +43,19 @@ if [ -z "$MODELS_JSON" ] || ! echo "$MODELS_JSON" | grep -q '"data"'; then
   bad "no usable /models response — is the proxy running?"
   echo "     raw: ${MODELS_JSON:0:300}"
   echo
-  echo "     start one:  npx copilot-api@latest        # OAuth device-flow, port 4000"
+  echo "     start one:  npx --registry=https://registry.npmjs.org/ --cafile=/etc/ssl/certs/ca-certificates.crt copilot-api@latest start --proxy-env"
+  echo "                 # (--proxy-env must come AFTER 'start', not before — citty parses it as a"
+  echo "                 #  start-subcommand option, not a global flag)"
+  echo "                 # OAuth device-flow, port 4000. Two flags are needed on this laptop:"
+  echo "                 #  - --registry/--cafile: 'npx copilot-api@latest' alone fails with E401"
+  echo "                 #    because npm's default registry is the internal Nexus repo, which"
+  echo "                 #    needs creds copilot-api doesn't have; these flags route just this"
+  echo "                 #    package through the public npm registry via the system CA bundle."
+  echo "                 #  - --proxy-env: makes copilot-api honour http(s)_proxy so it can reach"
+  echo "                 #    api.github.com/api.githubcopilot.com through the corporate proxy."
+  echo "                 # NOTE: also requires the GitHub account to actually hold a Copilot seat —"
+  echo "                 # a 403 'No access to GitHub Copilot found' means the seat isn't assigned,"
+  echo "                 # not a proxy/registry problem."
   echo "             or: litellm --config config.yaml  # github_copilot provider"
   exit 1
 fi
@@ -79,11 +91,11 @@ fi
 # --- 4: tool calling (the actual spike) --------------------------------------
 echo
 echo "[4/4] POST /chat/completions (TOOL CALLING — the one that matters)"
-TOOLS='[{"type":"function","function":{"name":"get_incident","description":"Fetch a ServiceNow incident by number","parameters":{"type":"object","properties":{"number":{"type":"string","description":"e.g. INC0012345"}},"required":["number"]}}}]'
+TOOLS='[{"type":"function","function":{"name":"get_incident","description":"Fetch a ServiceNow incident by number","parameters":{"type":"object","properties":{"number":{"type":"string","description":"e.g. INC0010005"}},"required":["number"]}}}]'
 TOOLCALL="$(curl -sS --max-time 60 "$BASE/chat/completions" \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer dummy' \
-  -d "{\"model\":\"$MODEL\",\"temperature\":0,\"tools\":$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Look up incident INC0012345. Use the tool.\"}]}" 2>&1)"
+  -d "{\"model\":\"$MODEL\",\"temperature\":0,\"tools\":$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Look up incident INC0010005. Use the tool.\"}]}" 2>&1)"
 if echo "$TOOLCALL" | grep -q '"tool_calls"'; then
   ok "proxy returned tool_calls — the ADK agent loop (D1) will work"
 elif echo "$TOOLCALL" | grep -q '"content"'; then

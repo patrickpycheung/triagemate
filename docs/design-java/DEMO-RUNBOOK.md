@@ -24,6 +24,15 @@ The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:
 
 ## 0. One-time prep (before demo day)
 
+> **After the first-time setup below, `./run-adk.sh` starts the proxy for you** —
+> it checks `http://localhost:4000/v1/models`, and if nothing answers, runs
+> `copilot-api start --port 4000 --proxy-env` itself (falling back to `npx
+> copilot-api@latest` if `copilot-api` isn't on PATH) and waits up to 30s for it to
+> come up. The GitHub OAuth device-flow (step a below) only has to happen once —
+> the token is cached, so later runs just reuse it. Steps (a)-(d) are still the
+> reference for first-time setup, corp-laptop npm/proxy issues
+> (`./bin/setup-copilot-api.sh`), and picking/validating the model.
+
 ### a) Stand up the Copilot → OpenAI proxy (E2)
 
 > **Validate with `./bin/e2-proxy-spike.sh` once it's up** — in particular check 4,
@@ -60,8 +69,17 @@ litellm --config config.yaml   # serves http://localhost:4000
 ### b) Discover the exact high-model id your seat exposes
 ```bash
 curl -s http://localhost:4000/v1/models | jq -r '.data[].id'
-# pick a HIGH tier, e.g. claude-opus-4.6 or gpt-5.3-codex (names change — use what's listed)
+# pick a HIGH tier (names change — use what's listed)
 ```
+> **Verified 2026-07-30 on the corp laptop**: the seat exposes **31 models**, including
+> `claude-opus-4.6`, `claude-sonnet-5`, `gpt-5.3-codex`, `gpt-5.4`, `gemini-3.5-flash`.
+> **Demo on `claude-opus-4.6`.** Raw list: `bin/spikes/spike-output.log`.
+>
+> ⚠️ **Do not leave this on `gpt-4o-mini`.** It's served, so the spike's check 2 passes —
+> but it is a *mini* model, and both the step-2 narration ("a high Copilot model
+> reasoning, on rails") and D3's contrast ("the frontier model is the same one we just
+> used") become false on stage. The `secrets.properties.example` default is now
+> `claude-opus-4.6` for exactly this reason.
 
 ### c) Wire the app to the proxy (config-only — no code change)
 `secrets.properties` at the repo root:
@@ -80,7 +98,7 @@ curl -s http://localhost:4000/v1/chat/completions \
 
 # app + high model, one incident, live agent path:
 ./run-adk.sh &
-curl -s -X POST http://localhost:8080/api/diagnose/INC0012345 | jq '.report.suggestedAssignment, .trace'
+curl -s -X POST http://localhost:8080/api/diagnose/INC0010005 | jq '.report.suggestedAssignment, .trace'
 ```
 
 You should see advisory output **and** a `trace` proving bounded, real tool calls.
@@ -94,7 +112,7 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
 | T2 | **Primary (D1)** — our loop + high model | `./run-adk.sh` | 8080 |
 | T3 | **Fallback (D2)** — deterministic, offline | `./run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
-| T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0012345: <paste the summary>. Diagnose it."` | — |
+| T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0010005: <paste the summary>. Diagnose it."` | — |
 | — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
 
 Start T1 → T2 → T3 **before** you present, so both instances are warm. T3 needs **no
@@ -105,7 +123,7 @@ network** (default deterministic engine), so it is your guaranteed floor.
 ## 2. Running the demo
 
 1. **Lead with the value + evidence trail (D4).** Open `http://localhost:8080`, trigger
-   `INC0012345`, and narrate: sources consulted → first-pass diagnosis → the **log↔code
+   `INC0010005`, and narrate: sources consulted → first-pass diagnosis → the **log↔code
    citation** (`payment_service.py:44`) → "who to talk to" → the **trace** showing it
    really called ServiceNow/Sumo/Confluence/GitLab. Emphasise **advisory-only + bounded**.
 2. **This is a high Copilot model reasoning, on rails.** Same quality ceiling as a fully
@@ -143,7 +161,7 @@ stage — flip and continue.
       field. A proxy that drops `tools` silently degrades D1 to a single-shot answer with
       **no evidence trail** — which is the whole demo. Run it before anything else.
 - [ ] JDK + Maven present (`mvn -v`) — a JRE alone cannot build `-Padk`.
-- [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0012345` with a real `trace`.
+- [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0010005` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
 - [ ] Decide **now** whether D3 runs — network ok? If unsure, **skip it**. (No MCP
       setup needed: D3 is tool-less by design — have the incident summary on the clipboard.)

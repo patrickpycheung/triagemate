@@ -1,0 +1,148 @@
+package com.company.triage.gateway.real;
+
+import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.TriagePropertiesFixture;
+import com.company.triage.model.LogEvidence;
+import com.company.triage.model.LogSearchRequest;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Properties;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Hits the REAL Sumo Logic API. Opt-in: skipped unless {@code secrets.properties} at the
+ * repo root carries live {@code triage.integrations.sumo.*} values, so a normal
+ * {@code mvn test} on a machine with no credentials stays green and offline.
+ *
+ * <p>This exists because every other Sumo test is a stub, and the failure this guards is
+ * one only the real API can show: a query missing the {@code _index} clause is perfectly
+ * well-formed and returns <b>zero rows</b> against the corporate instance. That reads as
+ * "no logs for this incident", not as a bug — exactly the kind of wrong that survives a
+ * green test suite. Verified 2026-08-03 against the AU instance.
+ *
+ * <p>Run explicitly: {@code mvn test -Dtest=RealSumoGatewayLiveTest}. The project and
+ * environment it probes are injectable — see the probe keys below.
+ */
+class RealSumoGatewayLiveTest {
+
+    /**
+     * Which project/environment to probe. Injected, not hardcoded: the target is only a
+     * means to reach the API, so baking one in makes the test fail for a reason that has
+     * nothing to do with this code the day that project stops logging. Resolution order —
+     * system property, then {@code secrets.properties} (same file as the credentials, so
+     * the whole live config lives in one gitignored place), then a default.
+     *
+     * <pre>
+     *   mvn test -Dtest=RealSumoGatewayLiveTest \
+     *       -Dsumo.probe.project=my-app -Dsumo.probe.environment=prod
+     * </pre>
+     * or in {@code secrets.properties}:
+     * <pre>
+     *   sumo.probe.project=my-app
+     *   sumo.probe.environment=prod
+     * </pre>
+     */
+    private static final String PROBE_PROJECT_KEY = "sumo.probe.project";
+    private static final String PROBE_ENVIRONMENT_KEY = "sumo.probe.environment";
+    private static final String DEFAULT_PROBE_PROJECT = "delivery-hazards";
+    private static final String DEFAULT_PROBE_ENVIRONMENT = "ptest";
+
+    private static Properties secrets;
+
+    /** System property → secrets.properties → default. */
+    private static String probe(String key, String fallback) {
+        String fromSysProp = System.getProperty(key);
+        if (fromSysProp != null && !fromSysProp.isBlank()) return fromSysProp.trim();
+        return secrets.getProperty(key, fallback).trim();
+    }
+
+    private static String probeProject() {
+        return probe(PROBE_PROJECT_KEY, DEFAULT_PROBE_PROJECT);
+    }
+
+    private static String probeEnvironment() {
+        return probe(PROBE_ENVIRONMENT_KEY, DEFAULT_PROBE_ENVIRONMENT);
+    }
+
+    @BeforeAll
+    static void loadSecrets() {
+        secrets = new Properties();
+        Path p = Path.of("secrets.properties");
+        if (Files.exists(p)) {
+            try (var in = Files.newInputStream(p)) {
+                secrets.load(in);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+    }
+
+    private static RealSumoGateway liveGateway() {
+        String base = secrets.getProperty("triage.integrations.sumo.base-url", "");
+        String user = secrets.getProperty("triage.integrations.sumo.user", "");
+        String secret = secrets.getProperty("triage.integrations.sumo.secret", "");
+        Assumptions.assumeTrue(!base.isBlank() && !user.isBlank() && !secret.isBlank(),
+                "no live Sumo credentials in secrets.properties — skipping live API test");
+
+        var blank = new IntegrationProperties.Endpoint("", "", "", "");
+        return new RealSumoGateway(new IntegrationProperties(
+                blank, blank,
+                new IntegrationProperties.Endpoint(base, user, secret, ""),
+                blank));
+    }
+
+    @Test
+    void theRealApiAnswersAScopedIndexedSearch() {
+        RealSumoGateway gateway = liveGateway();
+
+        var sumo = TriagePropertiesFixture.sumo();
+        OffsetDateTime to = OffsetDateTime.now();
+        LogSearchRequest req = new LogSearchRequest(
+                sumo.sourceCategoryFor(probeProject(), probeEnvironment()),
+                sumo.index(),
+                "",                       // no term — "everything in this scope+window"
+                to.minusMinutes(30), to,  // the same 30-minute bound the app enforces
+                sumo.maxResults());
+
+        List<LogEvidence> logs = gateway.search(req);
+
+        // The point of the test: a correctly-formed scope+index query returns rows. If the
+        // _index clause were dropped this comes back empty, which is the silent failure.
+        assertThat(logs)
+                .as("live Sumo returned no rows for %s — either the _index clause regressed, "
+                        + "or probe project '%s'/'%s' has stopped logging (point the test at a "
+                        + "live one with -D%s / -D%s)",
+                        req.toSumoQuery(), probeProject(), probeEnvironment(),
+                        PROBE_PROJECT_KEY, PROBE_ENVIRONMENT_KEY)
+                .isNotEmpty();
+
+        // Never more than the configured cap, and every row is from the scope we asked for.
+        assertThat(logs).hasSizeLessThanOrEqualTo(sumo.maxResults());
+        assertThat(logs).allSatisfy(l ->
+                assertThat(l.logger()).isEqualTo(req.sourceCategory()));
+    }
+
+    @Test
+    void aNonsenseScopeReturnsNothingRatherThanFailing() {
+        RealSumoGateway gateway = liveGateway();
+
+        var sumo = TriagePropertiesFixture.sumo();
+        OffsetDateTime to = OffsetDateTime.now();
+        List<LogEvidence> logs = gateway.search(new LogSearchRequest(
+                sumo.sourceCategoryFor("no-such-project-triagemate-probe", probeEnvironment()),
+                sumo.index(), "", to.minusMinutes(10), to, 5));
+
+        // An unknown category is a legitimate empty result, not an error — the engine
+        // relies on this to carry on and report "nothing corroborated it".
+        assertThat(logs).isEmpty();
+    }
+}

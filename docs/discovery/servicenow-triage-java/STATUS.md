@@ -22,6 +22,12 @@ resolves **only the forks the pivot introduced**:
 
 | # | Fork | Decision | Class |
 |---|---|---|---|
+> ⚠️ **`D1`–`D5` here are THIS workspace's decision forks** (FND-6). A different, unrelated
+> `D1`–`D4` exists in DDS [[orchestrator-vs-copilot-cli]] meaning **demo paths** (D1 = our
+> orchestration on a high model, D2 = deterministic fallback, D3 = Copilot CLI contrast,
+> D4 = evidence trail) — that is the namespace used by `DEMO-RUNBOOK.md` and the J-cards.
+> The two sets are not related; check which workspace a `Dn` came from before resolving it.
+
 | D1 | Agent engine: ADK SDK vs Spring AI vs manual loop | **ADK-Java** | ADM-3 |
 | D2 | Connector shape: Rovo skills vs MCP vs plain tools | **Plain Java tools (ADK FunctionTools)** | ADM-2 |
 | D3 | Build fresh vs reuse `auspost-mcp` | **Reuse GitLab/Confluence integrations** | ADM-1 |

@@ -6,6 +6,23 @@ spring:
   # demo. Its triage.integrations.* values override the env placeholders below.
   config:
     import: "optional:file:secrets.properties"
+  http:
+    client:
+      # FND-34: DiagnosisOrchestrator's timeout-ms only bounds engine.diagnose() — the
+      # two ServiceNow writeback calls in runOnce() and IncidentPoller's own
+      # findIncidentsCreatedSince call run directly on the caller's thread (K3's HTTP
+      # request thread, or K1's single scheduler thread) with no wrapper at all, and
+      # RestClient.Builder previously had no configured timeout, so a network partition
+      # or a proxy that accepts a connection and never responds could hang either thread
+      # forever. This is Spring Boot's global HTTP-client property namespace: it applies
+      # to any Spring-autoconfigured RestClient.Builder, including RealServiceNowGateway's
+      # injected one — no code change needed there. Real Confluence/Sumo/GitLab calls
+      # build their own RestClient directly (not Spring-managed) and stay covered only by
+      # the orchestrator's existing virtual-thread wall-clock timeout (best-effort
+      # cancellation, see DiagnosisOrchestrator's javadoc) since they run solely inside
+      # engine.diagnose() — the writeback/poller gap this closes is specific to ServiceNow.
+      connect-timeout: 5s
+      read-timeout: 20s
 
 server:
   port: 8080
@@ -23,10 +40,64 @@ triage:
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 
+  agent:
+    # FND-27: was previously an inline @Value default only, absent from both this file
+    # and every card — every other triage.* key is declared here. J8's tool-call
+    # budget (J2's BoundsCallback); the allowlist itself is not configurable, it's the
+    # fixed set of 8 registered tools (see AdkDiagnosisEngine.ALLOWED_TOOLS).
+    max-tool-calls: 10
+
+  trigger:
+    # K1 — outbound polling (DDS servicenow-local-trigger). ServiceNow can't reach a
+    # corp-network laptop, so the app polls out instead of being pushed to.
+    # OFF by default: the demo uses the manual POST /api/diagnose/{number} (K3), and a
+    # poller waking up mid-presentation to diagnose unrelated tickets is a stage hazard.
+    poll:
+      enabled: false
+      interval-ms: 30000     # 30s — poll latency is the accepted cost of no inbound path
+      batch-limit: 10        # max incidents pulled per tick
+      completed-cap: 500     # in-process completed-set bound (FND-1 layer 3)
+      # FND-45: K1 (poll.enabled=true) + triage.engine=adk is unattended, programmatic LLM
+      # use, which the C6 ToS ruling gates (docs/discovery/copilot-cli-runtime). Previously
+      # documented only in prose; the app now WARNs at startup unless this is explicitly
+      # set true — turning a silent gap into a decision on record, not a hard refusal.
+      unattended-llm-ack: false
+
   writeback:
     # Automatic advisory write-back (J5) — two comments per run (sources first, then
     # diagnosis). No human in the loop. It only comments; never reassigns/closes/re-prioritises.
     enabled: true
+
+  orchestrator:
+    # FND-15: wall-clock bound on a single engine call (either engine — the deterministic
+    # one makes real HTTP calls too once triage.connectors.*=real). A hung gateway or proxy
+    # previously hung the request forever, including on the K1 poller's single scheduler
+    # thread. A timeout on the ADK engine degrades via the normal FND-7 fallback; on the
+    # deterministic engine it propagates (nothing left to fall back to).
+    #
+    # This wraps the WHOLE engine.diagnose() call, and the ADK path can make up to
+    # triage.agent.max-tool-calls (10) LLM round trips against a real frontier model before
+    # it's done. A too-tight timeout doesn't just fail slow runs — it makes FND-15's own
+    # fallback fire on every normal-but-unhurried real run, which looks identical on stage to
+    # the model actually failing and defeats D1's whole point.
+    #
+    # 120s — MEASURED over 3 runs, not guessed (FND-69, 2026-08-01). The LT4 spike ran the
+    # real agent against a Copilot-served model with real ServiceNow + Confluence:
+    #   3 tool calls → 37s mean; 8.0s ± 2.6s per tool call; 13.1s for the final report.
+    #   ⇒ N calls ≈ N × 8.0s + 13.1s, so a full 10-call run ≈ 92.7s ± 8.2 (3.3 sd under 120s).
+    # The previous 90s (itself self-documented as "a safer guess, not a measurement") was
+    # therefore SHORTER than a run its own tool budget permits: max-tool-calls=10 allowed a
+    # diagnosis that timeout-ms=90000 would kill, degrading to deterministic mid-demo
+    # — indistinguishable on stage from the agent failing.
+    #
+    # Fixed by raising the clock rather than cutting the budget to ~7: the tool budget is a
+    # J8 SAFETY bound (how much the model may do), the timeout is a LIVENESS bound (how long
+    # we wait). Tightening the safety bound to paper over a liveness number would cost real
+    # investigation depth — the documented flow uses up to 8 of the 8 registered tools, so 7
+    # would cut into legitimate work — to fix something that isn't a safety problem.
+    # 120s puts the 10-call worst case 3.3 sd clear, the realistic 8-call case 5.9 sd clear.
+    # Full measurement: concepts/J11-live-thinking-trace/verification-lt4-latency/findings.md
+    timeout-ms: 120000
 
   servicenow:
     # Which incident journal the two comments append to:
@@ -34,12 +105,47 @@ triage:
     #   comments   — "Additional comments", customer-facing
     write-field: work_notes
 
-  # Bounded Sumo scopes the agent may search (J8 allowlist).
+  # FND-20: max-results and max-window-minutes are actually read and enforced in
+  # TriageMateTools.searchLogs (server-side) — previously max-results was declared here
+  # but the code hardcoded 20, and the time window came straight from the model with no
+  # span check at all.
   sumo:
-    allowed-scopes:
-      - prod/payment
-      - prod/order-api
+    # The J8 guardrail is a TEMPLATE, not a list of literal scopes.
+    #
+    # It used to be `allowed-scopes: [prod/payment, prod/order-api]` — the model typed a
+    # _sourceCategory and we checked it against that list. That was wrong for the real
+    # estate twice over: those two values were demo fixtures that exist in no real Sumo,
+    # and scopes aren't an access boundary here anyway (any credential that can search
+    # can see every environment). Keeping a literal list would have meant hand-maintaining
+    # one entry per project × environment, and a stale list silently returns zero results.
+    #
+    # Instead the model supplies a project slug + an environment, and the APP composes the
+    # category from this pattern. That is a stronger bound than the allowlist was: the
+    # model cannot type `_sourceCategory=*` or anything off-convention, because it never
+    # supplies the category at all — only two narrow fields, one of which is allowlisted.
+    source-category-pattern: "IDT/ITServices/Tomcat/{project}/{environment}/AppEvt_{project}"
+    # Projects that don't fit the pattern above (e.g. non-Tomcat estate). Key is the
+    # project slug; value is a full pattern that still supports {project}/{environment}.
+    source-category-overrides: {}
+    # Appended as `and _index=<value>`. Blank disables the clause entirely.
+    index: Global_Standard_Infrequent
+    # The {environment} allowlist — the one part of the composed category the model
+    # genuinely chooses, so it stays bounded to real environment codes.
+    allowed-environments:
+      - pdev
+      - ptest
+      - stest
+      - vtest
+      - prod
     max-results: 20
+    max-window-minutes: 30
+
+  gitlab:
+    # J8 allowlist (FND-38: was documented as enforced but search_code accepted any
+    # model-supplied project unchecked, same class of gap as FND-20's Sumo bound).
+    # Enforced server-side in TriageMateTools.searchCode, not by beforeToolCallback.
+    allowed-projects:
+      - order-payments/payment-service
 
   # Credentials for real connectors. Set these in secrets.properties (preferred, see
   # above) as triage.integrations.*, or via the env vars below. Blank in the offline demo.
@@ -63,6 +169,13 @@ triage:
 logging:
   level:
     com.company.triage: INFO
+    # FND-68: ADK logs a WARN per recursive type per tool while building the tool schemas —
+    # six lines of "Type java.time.ZoneOffset is recursive. Omitting from schema." every run,
+    # from OffsetDateTime inside our tool signatures. Harmless (the omitted part is only the
+    # JSON-schema hint; arguments still serialize fine and AdkLiveRoundTripTest proves the
+    # round trip), but on stage it is six red-herring WARNs scrolling past right before the
+    # agent starts, which is exactly when someone is watching the console for a real problem.
+    com.google.adk.tools.FunctionCallingUtils: ERROR
 
 ---
 # Convenience profile: write the two comments to a REAL ServiceNow dev ticket while
