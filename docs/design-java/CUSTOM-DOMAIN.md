@@ -13,8 +13,8 @@ different thing entirely.
 ## Quickest path: use the script
 
 ```bash
-sudo ./setup-custom-domain.sh          # macOS / Linux
-./setup-custom-domain.sh               # Windows: Git Bash "Run as administrator"
+sudo ./bin/setup-custom-domain.sh          # macOS / Linux
+./bin/setup-custom-domain.sh               # Windows: Git Bash "Run as administrator"
 ```
 
 Idempotent, backs the file up first, and verifies the name resolves.
@@ -162,7 +162,7 @@ first:
 ## Reverting
 
 ```bash
-sudo ./setup-custom-domain.sh --remove
+sudo ./bin/setup-custom-domain.sh --remove
 ```
 
 Or delete the line by hand. Either way, drop the `--server.port` flag too. Nothing

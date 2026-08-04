@@ -11,10 +11,10 @@
 # Idempotent: safe to run repeatedly. Undo with --remove.
 #
 # Usage:
-#   ./setup-custom-domain.sh                 # add triagemate.auspost.local
-#   ./setup-custom-domain.sh myname.local    # add a different name
-#   ./setup-custom-domain.sh --remove        # remove whatever this script added
-#   ./setup-custom-domain.sh --check         # report status, change nothing
+#   ./bin/setup-custom-domain.sh                 # add triagemate.auspost.local
+#   ./bin/setup-custom-domain.sh myname.local    # add a different name
+#   ./bin/setup-custom-domain.sh --remove        # remove whatever this script added
+#   ./bin/setup-custom-domain.sh --check         # report status, change nothing
 #
 # Full background, port-80 options and no-admin fallbacks:
 #   docs/design-java/CUSTOM-DOMAIN.md
