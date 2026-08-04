@@ -10,6 +10,23 @@ on your laptop, via your own `hosts` file. It is cosmetic-but-convincing, which 
 exactly the intent. Say so if anyone asks: claiming it's a real deployment would be a
 different thing entirely.
 
+## Quickest path: use the script
+
+```bash
+sudo ./bin/setup-custom-domain.sh          # macOS / Linux
+./bin/setup-custom-domain.sh               # Windows: Git Bash "Run as administrator"
+```
+
+Idempotent, backs the file up first, and verifies the name resolves. **On Linux it
+also lowers the unprivileged-port floor** (`net.ipv4.ip_unprivileged_port_start=80`,
+persisted in `/etc/sysctl.d/`) so `./run-*.sh` can bind port 80 as your normal user —
+sudo is needed to set up, never to run.
+`--check` reports status without changing anything; `--remove` undoes it (and only
+ever deletes the line the script itself added). The rest of this document is the
+manual equivalent, plus the port and no-admin details the script points at.
+
+---
+
 Time: ~5 minutes. Needs local admin rights (editing `hosts`) — see
 [If you can't get admin rights](#if-you-cant-get-admin-rights) for a fallback that needs
 none.
@@ -147,5 +164,9 @@ first:
 
 ## Reverting
 
-Delete the line you added to `hosts`, and drop the `--server.port` flag. Nothing else
-was changed.
+```bash
+sudo ./bin/setup-custom-domain.sh --remove
+```
+
+Or delete the line by hand. Either way, drop the `--server.port` flag too. Nothing
+else was changed.

@@ -34,20 +34,76 @@ The assigned engineer still decides everything.
 mvn spring-boot:run
 ```
 
-Wait for `Started TriageMateApplication in ~1.3 seconds`, then open
-**http://localhost:8080**. Stop with `Ctrl+C`.
+The last line printed is the URL to open — click it. Stop with `Ctrl+C`.
+
+```
+  ==========================================================
+   TriageMate is ready   →   http://localhost
+
+   engine:     deterministic
+   connectors: servicenow=mock, confluence=mock, sumo=mock, gitlab=mock
+  ==========================================================
+```
+
+The default port is **80**, so the URL has no port tail. That port is privileged on
+macOS/Linux — plain `mvn spring-boot:run` there needs `sudo`, or pass
+`--server.port=8080`. The run scripts below handle this for you.
+
+### The four run scripts
+
+Two independent axes — which **engine** reasons, and whether the **data** is mock or
+live. Both `-real` scripts are thin wrappers that add `--spring.profiles.active=real`
+to the mock script beside them.
+
+| | Mock data (offline, guaranteed) | Real data (live systems) |
+|---|---|---|
+| **Deterministic** (no LLM) | `./run-deterministic.sh` | `./run-deterministic-real.sh` |
+| **ADK** (live agent) | `./run-adk.sh` | `./run-adk-real.sh` |
+
+All four serve on **port 80** by default (as does `application.yml`), so the URL is
+just `http://localhost`. Linux reserves ports below 1024 for root, so run the one-time
+setup once per machine:
+
+```bash
+sudo ./bin/setup-custom-domain.sh
+```
+
+That maps `triagemate.auspost.local` **and** lowers the unprivileged-port floor
+(persisted in `/etc/sysctl.d/`), after which `./run-*.sh` binds 80 as your normal user
+— sudo to set up, never to run. Until then the scripts fall back to 8080 with a note
+rather than failing, and the startup banner always shows whichever port it actually
+got. Pass `--server.port=N` to pin one explicitly; that is never second-guessed.
+
+**ADK + mock data is not a scripted replay.** The mocks fix what the *tools return*;
+ADK still calls the real model through the Copilot proxy, so the reasoning, the
+tool-choice decisions and the ~8s thinking pauses in the trace are all genuine, and
+two runs won't be identical. That combination — live agent, guaranteed data, no
+connector network — is usually the best one to demo: it shows the real thing working
+without depending on four systems being reachable.
+
+Rough order of risk on stage: `run-deterministic.sh` (nothing can fail) →
+`run-adk.sh` (needs the proxy) → `run-deterministic-real.sh` (needs four connectors) →
+`run-adk-real.sh` (needs both).
+
+Each `-real` script flips **all four** connectors. For a partial mix, pass the
+individual key to the mock script instead — e.g. real ServiceNow, everything else
+curated:
+
+```bash
+./run-deterministic.sh --triage.connectors.servicenow=real
+```
 
 ## How to use it
 
 **From the UI** (recommended for the demo)
-1. Open http://localhost:8080 — the incident number **`INC0010005`** is pre-filled.
+1. Open the URL from the startup banner — the incident number **`INC0010005`** is pre-filled.
 2. Click **Diagnose**.
 3. You'll see the full diagnosis and, under *"Posted to ServiceNow — automatically,"*
    the two advisory comments it writes back (sources first, then the diagnosis).
 
 **From the API** (same thing, headless)
 ```bash
-curl -X POST http://localhost:8080/api/diagnose/INC0010005 | jq
+curl -X POST http://localhost/api/diagnose/INC0010005 | jq   # add :8080 if it fell back
 ```
 
 **What happens on each run** — one bounded pass: read the ticket → clarify the real
@@ -73,8 +129,12 @@ auto-imports) — copy the template, fill it in, and just run. No shell `export`
 cp secrets.properties.example secrets.properties
 # fill in triage.integrations.servicenow.{base-url,user,secret}
 
-mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+mvn spring-boot:run -Dtriage.connectors.servicenow=real
 ```
+
+(There are only two named profiles — the default, all-mock config, and `real`, which
+flips **every** connector live at once. For just one connector, as here, override its
+`triage.connectors.*` key directly rather than using a profile.)
 
 Don't have a ServiceNow service account yet? See
 [`docs/integrations/SERVICENOW.md`](docs/integrations/SERVICENOW.md) for how to get

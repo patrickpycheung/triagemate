@@ -25,9 +25,28 @@ spring:
       read-timeout: 20s
 
 server:
-  port: 8080
+  # 80 so the URL is just http://localhost, with no port tail — the app is meant to
+  # read like a deployed service, not a dev server.
+  #
+  # Port 80 is privileged on macOS/Linux, so an unprivileged `mvn spring-boot:run`
+  # there will fail to bind. Two ways round it, both deliberate rather than a
+  # silently different default:
+  #   - the run scripts detect it and fall back to 8080 with a printed note;
+  #   - the e2e suite passes --server.port=8080 explicitly (tests must never need root).
+  port: 80
 
 triage:
+  # Cosmetic demo convenience — pre-fills the incident-number field in the browser so
+  # whoever's running the demo doesn't retype it every time. Edit the value below to
+  # change it; never read by any diagnosis path. Blank leaves the field empty. NOT a
+  # secret, so it lives here rather than in secrets.properties.
+  ui:
+    default-incident-number: INC0010005
+    # Friendly hostname the startup banner offers alongside localhost. Display only —
+    # the app never binds to it. It resolves to 127.0.0.1 via the machine's hosts file,
+    # which bin/setup-custom-domain.sh sets up. Blank hides the line.
+    public-hostname: triagemate.auspost.local
+
   # Per-connector data source: mock (offline demo data) or real (live system).
   # Mix freely — e.g. servicenow=real writes the two advisory comments to a REAL dev
   # ticket while the evidence stays mock/curated.
@@ -178,14 +197,21 @@ logging:
     com.google.adk.tools.FunctionCallingUtils: ERROR
 
 ---
-# Convenience profile: write the two comments to a REAL ServiceNow dev ticket while
-# the evidence stays mock/curated. Put the servicenow creds in secrets.properties
-# (triage.integrations.servicenow.*), then run:
-#   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=snow-live
+# 'real' profile: every connector live against the real system (needs every
+# credential in secrets.properties — see secrets.properties.example). One flag flips
+# all four; there is no separate profile for a partial mix. To run with only SOME
+# connectors real (e.g. ServiceNow live, everything else mock), don't use a profile at
+# all — override the individual triage.connectors.* keys directly, e.g.:
+#   mvn spring-boot:run -Dtriage.connectors.servicenow=real
+# Activate this profile with:
+#   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.profiles.active=real
 spring:
   config:
     activate:
-      on-profile: snow-live
+      on-profile: real
 triage:
   connectors:
     servicenow: real
+    confluence: real
+    sumo: real
+    gitlab: real

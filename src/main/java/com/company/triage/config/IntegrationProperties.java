@@ -4,8 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Connection settings for the real connectors (JS-2). Bind from
- * {@code triage.integrations.*} (env vars / application-real.yml). All optional so
- * the default mock demo never needs them.
+ * {@code triage.integrations.*} (env placeholders here, filled from secrets.properties,
+ * or overridden directly). All optional so the default mock demo never needs them.
  */
 @ConfigurationProperties(prefix = "triage.integrations")
 public record IntegrationProperties(

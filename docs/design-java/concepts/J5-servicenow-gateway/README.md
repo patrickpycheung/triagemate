@@ -49,7 +49,9 @@ The earlier human-confirm gate is **removed** (see `PIVOT.md` / J8).
 
 **Live write-back (2026-07-24).** The connector is switchable per system
 (`triage.connectors.servicenow=mock|real`), so the demo can post the two comments to a
-**real dev ServiceNow ticket** while evidence stays mock (`snow-live` profile). The
+**real dev ServiceNow ticket** while evidence stays mock (`-Dtriage.connectors.servicenow=real`,
+run with no profile — the app only has two named profiles: the default all-mock config,
+and `real`, which flips every connector at once). The
 target journal is configurable — `triage.servicenow.write-field=work_notes` (default,
 internal) or `comments` (customer-facing). Reads use `sysparm_display_value=true` for
 readable names. Runbook: `docs/design-java/DEMO-RUNBOOK.md` → "Live demo" (FND-11:

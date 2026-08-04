@@ -1126,6 +1126,17 @@ function render(data) {
   if (isReplay) renderLt3Replay(document.getElementById('lt3Card'), data);
   else if (isLive) renderLt4Final(document.getElementById('lt4Card'), data);
 }
+
+// Cosmetic demo convenience (triage.ui.default-incident-number): pre-fill the incident
+// field from server config, so the shipped "INC0010005" markup default is only the
+// fallback for whenever this endpoint doesn't answer (or the field was blank in
+// config), not something a demo runner has to remember to overtype. Never affects what
+// diagnose() sends — just what's sitting in the box when the page loads.
+fetch('/api/ui-config').then(r => r.ok ? r.json() : null).then(cfg => {
+  if (cfg && cfg.defaultIncidentNumber) {
+    document.getElementById('inc').value = cfg.defaultIncidentNumber;
+  }
+}).catch(() => { /* keep the markup default — cosmetic only, never block on this */ });
 </script>
 </body>
 </html>
