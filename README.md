@@ -34,8 +34,20 @@ The assigned engineer still decides everything.
 mvn spring-boot:run
 ```
 
-Wait for `Started TriageMateApplication in ~1.3 seconds`, then open
-**http://localhost:8080**. Stop with `Ctrl+C`.
+The last line printed is the URL to open — click it. Stop with `Ctrl+C`.
+
+```
+  ==========================================================
+   TriageMate is ready   →   http://localhost
+
+   engine:     deterministic
+   connectors: servicenow=mock, confluence=mock, sumo=mock, gitlab=mock
+  ==========================================================
+```
+
+The default port is **80**, so the URL has no port tail. That port is privileged on
+macOS/Linux — plain `mvn spring-boot:run` there needs `sudo`, or pass
+`--server.port=8080`. The run scripts below handle this for you.
 
 ### The four run scripts
 
@@ -48,12 +60,12 @@ to the mock script beside them.
 | **Deterministic** (no LLM) | `./run-deterministic.sh` | `./run-deterministic-real.sh` |
 | **ADK** (live agent) | `./run-adk.sh` | `./run-adk-real.sh` |
 
-All four serve on **port 80** by default, so the URL is just `http://localhost` with
-no port tail. Port 80 is privileged on macOS/Linux — if it can't be bound (no
-elevation, or something else already has it) the script prints a note and falls back
-to 8080 rather than failing. Pass `--server.port=N` to pin one explicitly; that is
-never second-guessed. Plain `mvn spring-boot:run` still uses 8080 (`application.yml`),
-which is what the test suite relies on.
+All four serve on **port 80** by default (as does `application.yml`), so the URL is
+just `http://localhost`. Port 80 is privileged on macOS/Linux — if it can't be bound
+(no elevation, or something else already has it) the script prints a note and falls
+back to 8080 rather than failing, and the startup banner shows whichever port it
+actually got. Pass `--server.port=N` to pin one explicitly; that is never
+second-guessed.
 
 **ADK + mock data is not a scripted replay.** The mocks fix what the *tools return*;
 ADK still calls the real model through the Copilot proxy, so the reasoning, the
@@ -77,14 +89,14 @@ curated:
 ## How to use it
 
 **From the UI** (recommended for the demo)
-1. Open http://localhost:8080 — the incident number **`INC0010005`** is pre-filled.
+1. Open the URL from the startup banner — the incident number **`INC0010005`** is pre-filled.
 2. Click **Diagnose**.
 3. You'll see the full diagnosis and, under *"Posted to ServiceNow — automatically,"*
    the two advisory comments it writes back (sources first, then the diagnosis).
 
 **From the API** (same thing, headless)
 ```bash
-curl -X POST http://localhost:8080/api/diagnose/INC0010005 | jq
+curl -X POST http://localhost/api/diagnose/INC0010005 | jq   # add :8080 if it fell back
 ```
 
 **What happens on each run** — one bounded pass: read the ticket → clarify the real

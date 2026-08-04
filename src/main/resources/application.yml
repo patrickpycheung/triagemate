@@ -25,7 +25,15 @@ spring:
       read-timeout: 20s
 
 server:
-  port: 8080
+  # 80 so the URL is just http://localhost, with no port tail — the app is meant to
+  # read like a deployed service, not a dev server.
+  #
+  # Port 80 is privileged on macOS/Linux, so an unprivileged `mvn spring-boot:run`
+  # there will fail to bind. Two ways round it, both deliberate rather than a
+  # silently different default:
+  #   - the run scripts detect it and fall back to 8080 with a printed note;
+  #   - the e2e suite passes --server.port=8080 explicitly (tests must never need root).
+  port: 80
 
 triage:
   # Cosmetic demo convenience — pre-fills the incident-number field in the browser so
