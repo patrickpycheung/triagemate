@@ -68,8 +68,15 @@ done
 if [ -z "$PORT" ]; then
   PORT="$DEFAULT_PORT"
   if ! port_is_bindable "$PORT"; then
-    echo "note: port $PORT unavailable (needs elevation on macOS/Linux, or it's already in use)" >&2
-    echo "      falling back to 8080 — re-run with sudo, or pass --server.port=N to choose" >&2
+    echo "" >&2
+    echo "  Port 80 is not bindable here, so falling back to 8080." >&2
+    echo "  (Windows binds 80 without elevation; macOS/Linux reserve ports below 1024.)" >&2
+    echo "" >&2
+    echo "  To actually get port 80 on Linux, lift the reservation once per boot:" >&2
+    echo "      sudo sysctl net.ipv4.ip_unprivileged_port_start=80" >&2
+    echo "  then re-run this script normally. Preferred over 'sudo ./run-*.sh', which" >&2
+    echo "  would leave root-owned files in target/ and ~/.m2 and break later builds." >&2
+    echo "" >&2
     PORT="8080"
   fi
   APP_ARGS="$(join_args "$@" "--server.port=$PORT")"

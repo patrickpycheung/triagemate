@@ -28,9 +28,11 @@ public class StartupBanner {
     private static final Logger log = LoggerFactory.getLogger(StartupBanner.class);
 
     private final Environment env;
+    private final DemoUiProperties ui;
 
-    public StartupBanner(Environment env) {
+    public StartupBanner(Environment env, DemoUiProperties ui) {
         this.env = env;
+        this.ui = ui;
     }
 
     @EventListener
@@ -54,10 +56,41 @@ public class StartupBanner {
         log.info("");
         log.info("  ==========================================================");
         log.info("   TriageMate is ready   →   {}", url);
+        hostnameLine(port).ifPresent(line -> log.info("                          →   {}", line));
         log.info("");
         log.info("   engine:     {}", engine);
         log.info("   connectors: {}", connectors);
         log.info("  ==========================================================");
         log.info("");
+    }
+
+    /**
+     * The friendly-hostname URL, shown beside the localhost one.
+     *
+     * <p>Annotated when the name does not currently resolve, rather than hidden. Hiding it
+     * would leave someone who expected the nice URL wondering whether the feature exists;
+     * printing it bare would advertise a link that goes nowhere. Saying "not set up yet"
+     * and naming the script that fixes it is the only version that is both visible and
+     * true.
+     */
+    private java.util.Optional<String> hostnameLine(int port) {
+        String host = ui == null ? null : ui.publicHostname();
+        if (host == null || host.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String url = "http://" + host + (port == 80 ? "" : ":" + port);
+        return java.util.Optional.of(resolves(host)
+                ? url
+                : url + "   (not set up yet — run bin/setup-custom-domain.sh)");
+    }
+
+    /** Does the OS resolve this name? Cheap: a hosts-file lookup, no network. */
+    private static boolean resolves(String host) {
+        try {
+            java.net.InetAddress.getByName(host);
+            return true;
+        } catch (java.net.UnknownHostException e) {
+            return false;
+        }
     }
 }
