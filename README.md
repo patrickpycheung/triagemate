@@ -48,6 +48,13 @@ to the mock script beside them.
 | **Deterministic** (no LLM) | `./run-deterministic.sh` | `./run-deterministic-real.sh` |
 | **ADK** (live agent) | `./run-adk.sh` | `./run-adk-real.sh` |
 
+All four serve on **port 80** by default, so the URL is just `http://localhost` with
+no port tail. Port 80 is privileged on macOS/Linux — if it can't be bound (no
+elevation, or something else already has it) the script prints a note and falls back
+to 8080 rather than failing. Pass `--server.port=N` to pin one explicitly; that is
+never second-guessed. Plain `mvn spring-boot:run` still uses 8080 (`application.yml`),
+which is what the test suite relies on.
+
 **ADK + mock data is not a scripted replay.** The mocks fix what the *tools return*;
 ADK still calls the real model through the Copilot proxy, so the reasoning, the
 tool-choice decisions and the ~8s thinking pauses in the trace are all genuine, and

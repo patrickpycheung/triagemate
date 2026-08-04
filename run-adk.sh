@@ -22,8 +22,9 @@
 # loop) which the default build skips. Also sets triage.engine=adk, since the
 # ADK code being on the classpath doesn't switch the app to use it.
 #
-# Runs on port 8080 by default — same as run-deterministic.sh, so run only one
-# at a time unless you override --port to compare them side by side.
+# Runs on port 80 by default, falling back to 8080 when 80 needs elevation or is
+# taken — same as run-deterministic.sh, so run only one at a time unless you pass
+# --server.port=N to compare them side by side.
 #
 # Usage: ./run-adk.sh [extra --app.args=...]   (forwarded to the app, not to Maven)
 set -euo pipefail
@@ -95,21 +96,58 @@ if $STARTED_PROXY; then
 fi
 
 # Extra arguments are forwarded to the APPLICATION, appended to the engine flag
-# this script already sets. The spring-boot plugin takes them comma-joined in one
-# -D property, so they can't just be appended to the mvn command line. Lets you do
-#   ./run-adk.sh --server.port=80
+# this script already sets. Lets you do e.g.
+#   ./run-adk.sh --server.port=8081
 # See docs/design-java/CUSTOM-DOMAIN.md.
-APP_ARGS="--triage.engine=adk"
-if [ "$#" -gt 0 ]; then
-  APP_ARGS="$APP_ARGS,$(IFS=,; echo "$*")"
-fi
 
-PORT="8080"
+# Can we actually listen on this port? Checked before launching so a failure is a
+# one-line note here rather than a Spring stack trace 20 seconds in.
+port_is_bindable() {
+  python3 - "$1" <<'PY' 2>/dev/null
+import socket, sys
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+PY
+}
+
+# The spring-boot plugin takes application arguments SPACE-separated in one -D
+# property. Comma looks plausible (Maven splits comma for List<String> params
+# elsewhere) but does NOT work here: the plugin passes the whole comma string
+# through as a single argument, so `--triage.engine=adk,--server.port=80` reached
+# Spring as engine="adk,--server.port=80" and failed enum binding at startup.
+# Verified empirically against this plugin version.
+join_args() { echo "$*"; }
+
+# --- port selection ----------------------------------------------------------
+# Same rule as run-deterministic.sh — see the long note there for why the script
+# defaults to 80 while application.yml stays on 8080.
+DEFAULT_PORT="80"
+PORT=""
 for arg in "$@"; do
   case "$arg" in --server.port=*) PORT="${arg#--server.port=}" ;; esac
 done
 
+APP_ARGS="--triage.engine=adk"
+if [ "$#" -gt 0 ]; then
+  APP_ARGS="$APP_ARGS $(join_args "$@")"
+fi
+if [ -z "$PORT" ]; then
+  PORT="$DEFAULT_PORT"
+  if ! port_is_bindable "$PORT"; then
+    echo "note: port $PORT unavailable (needs elevation on macOS/Linux, or it's already in use)" >&2
+    echo "      falling back to 8080 — re-run with sudo, or pass --server.port=N to choose" >&2
+    PORT="8080"
+  fi
+  APP_ARGS="$APP_ARGS --server.port=$PORT"
+fi
+
 echo "=== TriageMate — ADK live agent engine (D1) ==="
-echo "    http://localhost:$PORT"
+if [ "$PORT" = "80" ]; then echo "    http://localhost"; else echo "    http://localhost:$PORT"; fi
 echo "    Run ./bin/e2-proxy-spike.sh any time to validate the full proxy chain."
 exec mvn -Padk spring-boot:run -Dspring-boot.run.arguments="$APP_ARGS"
