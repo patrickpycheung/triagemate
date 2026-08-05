@@ -66,3 +66,9 @@ target/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Claude Code session state and worktrees. .claude/worktrees/ holds EMBEDDED git
+# repositories (a `git worktree` checkout is its own repo from the outer repo's point
+# of view), so a plain `git add -A` stages it as a gibberish gitlink — a commit that
+# looks like a submodule nobody can clone. Ignored so that cannot happen again.
+.claude/
