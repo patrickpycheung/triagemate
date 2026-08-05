@@ -91,7 +91,8 @@ public class RealSumoGateway implements SumoGateway {
                 JsonNode f = m.path("map");
                 out.add(new LogEvidence(
                         f.path("_messagetime").asText(),
-                        f.path("loglevel").asText(""),
+                        // J29/LLF-1: this estate never sets loglevel — fall back to _raw.
+                        parseLevel(f.path("loglevel").asText(""), f.path("_raw").asText("")),
                         f.path("_sourcecategory").asText(""),
                         f.path("_raw").asText("")));
             });
@@ -103,6 +104,37 @@ public class RealSumoGateway implements SumoGateway {
             try { http.delete().uri("/api/v1/search/jobs/{id}", jobId).retrieve().toBodilessEntity(); }
             catch (Exception ignore) { /* best-effort cleanup */ }
         }
+    }
+
+    /**
+     * Spring Boot's default console layout, up to the level. {@code %5p} RIGHT-ALIGNS the level
+     * to five characters, so four-character levels (WARN, INFO) carry TWO spaces before them —
+     * hence {@code \s+}, not the single literal space the field report proposed, which hits
+     * ERROR and silently misses everything shorter (J29, correction to the field report).
+     */
+    private static final java.util.regex.Pattern RAW_LEVEL = java.util.regex.Pattern.compile(
+            "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+(ERROR|WARN|INFO|DEBUG|TRACE)\\b");
+
+    /**
+     * J29/LLF-1: resolve a log level, preferring the structured Sumo field and falling back to
+     * scanning {@code _raw}.
+     *
+     * <p>Verified live 2026-08-05: this estate's responses carry no {@code loglevel} key at all,
+     * so every row used to arrive at {@code ""}, the engine's {@code "ERROR".equals(level)} filter
+     * matched nothing, and both GitLab steps skipped on real data.
+     *
+     * <p>The structured field keeps priority: an estate that DOES configure a field-extraction
+     * rule is better served by its own parsed value than by our regex, and must not be regressed
+     * to a guess. {@code ""} means "unreadable" (LLF-2) — never null, never an assumed severity.
+     *
+     * <p>Package-private static so {@link RealSumoGatewayLevelParseTest} can pin it against
+     * captured real rows with no HTTP — the response-side contract test J22 never built.
+     */
+    static String parseLevel(String structured, String raw) {
+        if (structured != null && !structured.isBlank()) return structured;
+        if (raw == null) return "";
+        java.util.regex.Matcher m = RAW_LEVEL.matcher(raw);
+        return m.find() ? m.group(1) : "";
     }
 
     /**
