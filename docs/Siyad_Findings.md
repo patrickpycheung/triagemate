@@ -1,5 +1,5 @@
-## ISSUES
-1. Issue with confluence query
+# ISSUES
+## 1. Issue with confluence query
 
 ### Description
 When using the confluence query, I encountered an issue where the query "hazards being recorded handheld appearing delivery application attached Hazards being recorded on" did not return the expected results. however the search text when used in the confluence ui gives search results.
@@ -39,7 +39,7 @@ ie; the confluence base url should be like as shown below
 triage.integrations.confluence.base-url=https://auspost.atlassian.net
 ```
 
-2. service-now query does not return Configuration Item as "Delivery Hazard".
+## 2. service-now query does not return Configuration Item as "Delivery Hazard".
 
 ### Details
 The issue with this is that when the sumo query is constructed, "Delivery Hazard" is not added as the first item of the query, because it is not in the list of Configuration Items. 
@@ -70,7 +70,7 @@ it is clear that the cmdb_id.display_value is not parsed correctly, and the Conf
 
 this need to be fixed.
 
-3. sumo query is constructed incorrectly, and does not return any results for "Delivery Hazard".
+## 3. sumo query is constructed incorrectly, and does not return any results for "Delivery Hazard".
 
 ### Details
 sumologic query is constructed incorrectly 
@@ -95,7 +95,7 @@ understand: id=null, keywords=[hazards, being, recorded, handheld, appearing, de
 ```
 The  fix for item 2 , may fix this issue as well.
 
-3. Confluence query not returning relevant results
+## 4. Confluence query not returning relevant results
 
 ### details
 
@@ -115,4 +115,4 @@ confluence — Teradata Transportation and Logistics Data Model 06.01.00 Appendi
 confluence — EDM Article Event (1825407267): This specification summarises how EMR event data is mapped into EDP for logistics event use cases. It focuses on safely making this data available to consumers in EDP consumption. Scope : EMR event data delivered via EDB/Pub/Sub into EDP, primarily the EMR_EVENTS / EMR_EventsCons staging pattern and downstream logistics-event modelling. Source system : Event Management Re-Imagined (EMR). Target pl… [/spaces/DAIA/pages/1825407267/EDM+Article+Event]
 ```
 
-investige the confluence query and see if it can be improved to return more relevant results.
+investigate the confluence query and see if it can be improved to return more relevant results.
