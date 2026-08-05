@@ -1,6 +1,6 @@
 # Running TriageMate on a custom domain (instead of `localhost:8080`)
 
-**Goal:** the browser address bar reads `http://triagemate.auspost.local` rather than
+**Goal:** the browser address bar reads `http://triagemate.auspost.com.au` rather than
 `http://localhost:8080`, so the demo looks like a deployed internal service instead of
 someone's laptop.
 
@@ -51,29 +51,56 @@ Add one line to the `hosts` file. Pick whichever name you prefer; `.local` and
    to see it.
 3. Add this line at the end:
    ```
-   127.0.0.1    triagemate.auspost.local
+   127.0.0.1    triagemate.auspost.com.au
    ```
 4. Save and close.
 
 ### macOS / Linux
 
 ```bash
-echo "127.0.0.1    triagemate.auspost.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1    triagemate.auspost.com.au" | sudo tee -a /etc/hosts
 ```
 
 ### Verify the name resolves
 
 ```bash
-ping triagemate.auspost.local
+ping triagemate.auspost.com.au
 ```
 You want replies from `127.0.0.1`. If it doesn't resolve, the `hosts` edit didn't save
 (almost always the admin-rights problem above).
+
+### Changing the name later
+
+The hostname was `triagemate.auspost.local` until **2026-08-05**. To rename it again,
+edit `DEFAULT_HOST` in `bin/setup-custom-domain.sh` (or pass the new name as an
+argument) and re-run:
+
+```bash
+sudo ./bin/setup-custom-domain.sh                      # uses the new DEFAULT_HOST
+sudo ./bin/setup-custom-domain.sh other.example.com    # or a one-off name
+```
+
+The script retires any name it previously added in the same pass, so you end up with
+**one** mapping rather than two and the old name stops resolving. Entries added by hand
+(or by your IT team) are deliberately left alone — `--check` will show them if the old
+name still answers after a re-run.
+
+Also update `triage.ui.public-hostname` in `src/main/resources/application.yml`, which is
+what the startup banner prints. It is display-only; the app never binds to it.
+
+> **One caveat with `.com.au`.** `auspost.com.au` is a real public domain, so this hosts
+> entry shadows whatever public DNS says for that exact name, and a corporate proxy or PAC
+> file may route `*.auspost.com.au` through the proxy rather than honouring `hosts` at all.
+> If `curl` reaches it but the browser doesn't, that's the proxy — check the PAC file or add
+> a proxy bypass for the name. The previous `.local` name had neither problem (it had a
+> different one: `.local` is mDNS territory, which is why the startup banner's lookup is
+> time-bounded — see J20/STV-6).
 
 ---
 
 ## Step 2 — Serve on port 80 so the URL needs no `:8080`
 
-`http://triagemate.auspost.local` with no port means port 80. Two options.
+`http://triagemate.auspost.com.au` with no port means port 80. Two options.
 
 ### Option A — just run on port 80 (simplest)
 
@@ -100,7 +127,7 @@ If port 80 is already taken (IIS, Docker Desktop, another dev server), you'll ge
 Change nothing about how you run it. The URL becomes:
 
 ```
-http://triagemate.auspost.local:8080
+http://triagemate.auspost.com.au:8080
 ```
 
 Less clean, but it still reads as a hostname rather than `localhost`, needs no admin
@@ -115,7 +142,7 @@ you're unsure** — the hostname is doing most of the work visually.
 ./run-deterministic.sh --server.port=80
 ```
 
-Then open **http://triagemate.auspost.local** (or with `:8080` for Option B).
+Then open **http://triagemate.auspost.com.au** (or with `:8080` for Option B).
 
 ---
 

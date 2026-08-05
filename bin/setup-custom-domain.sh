@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Point a friendly hostname at this machine, so the demo reads
-# http://triagemate.auspost.local instead of http://localhost:8080.
+# http://triagemate.auspost.com.au instead of http://localhost:8080.
 #
 # WHAT THIS ACTUALLY DOES: adds one line to your hosts file mapping the name to
 # 127.0.0.1. Nothing is published, no DNS is registered, no traffic leaves the
@@ -10,8 +10,22 @@
 # Works on Windows (Git Bash / MSYS, run as Administrator), macOS and Linux (sudo).
 # Idempotent: safe to run repeatedly. Undo with --remove.
 #
+# RENAMING the hostname: change DEFAULT_HOST below (or pass the new name as an
+# argument) and re-run. Any name THIS SCRIPT previously added is retired in the same
+# pass, so you end up with one mapping, not two — the old name stops resolving instead
+# of quietly continuing to work. Entries you or your IT team added by hand are never
+# touched; if the old name still resolves after a re-run, that is why, and the --check
+# output will show it.
+#
+# The default was triagemate.auspost.local until 2026-08-05. NOTE that the current
+# default sits under a REAL public domain (auspost.com.au): the hosts entry shadows
+# whatever public DNS says for that exact name, and a corporate proxy/PAC file may route
+# *.auspost.com.au to the proxy rather than honouring hosts at all — if the browser
+# can't reach it on the demo laptop, that is the first thing to check (curl works,
+# browser doesn't ⇒ proxy). A made-up TLD had neither problem.
+#
 # Usage:
-#   ./bin/setup-custom-domain.sh                 # add triagemate.auspost.local
+#   ./bin/setup-custom-domain.sh                 # add triagemate.auspost.com.au
 #   ./bin/setup-custom-domain.sh myname.local    # add a different name
 #   ./bin/setup-custom-domain.sh --remove        # remove whatever this script added
 #   ./bin/setup-custom-domain.sh --check         # report status, change nothing
@@ -20,7 +34,7 @@
 #   docs/design-java/CUSTOM-DOMAIN.md
 set -uo pipefail
 
-DEFAULT_HOST="triagemate.auspost.local"
+DEFAULT_HOST="triagemate.auspost.com.au"
 MARKER="# added by TriageMate setup-custom-domain.sh"
 
 # Linux reserves ports below 1024 for root, so an unprivileged `./run-*.sh` cannot
@@ -203,12 +217,43 @@ if [ "$ACTION" = "remove" ]; then
 fi
 
 # --- add ---------------------------------------------------------------------
+# Retire any name this script previously added that is NOT the one we're adding now.
+# Without this, renaming the host (triagemate.auspost.local → .com.au, 2026-08-05) and
+# re-running leaves the OLD name mapped as well: it still resolves, the app still answers
+# on it, and nothing says which one is current — so a stale bookmark or a colleague's
+# muscle memory keeps working and hides the rename until it matters.
+#
+# Only lines carrying $MARKER are touched, for the same reason --remove is that careful:
+# a hand-added or IT-managed entry is not ours to delete from a file this central.
+retire_previous_names() {
+  HOST_RE="$(printf '%s' "$HOST" | sed 's/\./\\./g')"
+  # Marker-bearing lines that do NOT map the current hostname.
+  STALE="$(grep -E "^[^#]*${MARKER}" "$HOSTS" 2>/dev/null \
+           | grep -vE "[[:space:]]${HOST_RE}([[:space:]]|$)" || true)"
+  [ -n "$STALE" ] || return 0
+
+  BACKUP="${HOSTS}.triagemate.bak"
+  cp "$HOSTS" "$BACKUP" && echo "backup: $BACKUP"
+  echo "Retiring name(s) this script added for an older hostname:"
+  printf '%s\n' "$STALE" | sed 's/^/    /'
+
+  TMP="$(mktemp)"
+  # Drop every marker line, then put back the one for the CURRENT host (if any), so an
+  # idempotent re-run is unaffected and only genuinely stale names are dropped.
+  grep -vE "^[^#]*${MARKER}" "$HOSTS" > "$TMP" || true
+  grep -E "^[^#]*${MARKER}" "$HOSTS" | grep -E "[[:space:]]${HOST_RE}([[:space:]]|$)" >> "$TMP" || true
+  cat "$TMP" > "$HOSTS" && rm -f "$TMP"
+}
+retire_previous_names
+
 if already_present; then
   echo "Already mapped — nothing to do:"
   grep -iE "^[^#]*[[:space:]]$(printf '%s' "$HOST" | sed 's/\./\\./g')([[:space:]]|$)" "$HOSTS" | sed 's/^/    /'
 else
   BACKUP="${HOSTS}.triagemate.bak"
-  cp "$HOSTS" "$BACKUP" && echo "backup: $BACKUP"
+  # Only back up if retire_previous_names hasn't already done so this run — otherwise the
+  # second copy would overwrite the pre-change backup with the half-changed file.
+  [ -n "${STALE:-}" ] || { cp "$HOSTS" "$BACKUP" && echo "backup: $BACKUP"; }
   # Leading newline guards against a hosts file with no trailing newline, which
   # would otherwise splice our entry onto the end of the last existing line.
   printf '\n127.0.0.1\t%s\t%s\n' "$HOST" "$MARKER" >> "$HOSTS"

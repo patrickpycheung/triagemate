@@ -68,7 +68,7 @@ setup once per machine:
 sudo ./bin/setup-custom-domain.sh
 ```
 
-That maps `triagemate.auspost.local` **and** lowers the unprivileged-port floor
+That maps `triagemate.auspost.com.au` **and** lowers the unprivileged-port floor
 (persisted in `/etc/sysctl.d/`), after which `./run-*.sh` binds 80 as your normal user
 — sudo to set up, never to run. Until then the scripts fall back to 8080 with a note
 rather than failing, and the startup banner always shows whichever port it actually

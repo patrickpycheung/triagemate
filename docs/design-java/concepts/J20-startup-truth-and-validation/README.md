@@ -227,6 +227,14 @@ rejection passes just as happily if *everything* is rejected.
 the name is absent from hosts — which is the branch the method exists to detect. With
 `triagemate.auspost.local` (`application.yml:48`) that is an mDNS/multicast query.
 
+> **Update (2026-08-05):** the configured hostname is now
+> `triagemate.auspost.com.au`, so the specific *mDNS* leg of this finding no longer
+> applies — `.com.au` goes to the ordinary DNS resolver, not multicast. The finding and
+> its decision **stand unchanged**: an absent name still reaches the system resolver, and
+> a corporate DNS server or proxy can be slower to answer than mDNS is, so the 250 ms
+> bound below is still what makes the listener's cost predictable. The text above is left
+> as written — it recorded what was true when the finding was made.
+
 **Decision: bound it, don't remove it.** Run the lookup on a short-lived daemon thread
 with a **250 ms** budget; on timeout treat the name as unresolved — which is the truthful
 answer for a name that does not resolve promptly — and print the existing
