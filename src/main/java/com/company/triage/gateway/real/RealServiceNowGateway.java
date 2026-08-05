@@ -3,7 +3,9 @@ package com.company.triage.gateway.real;
 import com.company.triage.config.IntegrationProperties;
 import com.company.triage.config.TriageProperties;
 import com.company.triage.gateway.ServiceNowGateway;
+import com.company.triage.gateway.SimilarIncidentRanker;
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.SymptomTokens;
 import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
 import com.company.triage.model.ServiceOwnership;
@@ -42,6 +44,9 @@ public class RealServiceNowGateway implements ServiceNowGateway {
 
     private final RestClient http;
     private final String writeField;   // "work_notes" (internal) or "comments" (customer-facing)
+    private final String resolvedStates;   // J26: encoded-query IN list, e.g. "6,7"
+    private final double similarityFloor;  // J26: minimum score worth reporting
+    private final int maxSimilar;          // J26: cap on reported similar incidents
     private final TriageProperties properties;   // operator-pinned similar incidents
 
     public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties integrationProps,
@@ -65,6 +70,11 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         // at boot regardless of connector mode, so a bad value fails before serving traffic
         // rather than the first time `triage.connectors.servicenow=real` is set on stage.
         this.writeField = props.servicenow().writeField();
+        // J26: no literals in the query. TriageProperties.ServiceNow's compact constructor
+        // guarantees these are populated even when the caller left them unset.
+        this.resolvedStates = props.servicenow().resolvedStates();
+        this.similarityFloor = props.servicenow().similarityFloor();
+        this.maxSimilar = props.servicenow().maxSimilar();
         this.properties = props;
     }
 
@@ -129,126 +139,139 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         }
     }
 
-    /** Fields every similar-incident lookup reads, pinned or searched. */
-    private static final String SIMILAR_FIELDS =
-            "number,short_description,assignment_group,close_code,close_notes,state";
-
     /**
-     * Similar incidents for the SAME application, ranked by description overlap.
+     * J26. Retrieve wide on the keys that actually carry signal, then rank locally.
      *
-     * <p>Replaces a keyword search that could not work by construction. It took
-     * {@code short_description.split(" ")[0]} — the FIRST WORD — so the demo's "Delivery
-     * Hazards" incident searched for {@code "Delivery"} and its twin, whose subject starts
-     * "Hazards being recorded…", searched for {@code "Hazards"}. Splitting an application
-     * name in half means neither query describes the thing being searched for. Verified
-     * against the live instance: both returned 0 rows.
+     * <p><b>What this replaced.</b> One query,
+     * {@code stateIN6,7^short_descriptionLIKE<first word of the subject line>}, with a
+     * hardcoded {@code 0.5} similarity on every row. Against the live instance that reduced
+     * to {@code short_descriptionLIKEHazards} (INC0010010, {@code docs/Siyad_Findings.md} §2)
+     * and returned nothing, for every incident, every time — while
+     * {@link SimilarIncidentRanker}'s javadoc records the other two faults the zero-hit
+     * symptom was hiding.
      *
-     * <p>Scoping is now by {@code cmdb_ci} — "similar incident" means "same application,
-     * similar symptoms", and the CI is what states the application. That also drops the
-     * {@code stateIN6,7} (resolved/closed) filter: it returned 0 here because none of the
-     * instance's Delivery Hazards tickets are closed, and a young estate ALWAYS looks like
-     * that. Resolved incidents still win — {@link #rank} sorts them first, because a ticket
-     * with a close code is the one that tells the triager what to do.
+     * <p><b>Two passes, deliberately overlapping.</b> Neither subsumes the other:
+     * <ul>
+     *   <li><b>By CI</b> — every recently-resolved incident against the same system. Finds
+     *       the recurrence whose reporter used entirely different words, which is the normal
+     *       case. This is the pass that would have found the prior hazards incidents.</li>
+     *   <li><b>By symptom</b> — an OR-group over the ticket's distinctive terms, so a fault
+     *       that moved between systems (or a ticket with no CI at all) is still reachable.</li>
+     * </ul>
+     * Ranking is what makes width affordable: a wide net with a scored, floored, capped
+     * selection beats a narrow net with no selection, because a narrow net's misses are
+     * invisible and its hits are unjustified.
+     *
+     * <p>Both passes are best-effort — a failure in one still lets the other contribute,
+     * because a partial similar-incident list is worth strictly more to a human than a
+     * failed diagnosis (same reasoning as {@link #journal}).
      */
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
-        List<ResolvedIncident> pinned = pinnedSimilar(incident.number());
+        if (incident == null) return List.of();
+        String resolved = "stateIN" + resolvedStates;
+        List<SimilarIncidentRanker.Candidate> candidates = new ArrayList<>();
 
-        String application = incident.configurationItem();
-        if (application == null || application.isBlank()) {
-            // No CI to scope by. Nothing reliable to search on — a first-word search is what
-            // this method is being fixed to stop doing — so answer with pins alone.
-            log.info("[ServiceNow] {} has no CI; similar-incident search needs one, returning {} pin(s)",
-                    incident.number(), pinned.size());
-            return pinned;
+        // Pass 1 — same configuration item, most recently resolved first.
+        String ci = incident.configurationItem();
+        if (ci != null && !ci.isBlank()) {
+            candidates.addAll(candidates(resolved + "^cmdb_ci.name=" + ci + RECENT_FIRST));
         }
 
-        JsonNode body = rows("/api/now/table/incident",
-                "cmdb_ci.name=" + application + "^number!=" + incident.number()
-                        + "^ORDERBYDESCsys_created_on",
-                SIMILAR_FIELDS);
+        // Pass 2 — symptom terms, as an OR-group.
+        //
+        // Encoded-query grouping: `^` is AND, `^OR` ORs with the immediately preceding
+        // condition, and `A^B^ORC` is the documented idiom for `A AND (B OR C)` — so the
+        // state filter is stated ONCE, up front, and every alternative after it is a
+        // short_description term. Repeating `stateIN...` inside each alternative (the
+        // obvious-looking way to keep it applying) does NOT do that: it makes the state
+        // condition one of the OR'd alternatives, which matches every resolved incident
+        // whatever its text.
+        List<String> terms = SymptomTokens.extract(
+                joinNonBlank(incident.shortDescription(), incident.description()), MAX_QUERY_TERMS);
+        if (!terms.isEmpty()) {
+            StringBuilder q = new StringBuilder(resolved);
+            for (int i = 0; i < terms.size(); i++) {
+                q.append(i == 0 ? "^" : "^OR").append("short_descriptionLIKE").append(terms.get(i));
+            }
+            candidates.addAll(candidates(q + RECENT_FIRST));
+        }
 
-        List<ResolvedIncident> found = new ArrayList<>();
-        Set<String> already = new java.util.HashSet<>();
-        pinned.forEach(pin -> already.add(pin.number()));
-        if (body != null) body.forEach(r -> {
-            String number = text(r, "number");
-            if (number == null || number.isBlank() || !already.add(number)) return;  // pins win
-            found.add(toResolvedIncident(r, similarity(incident.shortDescription(), text(r, "short_description"))));
-        });
+        List<ResolvedIncident> ranked = SimilarIncidentRanker.rank(
+                incident, candidates, similarityFloor, maxSimilar);
+        log.debug("similar incidents for {}: {} candidate(s) retrieved, {} above floor {}",
+                incident.number(), candidates.size(), ranked.size(), similarityFloor);
 
-        found.sort(RANK);
-        // Pins first, then search hits best-first.
+        // Operator pins go in front of everything the search+ranker produced. They are an
+        // assertion by a human that two tickets ARE the same problem, which no score can
+        // outrank — and they are the only path that still answers on an instance where the
+        // retrieval passes legitimately find nothing.
+        List<ResolvedIncident> pinned = pinnedSimilar(incident.number());
+        if (pinned.isEmpty()) return ranked;
+
+        Set<String> pinnedNumbers = new java.util.HashSet<>();
+        pinned.forEach(p -> pinnedNumbers.add(p.number()));
         List<ResolvedIncident> out = new ArrayList<>(pinned);
-        out.addAll(found);
+        ranked.stream().filter(r -> !pinnedNumbers.contains(r.number())).forEach(out::add);
         return out;
     }
 
     /**
-     * Operator-pinned duplicates, fetched by number so they carry real subjects and close
-     * notes rather than a bare id. A pin that no longer exists is dropped with a warning —
-     * a stale config entry must not fabricate an incident that the triager cannot open.
+     * Operator-pinned duplicates, fetched by number so they carry their real subject and
+     * close notes rather than a bare id. A pin naming an incident that does not exist is
+     * dropped with a warning — a stale config entry must not put a ticket in front of a
+     * triager that they cannot open.
      */
     private List<ResolvedIncident> pinnedSimilar(String number) {
-        List<String> pins = properties.servicenow().pinsFor(number);
         List<ResolvedIncident> out = new ArrayList<>();
-        for (String pin : pins) {
-            JsonNode row = firstRow("/api/now/table/incident", "number=" + pin, SIMILAR_FIELDS);
+        for (String pin : properties.servicenow().pinsFor(number)) {
+            JsonNode row = firstRow("/api/now/table/incident", "number=" + pin,
+                    "number,short_description,assignment_group,close_code,close_notes");
             if (row == null) {
                 log.warn("[ServiceNow] pinned similar incident {} for {} does not exist — skipping",
                         pin, number);
                 continue;
             }
-            // 1.0: a human asserted this pairing. Nothing the search finds outranks that.
-            out.add(toResolvedIncident(row, 1.0));
+            // 1.0 — a human asserted this pairing; nothing the ranker computes outranks it.
+            out.add(new ResolvedIncident(text(row, "number"), text(row, "short_description"),
+                    text(row, "assignment_group"), text(row, "close_code"),
+                    text(row, "close_notes"), 1.0));
         }
         return out;
     }
 
-    private ResolvedIncident toResolvedIncident(JsonNode r, double similarity) {
-        return new ResolvedIncident(text(r, "number"), text(r, "short_description"),
-                text(r, "assignment_group"), text(r, "close_code"), text(r, "close_notes"),
-                similarity);
-    }
-
-    /** Resolved-first (a close code is actionable), then by descending similarity. */
-    private static final java.util.Comparator<ResolvedIncident> RANK =
-            java.util.Comparator
-                    .comparing((ResolvedIncident r) ->
-                            r.resolutionCode() != null && !r.resolutionCode().isBlank() ? 0 : 1)
-                    .thenComparing(java.util.Comparator.comparingDouble(ResolvedIncident::similarity).reversed());
+    /** Distinctive terms to OR together. Enough to be findable; few enough to stay a query. */
+    private static final int MAX_QUERY_TERMS = 6;
+    private static final String RECENT_FIRST = "^ORDERBYDESCsys_updated_on";
 
     /**
-     * Jaccard overlap of the two subjects' significant words, 0..1.
+     * One retrieval pass → candidates. Best-effort: logs and returns empty rather than
+     * failing the whole diagnosis, so one malformed pass cannot cost the other one's hits.
      *
-     * <p>Deliberately dumb and local: it only ever re-orders incidents already scoped to the
-     * same application, so it cannot invent a match across applications the way a fuzzy text
-     * search can. The demo's twin subjects share "hazards/recorded/handheld/appearing" and
-     * score far above the unrelated "all hazards are no longer present" cluster.
+     * <p>{@code sys_updated_on} rather than {@code resolved_at} for ordering: {@code resolved_at}
+     * is not populated on every instance (and is null on closed-without-resolution rows), where
+     * ordering by it drops the rows it cannot sort. Recency is only a tiebreak here — the
+     * ranker decides relevance — so the more reliably present field is the right one.
      */
-    static double similarity(String a, String b) {
-        Set<String> left = significantWords(a);
-        Set<String> right = significantWords(b);
-        if (left.isEmpty() || right.isEmpty()) return 0.0;
-        Set<String> shared = new java.util.HashSet<>(left);
-        shared.retainAll(right);
-        Set<String> union = new java.util.HashSet<>(left);
-        union.addAll(right);
-        return (double) shared.size() / union.size();
+    private List<SimilarIncidentRanker.Candidate> candidates(String query) {
+        try {
+            JsonNode body = rows("/api/now/table/incident", query,
+                    "number,short_description,assignment_group,close_code,close_notes,cmdb_ci,category");
+            if (body == null) return List.of();
+            List<SimilarIncidentRanker.Candidate> out = new ArrayList<>();
+            body.forEach(r -> out.add(new SimilarIncidentRanker.Candidate(
+                    text(r, "number"), text(r, "short_description"),
+                    text(r, "assignment_group"), text(r, "close_code"),
+                    text(r, "close_notes"), text(r, "cmdb_ci"), text(r, "category"))));
+            return out;
+        } catch (Exception e) {
+            log.warn("similar-incident search failed for query [{}] — continuing without it", query, e);
+            return List.of();
+        }
     }
 
-    /** Lowercased words of 3+ chars, minus filler that carries no signal about the fault. */
-    private static final Set<String> STOP_WORDS = Set.of(
-            "the", "and", "are", "not", "for", "with", "from", "see", "all", "any", "was", "has",
-            "attached", "details", "please", "this", "that", "have", "been", "into", "when");
-
-    private static Set<String> significantWords(String s) {
-        if (s == null || s.isBlank()) return Set.of();
-        Set<String> out = new java.util.HashSet<>();
-        for (String w : s.toLowerCase(java.util.Locale.ROOT).split("[^a-z0-9]+")) {
-            if (w.length() >= 3 && !STOP_WORDS.contains(w)) out.add(w);
-        }
-        return out;
+    private static String joinNonBlank(String a, String b) {
+        return ((a == null ? "" : a) + " " + (b == null ? "" : b)).trim();
     }
 
     @Override
@@ -266,8 +289,8 @@ public class RealServiceNowGateway implements ServiceNowGateway {
 
         // A CI with no support_group answers nothing useful. Returning a ServiceOwnership
         // with a blank group is worse than empty: callers (and the ADK agent, which is told
-        // this is "the strongest routing signal") read a present record as "ownership found"
-        // and would route on a blank. Absent is honest; blank is a false positive.
+        // ownership is "the strongest routing signal") read a present record as "ownership
+        // found" and would route on a blank. Absent is honest; blank is a false positive.
         String supportGroup = text(row, "support_group");
         if (supportGroup == null || supportGroup.isBlank()) return Optional.empty();
 
@@ -434,7 +457,6 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         String s = v.asText();
         return s == null || s.isBlank() ? null : s;
     }
-
 
     /**
      * J14: {@code opened_at} anchors the deterministic engine's ±10m Sumo window, so a null

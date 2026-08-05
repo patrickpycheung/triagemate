@@ -124,16 +124,39 @@ triage:
     #   comments   — "Additional comments", customer-facing
     write-field: work_notes
 
-    # Operator-curated duplicate links, keyed by the incident being triaged.
-    # Search can only find what the instance's text index supports; when a human already
-    # KNOWS two tickets are the same problem, stating it here beats any heuristic. Pins are
-    # additive and rank above search hits, so the triager sees the known duplicate first.
+    # J26 — similar-incident search. This used to be one query with the first word of the
+    # subject line in it and a hardcoded 0.5 "similarity" on every row, which returned zero
+    # hits against the live instance for every incident. See SimilarIncidentRanker.
+    #
+    # Which incident states count as resolved, as an encoded-query IN list. 6=Resolved,
+    # 7=Closed out of the box — override if this instance customised its state values,
+    # otherwise the search silently matches nothing.
+    # 1=New is included alongside 6=Resolved and 7=Closed. MEASURED against the live dev
+    # instance (2026-08-05): every incident under the Delivery Hazards CI is state=New, so
+    # "6,7" retrieves ZERO candidates on both passes and the feature reports nothing —
+    # the original symptom, reproduced by the fix. A young estate always looks like this;
+    # it has open duplicates long before it has resolved ones, and an open duplicate is
+    # still worth showing ("two people have reported this").
+    # Drop back to "6,7" on an estate with real resolution history, where a resolved match
+    # is strictly more useful and the extra New rows are only noise.
+    resolved-states: "1,6,7"
+    # Minimum score (0..1) worth reporting. 0.25 admits a same-CI match on its own: a prior
+    # incident against the same system is worth a human's attention even when the two
+    # reporters described the fault in different words.
+    similarity-floor: 0.25
+    # Cap on reported similar incidents, highest-scoring first.
+    max-similar: 5
+
+    # Operator-curated duplicate links, keyed by the incident being triaged. Retrieval and
+    # the ranker can only find what the instance's text search and CMDB support; when a human
+    # already KNOWS two tickets are the same problem, stating it here beats any heuristic.
+    # Pins are additive, fetched by number, and rank above every scored hit.
     #
     #   similar-incidents:
     #     INC0010010:
     #       - INC0010012
     #
-    # Unset means "no pins" — the same-application search below still runs.
+    # Unset means "no pins" — the two retrieval passes above still run.
     similar-incidents: {}
 
   # FND-20: max-results and max-window-minutes are actually read and enforced in

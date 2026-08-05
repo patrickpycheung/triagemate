@@ -59,7 +59,7 @@ class RealServiceNowGatewayTest {
     void rejectsAnUnrecognisedWriteField() {
         var props = TriagePropertiesFixture.withEngine(TriageProperties.Engine.DETERMINISTIC);
         var badProps = new TriageProperties(props.engine(), props.writeback(), props.orchestrator(),
-                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority", java.util.Map.of()),
+                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority", "6,7", 0.25, 5, java.util.Map.of()),
                 props.sumo(), props.gitlab());
         try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
             var violations = factory.getValidator().validate(badProps);
@@ -93,6 +93,107 @@ class RealServiceNowGatewayTest {
 
         f.gateway().addWorkNote("INC0010005", "line one\r\nline\ttwo");
 
+        f.server().verify();
+    }
+
+    /**
+     * J26: the similar-incident search must query on the incident's CONFIGURATION ITEM and on
+     * its distinctive symptom terms — not on {@code short_descriptionLIKE<first word>}, which
+     * is what it did, and which returned zero rows against the live instance for every
+     * incident ever triaged ({@code docs/Siyad_Findings.md} §2).
+     *
+     * <p>Asserted at the HTTP boundary rather than on an extracted predicate for the same
+     * reason FND-14's test is: the fault was in the query that went over the wire, and every
+     * test that exercised similar-incidents before this one ran against
+     * {@code MockServiceNowGateway}'s two hardcoded rows — the identical mock-only blind spot
+     * as FND-47, FND-61 and J24/SFF-1.
+     */
+    @Test
+    void similarIncidentSearchQueriesByConfigurationItemAndSymptomTerms() {
+        var f = build();
+        // Derived from the fixture rather than written out, so this keeps proving the point
+        // it was written to prove — that the states come from CONFIG, not a literal in the
+        // query builder — without also pinning WHICH states are configured. The default
+        // moved to "1,6,7" (application.yml explains why: every candidate on the live dev
+        // instance is state=New, so "6,7" retrieves nothing), and a hardcoded expectation
+        // here turned that config change into a false test failure.
+        String states = TriagePropertiesFixture.deterministic().servicenow().resolvedStates();
+        var queries = new java.util.ArrayList<String>();
+        // Two retrieval passes (CI, then symptom terms); capture what each actually sent.
+        for (int i = 0; i < 2; i++) {
+            f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                    .andExpect(method(HttpMethod.GET))
+                    .andExpect(request -> queries.add(
+                            java.net.URLDecoder.decode(request.getURI().getQuery(),
+                                    java.nio.charset.StandardCharsets.UTF_8)))
+                    .andRespond(withSuccess("{\"result\":[]}", MediaType.APPLICATION_JSON));
+        }
+
+        var incident = new com.company.triage.model.IncidentContext("INC0010010",
+                "Hazards being recorded on handheld are not appearing in Delivery Hazards application.",
+                "", "Adela Cervantsz", "Inquiry / Help", null, null, null, null,
+                java.util.List.of(), java.util.List.of(), "Delivery Hazards", java.util.List.of());
+
+        f.gateway().findSimilarIncidents(incident);
+        f.server().verify();
+
+        String ciPass = queries.get(0);
+        org.assertj.core.api.Assertions.assertThat(ciPass)
+                .contains("cmdb_ci.name=Delivery Hazards")   // the key the old query never used
+                .contains("stateIN" + states);               // from config, not a literal
+
+        String symptomPass = queries.get(1);
+        org.assertj.core.api.Assertions.assertThat(symptomPass)
+                .contains("short_descriptionLIKEhazards")
+                .contains("^OR")                             // several terms, not one
+                .contains("short_descriptionLIKEhandheld");
+
+        // The specific regression: "Hazards" was the FIRST WORD, and the entire retrieval
+        // used to be that one token. A single-term query is no longer possible.
+        org.assertj.core.api.Assertions.assertThat(symptomPass.split("short_descriptionLIKE"))
+                .hasSizeGreaterThan(2);
+
+        // Grouping matters as much as the terms. `A^B^ORC` is `A AND (B OR C)`; stating the
+        // state filter once up front is what keeps it ANDed. Repeating `stateIN...` inside
+        // each alternative would make it one of the OR'd branches instead, matching every
+        // resolved incident regardless of its text — a query that "works" and means nothing.
+        org.assertj.core.api.Assertions.assertThat(symptomPass)
+                .containsOnlyOnce("stateIN" + states)
+                .doesNotContain("^ORstateIN");
+        org.assertj.core.api.Assertions.assertThat(symptomPass.indexOf("stateIN" + states))
+                .isLessThan(symptomPass.indexOf("short_descriptionLIKE"));
+    }
+
+    /**
+     * J26: a failure in one retrieval pass must not cost the other one's results — a partial
+     * similar-incident list is worth strictly more to a human than a failed diagnosis.
+     */
+    @Test
+    void similarIncidentSearchSurvivesAFailingPass() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withServerError());
+        f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"result":[{"number":"INC2616763",
+                          "short_description":"Hazards captured on handhelds not being saved",
+                          "assignment_group":"Delivery Support","close_code":"Resolved - Code Fix",
+                          "close_notes":"","cmdb_ci":"Delivery Hazards","category":"Inquiry / Help"}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var incident = new com.company.triage.model.IncidentContext("INC0010010",
+                "Hazards being recorded on handheld are not appearing in Delivery Hazards application.",
+                "", null, "Inquiry / Help", null, null, null, null,
+                java.util.List.of(), java.util.List.of(), "Delivery Hazards", java.util.List.of());
+
+        var similar = f.gateway().findSimilarIncidents(incident);
+
+        org.assertj.core.api.Assertions.assertThat(similar)
+                .extracting(com.company.triage.model.ResolvedIncident::number)
+                .containsExactly("INC2616763");
         f.server().verify();
     }
 

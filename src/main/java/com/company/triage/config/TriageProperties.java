@@ -1,6 +1,8 @@
 package com.company.triage.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -80,21 +82,52 @@ public record TriageProperties(
      */
     public record ServiceNow(
             @Pattern(regexp = "work_notes|comments") String writeField,
+            /**
+             * J26: incident {@code state} values that count as "resolved" for the
+             * similar-incident search, as an encoded-query {@code IN} list. Out-of-the-box
+             * ServiceNow is {@code 6} (Resolved) and {@code 7} (Closed), which is the default
+             * — but these are configurable per instance, and this was previously the literal
+             * {@code stateIN6,7} baked into the query. On an instance with customised states
+             * that hardcoding returns zero rows for every incident, with nothing in the trace
+             * to say why.
+             */
+            String resolvedStates,
+            /**
+             * J26: minimum similarity ({@code 0..1}) a candidate must score to be reported.
+             * The default admits a same-CI match on its own — see
+             * {@link com.company.triage.gateway.SimilarIncidentRanker} for the weights.
+             */
+            @DecimalMin("0.0") @DecimalMax("1.0") double similarityFloor,
+            /** J26: how many ranked similar incidents to report at most. */
+            @Min(1) int maxSimilar,
+            /**
+             * Operator-curated "these two tickets are the same problem" links, keyed by the
+             * incident being triaged:
+             * {@code triage.servicenow.similar-incidents.INC0010010[0]=INC0010012}.
+             *
+             * <p>Retrieval + {@link com.company.triage.gateway.SimilarIncidentRanker} can only
+             * find what the instance's own text search and CMDB support. When a human already
+             * KNOWS two tickets are duplicates, saying so beats any heuristic — and it is the
+             * difference between the triager seeing "we resolved this last week, close it" and
+             * seeing nothing. Pins are additive and rank above every scored hit.
+             *
+             * <p>Unset means "no pins", never null.
+             */
             java.util.Map<String, List<String>> similarIncidents
     ) {
         /**
-         * Operator-curated "these two tickets are the same problem" links, keyed by the
-         * incident being triaged: {@code triage.servicenow.similar-incidents.INC0010010[0]=INC0010012}.
-         *
-         * <p>Automated similarity is a genuinely hard ranking problem and the search-based
-         * path can only ever find what the instance's own text search supports. When a human
-         * already KNOWS two tickets are duplicates, saying so in config beats any heuristic —
-         * and it is the difference between the triager seeing "we resolved this last week,
-         * close it" and seeing nothing at all. Pins are additive and rank above search hits.
-         *
-         * <p>Null-safe: unset means "no pins", not a null map.
+         * Defaults applied here rather than only in {@code application.yml} so a partial
+         * override (or a test fixture constructing this directly) cannot silently produce
+         * {@code resolvedStates=null} → a malformed encoded query, or {@code maxSimilar=0} →
+         * a search that always reports nothing. Both of those are the FND-57 shape: a config
+         * fault that presents as an empty result rather than as an error.
          */
         public ServiceNow {
+            if (resolvedStates == null || resolvedStates.isBlank()) resolvedStates = "6,7";
+            if (similarityFloor <= 0.0) similarityFloor = 0.25;
+            if (maxSimilar <= 0) maxSimilar = 5;
+            // Same FND-57 shape as the three above: a null map here would NPE on the first
+            // pin lookup rather than simply meaning "no pins configured".
             similarIncidents = similarIncidents == null ? java.util.Map.of() : similarIncidents;
         }
 
