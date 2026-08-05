@@ -390,4 +390,97 @@ class DeterministicDiagnosisEngineTest {
             assertThat(step.result()).contains("skipped");
         });
     }
+
+    // --- J24/SFF-2,3,4: the affected system, and saying so when it was inferred -----------
+
+    /**
+     * J24/SFF-2 + SFF-3 — the exact shape from the live instance
+     * ({@code docs/Siyad_Findings.md} §2/§3): a ticket whose CMDB entry is absent, so the
+     * affected system is inferred from the subject line.
+     *
+     * <p>Before J24 this produced a Sumo scope built from the sentence fragment
+     * {@code hazards-being-recorded-on}, which matches no real {@code _sourceCategory}, and
+     * then reported "0 line(s)" — a false negative presented to the reader as evidence that
+     * the system was quiet. Now the search is skipped, the trace says why, and the report
+     * discloses that every system-scoped conclusion rests on an inference.
+     */
+    @Test
+    void anInferredAffectedSystemIsDisclosedAndItsScopeIsNotSearched() {
+        var engineForCilessIncident = new DeterministicDiagnosisEngine(
+                noCmdbIncidentGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), new MockGitLabGateway(),
+                TriagePropertiesFixture.deterministic());
+
+        var result = engineForCilessIncident.diagnose("INC0010010");
+
+        assertThat(result.report().missingInformation())
+                .as("the inference must be stated, not silently relied on")
+                .anySatisfy(m -> assertThat(m).contains("no configuration item"));
+        assertThat(result.trace())
+                .anySatisfy(line -> assertThat(line)
+                        .contains("sumo.search → skipped")
+                        .contains("inferred from the ticket's subject line"));
+        assertThat(result.report().missingInformation())
+                .noneSatisfy(m -> assertThat(m).contains("No log lines matched"));
+    }
+
+    /**
+     * J24/SFF-2 — the counterpart: a CMDB-sourced system is NOT flagged as inferred, and its
+     * scope is searched normally. Without this the previous test would pass trivially if the
+     * code simply always disclosed.
+     */
+    @Test
+    void aCmdbSourcedAffectedSystemIsNotFlaggedAsInferred() {
+        var result = engine.diagnose("INC0010005");   // seeded incident: cmdb_ci = "Order Portal"
+
+        assertThat(result.report().missingInformation())
+                .noneSatisfy(m -> assertThat(m).contains("inferred from its subject line"));
+        assertThat(result.trace())
+                .anySatisfy(line -> assertThat(line).contains("sumo.search("));
+    }
+
+    /** J24/SFF-4 — an environment nobody stated is disclosed as an assumption. */
+    @Test
+    void aDefaultedEnvironmentIsDisclosed() {
+        var engineForEnvlessIncident = new DeterministicDiagnosisEngine(
+                noCmdbIncidentGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), new MockGitLabGateway(),
+                TriagePropertiesFixture.deterministic());
+
+        var result = engineForEnvlessIncident.diagnose("INC0010010");
+
+        assertThat(result.report().missingInformation())
+                .anySatisfy(m -> assertThat(m).contains("does not state a usable environment"));
+    }
+
+    /**
+     * The live ticket's shape (INC0010010): no CMDB entry, no environment, a real subject
+     * line. Dated, so the J14 opened_at path is not what is under test here.
+     */
+    private static com.company.triage.gateway.ServiceNowGateway noCmdbIncidentGateway() {
+        return new com.company.triage.gateway.ServiceNowGateway() {
+            @Override
+            public com.company.triage.model.IncidentContext getIncident(String number) {
+                return new com.company.triage.model.IncidentContext(
+                        number,
+                        "Hazards being recorded on handheld are not appearing in Delivery Hazards application",
+                        "See attached for details.",
+                        "Adela Cervantsz", "Inquiry / Help", null,
+                        java.time.OffsetDateTime.parse("2026-08-02T21:37:16Z"),
+                        null,          // <-- no environment
+                        null,
+                        List.of(), List.of(),
+                        null,          // <-- no cmdb_ci
+                        List.of());
+            }
+            @Override public List<com.company.triage.model.ResolvedIncident> findSimilarIncidents(
+                    com.company.triage.model.IncidentContext c) { return List.of(); }
+            @Override public java.util.Optional<com.company.triage.model.ServiceOwnership> findOwnership(String a) {
+                return java.util.Optional.empty();
+            }
+            @Override public void addWorkNote(String number, String note) {}
+            @Override public List<com.company.triage.model.NewIncident> findIncidentsCreatedSince(
+                    java.time.OffsetDateTime since, int limit) { return List.of(); }
+        };
+    }
 }

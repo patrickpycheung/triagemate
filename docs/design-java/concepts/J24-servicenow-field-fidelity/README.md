@@ -1,6 +1,9 @@
 # J24 — ServiceNow Field Fidelity (the incident's own fields must survive the parse)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: HIGH
+**State**: 🟢 Built (SFF-1…SFF-5, 2026-08-05) — reference-field unwrapping, app-provenance
+disclosure, unmatched-scope skip, the environment ladder, and the captured-response fixture
+all landed; `mvn test` 166 / `mvn -Padk test` 222 green. The deferred alias-map question in
+SFF-3 remains open and is explicitly non-blocking · **Complexity**: Moderate · **Priority**: HIGH
 **Depends on**: J3 (gateway contracts), J5 (ServiceNow gateway), J2 (both engines consume `IncidentContext`)
 **Amends**: J5 (`getIncident` field contract), J2 (FND-67's premise — see [Correction](#correction-to-fnd-67)), J14 (absorbs its `openedAt` finding's root cause)
 **Source**: teammate field report — `docs/Siyad_Findings.md` §2 and §3, by **sajids4**

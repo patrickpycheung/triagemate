@@ -172,9 +172,24 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // of a sweep, since there is no longer a list of candidates to guess between.
         String logQuery = signals.logQuery();
         String projectSlug = IncidentSignals.projectSlug(signals.app());
-        String environment = IncidentSignals.environmentCode(
+        IncidentSignals.EnvironmentChoice env = IncidentSignals.resolveEnvironment(
                 inc.environment(), sumoAllowedEnvironments, sumoDefaultEnvironment);
+        String environment = env.code();
         String scope = sumoProps.sourceCategoryFor(projectSlug, environment);
+        // J24/SFF-3: a slug derived from a SENTENCE FRAGMENT can never match a real
+        // _sourceCategory, so issuing it burns a call and then reports "0 lines" as though the
+        // system had been searched and found quiet — a false negative presented as evidence.
+        // That is exactly what happened on the live instance (docs/Siyad_Findings.md §3): the
+        // CI parse dropped "Delivery Hazards", `app` fell back to the subject line, and the
+        // query went to .../hazards-being-recorded-on/... which exists nowhere.
+        //
+        // Skip only when BOTH are true — the app was inferred rather than read from the CMDB,
+        // AND the derived slug matches no configured GitLab project. A CMDB-sourced name is
+        // trusted even if it matches no allowlist entry (the allowlist is a GitLab concept and
+        // may legitimately not list every system that logs to Sumo).
+        boolean slugIsAGuess = signals.appWasInferred()
+                && IncidentSignals.rankAllowlist(signals.app(), gitLabProjectAllowlist).stream()
+                        .noneMatch(p -> IncidentSignals.projectSlug(p).equals(projectSlug));
         // J14: `openedAt` is the ANCHOR for the ±10m window, and against a real instance it
         // can be null — ServiceNow returns `opened_at` in the requesting user's display
         // format under `sysparm_display_value=true`, and any format `parseTime` doesn't
@@ -189,7 +204,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // searched and found quiet — a false negative presented as evidence. Say plainly
         // that the search did not happen and why, exactly as the gitlab.searchCode branch
         // below already does.
-        LogSearchRequest sumoRequest = inc.openedAt() == null ? null
+        LogSearchRequest sumoRequest = (inc.openedAt() == null || slugIsAGuess) ? null
                 : new LogSearchRequest(scope, sumoProps.index(), logQuery,
                         inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10),
                         sumoProps.maxResults());
@@ -207,11 +222,22 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // the UI whether the _index clause was being applied at all — and without it a
         // real Sumo search returns zero rows every time, so it is the one part of the
         // query most worth being able to see.
-        String traceSumoSearch = sumoRequest == null
-                ? "sumo.search → skipped (the ticket's opened_at is missing or unparseable, so "
-                        + "there is no time window to search around)"
-                : "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
-                        .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
+        String traceSumoSearch;
+        if (sumoRequest != null) {
+            traceSumoSearch = "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
+                    .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
+        } else if (inc.openedAt() == null) {
+            traceSumoSearch = "sumo.search → skipped (the ticket's opened_at is missing or "
+                    + "unparseable, so there is no time window to search around)";
+        } else {
+            // J24/SFF-3: say WHAT was rejected and why, so the trace shows a decision rather
+            // than an absence — and name the guessed slug, because that is the thing an
+            // operator needs to see to recognise the CMDB is not naming the system.
+            traceSumoSearch = ("sumo.search → skipped (the affected system was inferred from the "
+                    + "ticket's subject line, not its CMDB entry, and the derived scope '%s' "
+                    + "matches no configured project — searching it would report a false "
+                    + "'no logs found')").formatted(projectSlug);
+        }
         trace.add(traceSumoSearch);
         emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
 
@@ -369,11 +395,32 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // J14: distinguish "we searched and found nothing" from "we could not search at all".
         // Claiming the former when the latter happened is the FND-8 class — narrating an
         // investigation step that did not occur.
-        if (sumoRequest == null) {
+        if (sumoRequest == null && inc.openedAt() == null) {
             missing.add("Logs were not searched: the ticket's opened_at is missing or unparseable, "
                     + "so there is no time window to bound the query");
+        } else if (sumoRequest == null) {
+            // J24/SFF-3
+            missing.add("Logs were not searched: the affected system was inferred from the subject "
+                    + "line rather than read from the CMDB, and the resulting scope matches no "
+                    + "configured project — searching it would have reported a false 'no logs found'");
         } else if (logs.isEmpty()) {
             missing.add("No log lines matched in the ±10m window around opened_at");
+        }
+        // J24/SFF-2: the affected system is the pivot every other derivation turns on — the
+        // Sumo scope, the candidate systems, the Confluence query. When it was inferred rather
+        // than read, that is the single most important caveat on the whole report.
+        if (signals.appWasInferred()) {
+            missing.add(("The ticket has no configuration item, so the affected system (\"%s\") was "
+                    + "inferred from its subject line — treat every system-scoped conclusion below "
+                    + "as resting on that inference").formatted(signals.app()));
+        }
+        // J24/SFF-4: an environment that was defaulted rather than read points the log search at
+        // an environment nobody chose. On the live instance this silently searched prod for a
+        // ptest system.
+        if (env.wasDefaulted()) {
+            missing.add(("The ticket does not state a usable environment, so '%s' was assumed; "
+                    + "a log search bounded by it may be looking at the wrong environment")
+                    .formatted(environment));
         }
         if (docs.isEmpty()) missing.add("No runbook or known-error page matched the symptom terms");
         if (inc.environment() == null || inc.environment().isBlank()) missing.add("Environment not set on the ticket");

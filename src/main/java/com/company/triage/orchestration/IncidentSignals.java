@@ -44,10 +44,38 @@ import java.util.regex.Pattern;
  */
 record IncidentSignals(
         String app,
+        AppSource appSource,
         List<String> keywords,
         String primaryIdentifier,
         List<String> identifiers
 ) {
+
+    /**
+     * J24/SFF-2 — where {@link #app} came from.
+     *
+     * <p>With the FND-67-era parse bug fixed (J24/SFF-1: reference fields arrived as
+     * {@code {display_value, link}} objects and parsed to {@code ""}), a blank CI is now rare
+     * AND meaningful. That changes what the fallback means: it used to fire on essentially
+     * every real ticket, so it was effectively the primary path; now it fires only when the
+     * ticket genuinely has no configuration item.
+     *
+     * <p>The fallback stays — a CI really can be unset — but it stops being invisible. The
+     * honesty contract applies to a DERIVATION, not just to a fetch: guessing which system is
+     * affected is allowed, guessing silently is not.
+     */
+    enum AppSource {
+        /** The CMDB named it — {@code cmdb_ci} on the incident. */
+        FROM_CMDB_CI,
+        /** Nothing named it; inferred from the ticket's subject line. */
+        FROM_SUBJECT_LINE,
+        /** The ticket carries neither a CI nor a usable subject line. */
+        UNKNOWN
+    }
+
+    /** Whether {@link #app} was inferred rather than read from the CMDB (J24/SFF-2). */
+    boolean appWasInferred() {
+        return appSource != AppSource.FROM_CMDB_CI;
+    }
 
     /** Ticket-ish ids: {@code INC-ORD-4471}, {@code ORD-1234}, {@code PAY-99}. Most specific. */
     private static final Pattern DASHED_ID = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\\d{3,}\\b");
@@ -94,10 +122,23 @@ record IncidentSignals(
         // a whole sentence in `app` — which then got appended verbatim to the Confluence
         // query and fed to allowlist ranking as if it were a system name. Cap the fallback at
         // a name-sized leading fragment: enough to target with, not a paragraph.
-        String app = notBlank(inc.configurationItem()) ? inc.configurationItem().trim()
-                                                       : leadingPhrase(symptom);
+        //
+        // J24/SFF-2: record WHICH of those two answered. Before SFF-1 fixed the reference-field
+        // parse, cmdb_ci was blank on every real ticket, so this fallback was silently the
+        // primary path — the sentence fragment "Hazards being recorded on" reached the Sumo
+        // slug and matched nothing. Now the fallback is genuinely exceptional, and when it
+        // fires the report says so rather than presenting a guess as a reading.
+        String app;
+        AppSource appSource;
+        if (notBlank(inc.configurationItem())) {
+            app = inc.configurationItem().trim();
+            appSource = AppSource.FROM_CMDB_CI;
+        } else {
+            app = leadingPhrase(symptom);
+            appSource = notBlank(app) ? AppSource.FROM_SUBJECT_LINE : AppSource.UNKNOWN;
+        }
 
-        return new IncidentSignals(app, extractKeywords(rawText),
+        return new IncidentSignals(app, appSource, extractKeywords(rawText),
                 ids.isEmpty() ? null : ids.get(0), ids);
     }
 
@@ -188,6 +229,22 @@ record IncidentSignals(
      * always pass an explicit environment instead (the ADK tool exposes it as a parameter).
      */
     static String environmentCode(String environment, List<String> allowed, String fallback) {
+        return resolveEnvironment(environment, allowed, fallback).code();
+    }
+
+    /**
+     * J24/SFF-4 — the environment, plus which rung of the ladder answered.
+     *
+     * <p>{@code u_environment} does not exist on the live AusPost instance, so this silently
+     * fell through to the {@code prod} default and pointed the log search at the wrong
+     * environment — the second wrong component of the {@code _sourceCategory} in
+     * {@code docs/Siyad_Findings.md} §3 (sent {@code /prod/}, expected {@code /ptest/}). The
+     * value being a default rather than a reading was invisible.
+     *
+     * <p>Rejected: inferring the environment from the CI name. It reads as clever and fails
+     * silently in exactly the cases it matters.
+     */
+    static EnvironmentChoice resolveEnvironment(String environment, List<String> allowed, String fallback) {
         String e = text(environment).toLowerCase(Locale.ROOT);
         String guess = null;
         if (e.contains("prod")) guess = "prod";
@@ -197,9 +254,33 @@ record IncidentSignals(
         else if (e.contains("test") || e.contains("sit") || e.contains("qa")) guess = "ptest";
         // Only honour the guess if it's actually a configured environment.
         if (guess != null && (allowed == null || allowed.isEmpty() || allowed.contains(guess))) {
-            return guess;
+            return new EnvironmentChoice(guess, EnvironmentSource.FROM_TICKET);
         }
-        return fallback;
+        // A value was present but named an environment this deployment does not configure —
+        // worth distinguishing from "the ticket said nothing at all", because it means the
+        // ticket and the config disagree rather than the ticket being silent.
+        return new EnvironmentChoice(fallback,
+                guess != null ? EnvironmentSource.TICKET_VALUE_NOT_CONFIGURED
+                        : notBlank(e) ? EnvironmentSource.TICKET_VALUE_UNRECOGNISED
+                        : EnvironmentSource.DEFAULTED);
+    }
+
+    /** J24/SFF-4: the resolved environment and the rung of the ladder that supplied it. */
+    record EnvironmentChoice(String code, EnvironmentSource source) {
+        boolean wasDefaulted() {
+            return source != EnvironmentSource.FROM_TICKET;
+        }
+    }
+
+    enum EnvironmentSource {
+        /** The ticket's own environment field named a configured environment. */
+        FROM_TICKET,
+        /** The ticket named an environment this deployment does not configure. */
+        TICKET_VALUE_NOT_CONFIGURED,
+        /** The ticket carried a value nothing recognised. */
+        TICKET_VALUE_UNRECOGNISED,
+        /** The ticket said nothing; the global default answered. */
+        DEFAULTED
     }
 
     private static Set<String> tokens(String s) {
