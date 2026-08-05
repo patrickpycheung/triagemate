@@ -98,7 +98,7 @@ curl -s http://localhost:4000/v1/chat/completions \
 
 # app + high model, one incident, live agent path:
 ./run-adk.sh &
-curl -s -X POST http://localhost:8080/api/diagnose/INC0010005 | jq '.report.suggestedAssignment, .trace'
+curl -s -X POST http://localhost/api/diagnose/INC0010005 | jq '.report.suggestedAssignment, .trace'
 ```
 
 You should see advisory output **and** a `trace` proving bounded, real tool calls.
@@ -110,10 +110,25 @@ You should see advisory output **and** a `trace` proving bounded, real tool call
 | # | What | Command | Port |
 |---|------|---------|------|
 | T1 | Copilot proxy | `npx copilot-api@latest` (or `litellm --config config.yaml`) | 4000 |
-| T2 | **Primary (D1)** — our loop + high model | `./run-adk.sh` | 8080 |
-| T3 | **Fallback (D2)** — deterministic, offline | `./run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` | 8081 |
+| T2 | **Primary (D1)** — our loop + high model | `./run-adk.sh` | **80** |
+| T3 | **Fallback (D2)** — deterministic, offline | `./run-deterministic.sh --server.port=8081` | 8081 |
 | T4 | **Contrast (D3, optional)** — Copilot CLI, no tools | `copilot -p "Here is incident INC0010005: <paste the summary>. Diagnose it."` | — |
-| — | Browser | `http://localhost:8080` (primary) · `http://localhost:8081` (standby) | — |
+| — | Browser | `http://localhost` (primary) · `http://localhost:8081` (standby) | — |
+
+> **J15 (corrected 2026-08-05) — this table was wrong in two ways that would have bitten
+> on stage.** It listed the primary on 8080; the scripts and `application.yml` have both
+> defaulted to **80** since `f947ee3`, so a browser on `:8080` would have shown nothing.
+> And T3's command was
+> `./run-deterministic.sh -Dspring-boot.run.arguments=--server.port=8081` — the script
+> scans its OWN arguments for `--server.port=`, so that spelling never matched, `PORT`
+> stayed empty, and **the standby would have defaulted to 80 and collided with T2**. The
+> rehearsed safety net was, in fact, a second way to fail. Pass script arguments directly;
+> the script forwards them to Maven itself.
+>
+> If port 80 is not bindable on the demo laptop, `./run-adk.sh` says so and falls back to
+> 8080 (verifying 8080 is free first, also J15) — in that case the primary is
+> `http://localhost:8080` and the standby stays on 8081. Run the setup once to avoid the
+> question entirely: `sudo ./bin/setup-custom-domain.sh`.
 
 Start T1 → T2 → T3 **before** you present, so both instances are warm. T3 needs **no
 network** (default deterministic engine), so it is your guaranteed floor.
@@ -122,7 +137,7 @@ network** (default deterministic engine), so it is your guaranteed floor.
 
 ## 2. Running the demo
 
-1. **Lead with the value + evidence trail (D4).** Open `http://localhost:8080`, trigger
+1. **Lead with the value + evidence trail (D4).** Open `http://localhost`, trigger
    `INC0010005`, and narrate: sources consulted → first-pass diagnosis → the **log↔code
    citation** (`payment_service.py:44`) → "who to talk to" → the **trace** showing it
    really called ServiceNow/Sumo/Confluence/GitLab. Emphasise **advisory-only + bounded**.
@@ -135,7 +150,7 @@ network** (default deterministic engine), so it is your guaranteed floor.
    name `payment_service.py:44`, cannot say which deploy correlates, and cannot tell you
    who to talk to — because it never read the logs, the wiki or the repo. **The frontier
    model is the same one we just used; the difference on screen is the evidence trail.**
-   Then stop and return to the 8080 result.
+   Then stop and return to the primary result.
 
 ---
 
@@ -146,7 +161,8 @@ If the model/proxy misbehaves live (slow, error, network drop):
 - **Just move the browser to `http://localhost:8081`** (the deterministic standby) and
   keep going — identical UI and output, **no LLM, no network**. Say nothing broke; it's
   the offline mode.
-- If you prefer one port: stop T2 and run `./run-deterministic.sh` on 8080.
+- If you prefer one port: stop T2, then run `./run-deterministic.sh` (it takes port 80,
+  the one T2 just released, so the URL you already have on screen keeps working).
 
 Because D2 is already running, the flip is a single browser-tab switch. **Never** debug on
 stage — flip and continue.
@@ -161,11 +177,13 @@ stage — flip and continue.
       field. A proxy that drops `tools` silently degrades D1 to a single-shot answer with
       **no evidence trail** — which is the whole demo. Run it before anything else.
 - [ ] JDK + Maven present (`mvn -v`) — a JRE alone cannot build `-Padk`.
-- [ ] T2 (8080) answered one warm-up `POST /api/diagnose/INC0010005` with a real `trace`.
+- [ ] T2 (port 80, or 8080 if the script announced a fallback) answered one warm-up
+      `POST /api/diagnose/INC0010005` with a real `trace`.
 - [ ] T3 (8081) deterministic standby answered the same incident offline.
 - [ ] Decide **now** whether D3 runs — network ok? If unsure, **skip it**. (No MCP
       setup needed: D3 is tool-less by design — have the incident summary on the clipboard.)
-- [ ] Browser tabs open on 8080 and 8081.
+- [ ] Browser tabs open on the primary URL the script PRINTED, and on 8081.
+- [ ] The two servers are on DIFFERENT ports — confirm T3's banner says 8081, not 80.
 
 ---
 

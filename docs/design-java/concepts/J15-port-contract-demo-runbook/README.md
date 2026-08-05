@@ -1,6 +1,10 @@
 # J15 — The Run Contract (ports, endpoints, and a runbook that matches the scripts)
 
-**State**: 🔴 Designed, not built · **Complexity**: Simple ·
+**State**: 🟢 Built (2026-08-05) — the runbook's terminal table and fallback flip are
+re-derived from what the scripts actually do, both stale `application.yml says 8080`
+rationales are corrected, and the 8080 fallback now verifies 8080 is free before using it.
+Verified by executing the scripts' own port-selection logic: the old T3 spelling resolved to
+port 80 (colliding with the primary), the corrected one resolves to 8081 · **Complexity**: Simple ·
 **Priority**: HIGH ·
 **Depends on**: J1 (Spring Boot app + `application.yml`), J2 (ADK path + Copilot proxy) ·
 **Amends**: J7 (RC6 demo safety — the two-engine standby procedure it carries) ·

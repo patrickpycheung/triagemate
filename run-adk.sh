@@ -125,8 +125,10 @@ PY
 join_args() { echo "$*"; }
 
 # --- port selection ----------------------------------------------------------
-# Same rule as run-deterministic.sh — see the long note there for why the script
-# defaults to 80 while application.yml stays on 8080.
+# Same rule as run-deterministic.sh. Both the scripts AND application.yml default to
+# 80 (J15) — an earlier version of this comment claimed application.yml "stays on
+# 8080", which stopped being true when the port-80 default landed and left the two
+# files documenting each other wrongly.
 DEFAULT_PORT="80"
 PORT=""
 for arg in "$@"; do
@@ -150,7 +152,18 @@ if [ -z "$PORT" ]; then
     echo "  user. Preferred over 'sudo ./run-*.sh', which would leave root-owned files" >&2
     echo "  in target/ and ~/.m2 and break later non-root builds." >&2
     echo "" >&2
-    PORT="8080"
+    # J15: do not assume the fallback is free either. 8080 is the single most contended
+    # port on a developer laptop, and a demo laptop is exactly where something else is
+    # already on it. Falling back to a port we never checked turns "port 80 needs
+    # elevation" into a confusing second failure at Spring startup.
+    if port_is_bindable "8080"; then
+      PORT="8080"
+    else
+      echo "  Port 8080 is not free either — something is already listening there." >&2
+      echo "  Pick an explicit port, e.g.:  ./run-adk.sh --server.port=8090" >&2
+      echo "" >&2
+      exit 1
+    fi
   fi
   APP_ARGS="$APP_ARGS --server.port=$PORT"
 fi

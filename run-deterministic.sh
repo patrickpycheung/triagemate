@@ -48,11 +48,15 @@ join_args() { echo "$*"; }
 
 # --- port selection ----------------------------------------------------------
 # Default to 80 so the demo URL has no ":8080" tail — the point is for it to read
-# like a deployed service. application.yml deliberately still says 8080: that is
-# what plain `mvn spring-boot:run` and the e2e suite use, and port 80 is
-# privileged on macOS/Linux, so defaulting the APP to 80 would make the test
-# suite and everyday `mvn` runs need sudo. The scripts are the demo path; the
-# framework default stays unprivileged.
+# like a deployed service.
+#
+# J15: this comment used to assert "application.yml deliberately still says 8080".
+# That WAS the design, and it stopped being true when the port-80 default landed in
+# f947ee3 — application.yml now says 80 as well, so the two files were documenting
+# each other wrongly and a reader trusting either one got the other's behaviour.
+# The e2e suite pins its own port explicitly (--server.port=8080), which is what
+# actually keeps the test path unprivileged; that is the mechanism, not the app
+# default it used to rely on.
 #
 # If 80 can't be bound (no privilege, or something else already has it) we fall
 # back to 8080 and SAY SO, rather than dying with a stack trace or — worse —
@@ -78,6 +82,13 @@ if [ -z "$PORT" ]; then
     echo "  user. Preferred over 'sudo ./run-*.sh', which would leave root-owned files" >&2
     echo "  in target/ and ~/.m2 and break later non-root builds." >&2
     echo "" >&2
+    # J15: check the fallback is free too — see run-adk.sh for the full note.
+    if ! port_is_bindable "8080"; then
+      echo "  Port 8080 is not free either — something is already listening there." >&2
+      echo "  Pick an explicit port, e.g.:  ./run-deterministic.sh --server.port=8090" >&2
+      echo "" >&2
+      exit 1
+    fi
     PORT="8080"
   fi
   APP_ARGS="$(join_args "$@" "--server.port=$PORT")"
