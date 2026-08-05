@@ -32,10 +32,34 @@ public class RealConfluenceGateway implements ConfluenceGateway {
         String basic = Base64.getEncoder()
                 .encodeToString((cf.user() + ":" + cf.secret()).getBytes());
         this.http = RestClient.builder()
-                .baseUrl(cf.baseUrl())
+                .baseUrl(siteRoot(cf.baseUrl()))
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")
                 .build();
+    }
+
+    /**
+     * FND-83: the request paths below supply the {@code /wiki} context path themselves, so
+     * the configured base URL must be the bare site root. The value everyone will actually
+     * paste — the one in the browser address bar, and the one Atlassian's own docs show — is
+     * {@code https://<site>.atlassian.net/wiki}, which produced
+     * {@code /wiki/wiki/rest/api/content/search} and a 404.
+     *
+     * <p>Field-reported by sajids4 ({@code docs/Siyad_Findings.md} §1, live instance
+     * 2026-08-04) after a debugging session, and the failure is maximally unhelpful: the 404
+     * body is a full Confluence "Page Not Found" HTML page, so the log shows a wall of markup
+     * rather than "your base URL is wrong". Both spellings must work, because both are what
+     * people will configure.
+     */
+    static String siteRoot(String baseUrl) {
+        if (baseUrl == null) return null;
+        String s = baseUrl.trim();
+        while (s.endsWith("/")) s = s.substring(0, s.length() - 1);
+        if (s.regionMatches(true, s.length() - 5, "/wiki", 0, 5)) {
+            s = s.substring(0, s.length() - 5);
+        }
+        while (s.endsWith("/")) s = s.substring(0, s.length() - 1);
+        return s;
     }
 
     @Override

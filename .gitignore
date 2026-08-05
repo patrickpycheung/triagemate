@@ -19,8 +19,19 @@ STATUS-INFLIGHT.md
 
 # Java build output
 target/
-.mvn/
-!.mvn/wrapper/maven-wrapper.jar
+# FND-82: the Maven wrapper. This was `.mvn/` + `!.mvn/wrapper/maven-wrapper.jar`, a
+# negation that was dead TWICE OVER — git cannot re-include a file whose parent directory is
+# excluded, and `*.jar` below re-ignores it anyway. It mattered because the run scripts hard-
+# require a system Maven (`command -v mvn` → "sudo apt install"), which on the locked-down
+# corp demo laptop may need admin rights the presenter does not have; the moment someone adds
+# the wrapper to de-risk exactly that, `git add .mvn` would have silently skipped the jar and
+# the fresh clone would fail with `Could not find or load main class ...MavenWrapperMain`.
+# Excluding the directory's CONTENTS (not the directory itself) is what makes a negation
+# reachable; the wrapper jar is then re-included explicitly below the `*.jar` rule.
+.mvn/*
+!.mvn/wrapper/
+.mvn/wrapper/*
+!.mvn/wrapper/maven-wrapper.properties
 
 # Rovo/Forge (paused)
 .wrangler/
@@ -41,6 +52,10 @@ target/
 
 # Package Files #
 *.jar
+# FND-82: must come AFTER *.jar — in gitignore the LAST matching rule wins, so this is the
+# line that actually makes the Maven wrapper jar committable. The old negation sat above
+# *.jar (and under an excluded parent directory), so it never had any effect at all.
+!.mvn/wrapper/maven-wrapper.jar
 *.war
 *.nar
 *.ear

@@ -62,6 +62,29 @@ class ConnectorModeProviderTest {
         assertThat(modes.get("gitlab")).isEqualTo("mock");
     }
 
+    /**
+     * FND-74 — the reported mode must match the bean Spring actually built.
+     *
+     * <p>{@code @ConditionalOnProperty(havingValue = "real")} matches case-insensitively, so
+     * {@code Real} builds the REAL gateway and writes to a live ticket. This provider stored
+     * the raw string and the LT7 chip compares it strictly, so the UI labelled that run
+     * "fixtures" while it was posting advisory comments to a customer-visible incident.
+     */
+    @Test
+    void connectorModeIsCaseAndWhitespaceInsensitive() {
+        MockEnvironment env = new MockEnvironment()
+                .withProperty("triage.connectors.servicenow", "Real")
+                .withProperty("triage.connectors.confluence", "  REAL  ")
+                .withProperty("triage.connectors.sumo", "Mock");
+
+        Map<String, String> modes = new ConnectorModeProvider(env).modes();
+
+        assertThat(modes.get("servicenow")).isEqualTo("real");
+        assertThat(modes.get("confluence")).isEqualTo("real");
+        assertThat(modes.get("sumo")).isEqualTo("mock");
+        assertThat(modes.get("gitlab")).isEqualTo("mock");
+    }
+
     @Test
     void mixedRealAndMockConnectorsAreReportedIndependently() {
         // FND-10: the actual scenario this feature exists for — real and mock are

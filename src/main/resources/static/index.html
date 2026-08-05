@@ -399,10 +399,15 @@
     </div>
   </div>
 
-  <div class="row">
+  <!-- FND-80: a <form> rather than a bare .row, so Enter submits. On stage the presenter
+       types the incident number and hits Enter — the universal reflex — and previously
+       nothing happened, costing a confused beat while they hunted for the button. The
+       button-disabled guard inside run() already covers double-submit, so making Enter a
+       second trigger adds no re-entrancy risk. return false keeps the page from navigating. -->
+  <form class="row" onsubmit="run(); return false;">
     <input id="inc" value="INC0010005" placeholder="INC0010005"/>
-    <button id="go" onclick="run()">Diagnose</button>
-  </div>
+    <button id="go" type="submit">Diagnose</button>
+  </form>
 
   <div id="out"></div>
 </div>
@@ -508,7 +513,11 @@ async function run() {
     if (!body) { out.innerHTML = '<div class="card">Error: server returned a non-JSON body</div>'; return; }
     render(body);
   } catch (e) {
-    out.innerHTML = `<div class="card">Error: ${e}</div>`;
+    // FND-80: esc() here too. `e` is browser-generated today, so this is not currently
+    // exploitable — but it was the single interpolation on the page bypassing an otherwise
+    // uniform escaping discipline, and it becomes load-bearing the moment anything
+    // server-derived is thrown inside the try above. Make the rule per-value, not per-path.
+    out.innerHTML = `<div class="card">Error: ${esc((e && e.message) || e)}</div>`;
   } finally {
     // Requirement 4: stop on done:true (handled inside startLt4Poll itself) OR
     // when the POST's own 200 resolves — whichever is first. This covers the

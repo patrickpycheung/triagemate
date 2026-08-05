@@ -29,6 +29,291 @@ pending design decision" premise on FND-55/56 and found both decidable now
 
 ---
 
+
+## Resolved 2026-08-05 — application review + teammate field report
+
+Thirteen entries from the 2026-08-05 whole-application review (FND-70…82) plus one
+field-reported by sajids4 (FND-83). All fixed the same day: five during the review
+session itself, the remaining nine by `/found-issues-resolve`. Every behaviour change
+carries a fails-before/passes-after regression test; both profiles green at 163/219.
+
+## FND-83 — Confluence `base-url` must not include `/wiki`, and nothing says so · **HIGH** · *field-reported*
+
+**Where**: `src/main/java/com/company/triage/gateway/real/RealConfluenceGateway.java:47`
+and `:78` (the code supplies the `/wiki` prefix itself) vs
+`secrets.properties.example:19` (`triage.integrations.confluence.base-url=`, blank, no hint).
+
+**Reported by**: sajids4 (siyad.sajid4@auspost.com.au), `docs/Siyad_Findings.md` §1, commit
+`6c550ab` — from a live run against real Confluence, 2026-08-04.
+
+**What**: `RealConfluenceGateway` hardcodes `/wiki/rest/api/...` into every request path, so
+the configured base URL must be the bare site (`https://auspost.atlassian.net`). The natural
+value to paste — the one in every browser address bar and the one Atlassian's own docs show —
+is `https://auspost.atlassian.net/wiki`, which produces `/wiki/wiki/rest/api/content/search`
+and a 404. The example file gives no clue either way.
+
+**Why it matters**: it cost a teammate a debugging session on the live instance, and the
+failure is maximally misleading — the 404 body is a full Confluence "Page Not Found" HTML
+page, so the log shows a wall of markup rather than "your base URL is wrong". Worse, the
+gateway's blanket `catch → List.of()` turns it into `0 page(s)` in the trace and a
+`missingInformation` line asserting *"No runbook or known-error page matched the symptom
+terms"* — a clean-looking empty search that never happened. On stage this reads as
+"Confluence had nothing", not "Confluence was never reached".
+
+**Fix**: three small parts, all specified.
+1. Strip a trailing `/wiki` (and any trailing slash) from the configured base URL in the
+   constructor — the two spellings must both work, because both are what people will paste.
+2. Document the contract in `secrets.properties.example` next to the key: *"site root, no
+   `/wiki` suffix — the app adds it"*.
+3. Reference it from `docs/integrations/` alongside the other connector setup notes.
+
+The *visibility* half — making a failed search distinguishable from an empty one — is
+deliberately not here; it is a design change owned by
+[J25](docs/design-java/concepts/J25-knowledge-query-relevance/README.md) (KQR-4), and this
+entry should be fixed without waiting for it.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, during the application-review session)
+- **Escape**: integration-contract-undocumented — the gateway supplies the `/wiki` context
+  path itself, making the base-URL a contract with the config; nothing stated it, no test
+  covered this gateway at all, and the blanket `catch -> List.of()` turned the resulting 404
+  into a clean-looking empty search. Found only by a teammate on a live instance.
+
+## FND-70 — J6/J8/DETERMINISTIC-FLOW/SUMOLOGIC still document the removed `triage.sumo.allowed-scopes` guardrail · **MEDIUM**
+
+**Where**: `docs/design-java/concepts/J8-guardrails-observability/README.md:29`, plus the
+Sumo sections of `J6-knowledge-tools/README.md`, `docs/design-java/DETERMINISTIC-FLOW.md`
+and `docs/integrations/SUMOLOGIC.md:19`.
+
+**What**: commit `92574ce` replaced the literal Sumo scope allowlist with an
+app-composed `_sourceCategory` (allowed-environments + slug regex + configured pattern).
+Four docs still describe the removed key as a live guardrail.
+
+**Why it matters**: J8 is *the* card whose purpose is "what bounds are enforced, and
+where". Anyone auditing the guardrail inventory — teammate, judge, or the next
+`/doc-test` pass — is told the app enforces a scope allowlist it does not have. The real
+bound is different, not weaker, but the doc names the wrong mechanism entirely.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: convention-propagation — a config-key removal (92574ce) changed the enforced guardrail but no step required the four docs that name it to be re-derived from the code.
+
+## FND-71 — README "Verify it works" claims 3/5 passing tests against an actual 152/201 · **LOW**
+
+**Where**: `README.md:157`
+
+**What**: the README's own verification step promises `mvn test → 3 tests pass` and
+`mvn -Padk test → 5 tests pass`. Actual: ~152 and ~201.
+
+**Why it matters**: FND-30 already established that hand-maintained counts drift, and
+fixed J10 + STATUS.md — but the root README, the first thing a judge or teammate reads
+and the doc that *invites* the verification, was never included. Someone following it
+sees 152 where 3 was promised and concludes the docs are unmaintained, which is the
+opposite of what a "Verify it works" section is for. Apply FND-30's policy: name
+approximate counts with an "as of" date, or defer to `mvn` output.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: doc-freshness — FND-30 established the drifting-counts policy and fixed J10 + STATUS.md, but the fix was applied to the files that had drifted, not to every file carrying a count.
+
+## FND-72 — J1/J11 response-contract docs omit the sixth `DiagnosisResult` component `connectors` · **LOW**
+
+**Where**: `docs/design-java/concepts/J1-spring-boot-orchestrator/README.md:89`, and
+J11's LT7 section.
+
+**What**: J1 documents the response as `report + trace + engine + writebackPosted`,
+amended by J11 to add `steps`. The code has since added a sixth component,
+`Map<String,String> connectors` (`DiagnosisResult.java:48-54`, TASK-016), feeding the
+LT7 provenance chips. Additive and wire-compatible, but unrecorded.
+
+**Why it matters**: J1 is the card an integrator reads for the `POST /api/diagnose`
+contract, and it under-reports the shape at the one place it explicitly enumerates it —
+the same "cards lag implementation" class FND-9…32 clustered on. One sentence each.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: card-lag — a response field shipped (TASK-016) without the contract card that enumerates the response shape being part of the change's definition of done.
+
+## FND-73 — `secrets.properties.example` instructs a `snow-live` profile that no longer exists · **MEDIUM**
+
+**Where**: `secrets.properties.example:8` and `:13` (also
+`TRIAGEMATE_APPLICATION_REVIEW.md:339`, which calls it "the recommended combination").
+
+**What**: the example file every new-machine setup copies tells the user to run with
+`--spring.profiles.active=snow-live`. `application.yml:211` defines exactly one profile,
+`real`; `snow-live` was consciously replaced by per-key `triage.connectors.*` overrides.
+Spring silently accepts unknown active profiles.
+
+**Why it matters**: the presenter sets up the corp laptop from this file, fills in real
+ServiceNow credentials, follows its instruction — and every connector stays mock
+(`matchIfMissing=true`). The two "advisory comments" go to the in-memory mock while the
+presenter believes they landed on a real ticket. Silent, and exactly backwards from the
+failure mode you want. Fix the two references, or re-add a `snow-live` profile document
+(servicenow=real, rest mock — the combination the review doc recommends).
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: setup-path-untested — the example file is the new-machine entry point and nothing exercises it; a profile rename left it pointing at a profile that Spring accepts silently.
+
+## FND-74 — Connector mode compared case-insensitively for bean selection but strictly for the provenance chip · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/config/ConnectorModeProvider.java:37`
+
+**What**: `@ConditionalOnProperty` matches `havingValue="real"` case-insensitively, so
+`triage.connectors.servicenow=Real` constructs `RealServiceNowGateway`.
+`ConnectorModeProvider` stores the raw string and the LT7 chip compares it strictly, so
+anything but exactly lowercase `real` renders as `fixtures`.
+
+**Why it matters**: a capitalised value posts two advisory comments to a live,
+customer-visible ticket while the UI asserts the run used fixtures. That is the FND-8
+honesty-contract class — the UI claiming something that did not happen — in its most
+consequential direction. Normalize (trim + lowercase) at the one comparison point, and
+validate against `{mock,real}` so a typo fails fast instead of silently meaning mock.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: mock-only-testing — the reported mode and the wired bean were never asserted against each other, so a case-sensitivity mismatch between them was invisible offline.
+
+## FND-75 — `generatedAt` is model-fabricated and parse-fragile · **MEDIUM**
+
+**Where**: `src/main/adk/java/com/company/triage/agent/AdkDiagnosisEngine.java:160`
+(prompt schema) → the parse at `:688`.
+
+**What**: the report's `generatedAt` is asked of the model rather than stamped by the
+server. `DeterministicDiagnosisEngine.java:371` already stamps `OffsetDateTime.now()`.
+
+**Why it matters**: two costs, one honesty and one operational. (a) A model-invented
+generation timestamp flows into the API response and the ServiceNow work note. (b) A
+common LLM timestamp shape (`2026-08-05 14:32:10` — no `T`, no offset) throws
+`InvalidFormatException` and burns the single FND-42 repair retry — ~8s of stage time and
+a Copilot call — on a field that carries no model judgment at all. Remove it from the
+prompt schema and stamp after parse.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: contract-boundary — a field the server owns was placed in the model's schema, so nothing tested the case where the model answers it badly.
+
+## FND-76 — An `Error` escaping `runOnce` leaves the coalescing future forever incomplete · **LOW**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java:199`
+(owner completion) and `:213` (untimed `existing.get()`).
+
+**What**: the owner completes `mine` on normal return or `catch (RuntimeException)`, while
+the `finally` removes the map entry unconditionally. A `Throwable` raised on the owner
+thread leaves the future incomplete forever, and `awaitExisting` blocks untimed.
+
+**Why it matters**: verified narrower than first stated — `callWithTimeout` wraps engine
+`Error`s into `RuntimeException`, so the exposed window is only a `Throwable` on the owner
+thread *outside* the engine future (OOM/StackOverflow during trace assembly, work-note
+construction, or result construction). But `IncidentPoller` is confirmed single-threaded,
+so one hung waiter permanently kills polling for the process lifetime — no WARN, no
+recovery. Complete the future unconditionally (`finally { if (!mine.isDone())
+mine.completeExceptionally(...) }`), and optionally bound `awaitExisting`.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: exception-taxonomy — the coalescing design reasoned about RuntimeException and never about Throwable, and no test raised an Error on the owner thread.
+
+## FND-77 — `collector.markDone()` is skipped on every failure path · **LOW**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java:280`
+
+**What**: `runOnce()` reaches `markDone()` only on success, so a `runId`-registered buffer
+for a failed run reads `done=false` until the 5-minute TTL evicts it — violating the
+TASK-011 invariant that `done` agrees with the POST outcome.
+
+**Why it matters**: verified that the claimed UI harm is **not** reachable with the
+shipped client (`index.html` stops polling in the POST's `finally`, which fires on
+rejection; a coalesced waiter's POST also fails and stops its poll). So this is contract
+accuracy, not a live bug — worth two lines of `try/finally` because the invariant is
+load-bearing for J16's registry work and for any non-browser poller.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: invariant-untested — TASK-011 stated done agrees with the POST outcome but the assertion only ever ran on the success path.
+
+## FND-78 — Trace finish line over-counts denied attempts as observed tool calls · **LOW**
+
+**Where**: `src/main/adk/java/com/company/triage/agent/AdkDiagnosisEngine.java:441`
+
+**What**: `bounds.used()` increments on every allowlisted attempt including those denied
+for exceeding the budget, and the finish line reports it as "tool call(s) observed".
+
+**Why it matters**: with `max-tool-calls=10` and a chatty model attempting 12, the trace's
+last line reads "12 tool call(s) observed" — an operator or judge reading it against the
+stated budget of 10 sees the J8 leash apparently violated when it actually held. The
+per-attempt DENIED rows are emitted correctly, so the trace stays reconcilable; only the
+summary is wrong. Report executed and denied separately.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: observability-semantics — the counter's meaning (attempts) and the label's claim (executed calls) diverged, and no test read the finish line against the budget.
+
+## FND-79 — `unfence()` misses prose-before-fence and same-line fences · **LOW** · *unverified*
+
+**Where**: `src/main/adk/java/com/company/triage/agent/AdkDiagnosisEngine.java:722`
+
+**What**: the fence strip only fires when the response *starts* with a backtick and only
+when a newline follows the opening fence. Two shapes pass through untouched:
+`Here is the report:\n```json\n{...}` (lead-in sentence) and a fence with no newline.
+`AdkUnfenceTest`'s six cases cover neither.
+
+**Why it matters**: FND-66 established that instructions alone do not suppress trained-in
+formatting behaviour, and measured the cost of each miss at ~8s plus one Copilot call for
+the repair retry — while stacking the run one failure away from
+`DEGRADED_TO_DETERMINISTIC`. A prose lead-in is the same class of behaviour as the fencing
+FND-66 fixed. Add a last-resort `{`…`}` substring extraction *after* the strict strip, so
+well-behaved responses stay untouched.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: adversarial-input-gap — FND-66 fixed the one observed fence shape and the test set froze there; the neighbouring shapes were never enumerated.
+
+## FND-80 — Enter key does not trigger Diagnose; `run()`'s catch path bypasses `esc()` · **LOW** · *unverified*
+
+**Where**: `src/main/resources/static/index.html:402` (the input row) and `:511` (catch).
+
+**What**: the incident input and button sit in a bare `div.row` with no form and no
+keydown handler, so Enter does nothing. Separately, the catch branch interpolates `${e}`
+raw while the sibling error path two lines up uses `esc(msg)`.
+
+**Why it matters**: on stage the presenter types the number and hits Enter — the universal
+reflex — and gets nothing, then hunts for the button. The button-disabled guard already
+covers double-submit, so a `<form onsubmit>` is safe. The `${e}` is not exploitable today
+(browser-generated text only), but it is the single interpolation on the page that breaks
+an otherwise uniform escaping discipline, and it becomes load-bearing the moment anything
+server-derived is thrown inside that `try`.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: ui-affordance-untested — no test or rehearsal step covers keyboard submission, and the escaping discipline was enforced per-path rather than per-value.
+
+## FND-81 — `bin/setup-copilot-api.sh` is tracked without the executable bit · **LOW** · *unverified*
+
+**Where**: `bin/setup-copilot-api.sh` (tracked mode `100644`; every sibling script is
+`100755`).
+
+**What**: `run-adk.sh` points users at `./bin/setup-copilot-api.sh` in four separate
+error/help paths (lines 10, 63, 83, 94).
+
+**Why it matters**: this is specifically the first-time corp-laptop Nexus/OAuth setup
+script — the one context guaranteed to run from a fresh clone. The user types exactly
+what the error message told them and gets `Permission denied`. It works on this dev
+machine only because the working-tree copy was chmod'd locally; the tracked mode is what
+the demo laptop gets. `git update-index --chmod=+x`.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: file-mode-untested — the working tree copy was chmod'd locally, so the tracked mode diverged from what a fresh clone gets and nothing checks tracked modes.
+
+## FND-82 — Dead `.gitignore` negation for the Maven wrapper jar · **LOW** · *unverified*
+
+**Where**: `.gitignore:22-23` (`.mvn/` then `!.mvn/wrapper/maven-wrapper.jar`), with
+`*.jar` at `:43`.
+
+**What**: git cannot re-include a file whose parent directory is excluded, and `*.jar`
+would re-ignore it anyway. The negation is dead in both directions. No wrapper is
+currently committed.
+
+**Why it matters**: the run scripts hard-require a system Maven (`command -v mvn` →
+"sudo apt install"), which on the locked-down corp demo laptop may need admin rights the
+presenter does not have. The moment someone adds the wrapper to de-risk exactly that,
+`git add .mvn` silently skips the jar, and the fresh clone on the demo laptop fails with
+`Could not find or load main class ...MavenWrapperMain`. The negation's presence suggests
+this was already intended once. Either fix the pattern set or delete the dead line so
+nobody trusts it.
+
+- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Escape**: silent-noop-rule — a gitignore negation that cannot fire produces no error, and nothing verified the rule's effect with git check-ignore.
+
+
 ## FND-55 — FND-34's HTTP timeout pre-empts FND-15's engine timeout; the 504 was mostly unreachable · **MEDIUM**
 
 **Where**: `application.yml` (`spring.http.client.read-timeout: 20s`),

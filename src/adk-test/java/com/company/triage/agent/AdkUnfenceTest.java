@@ -52,4 +52,51 @@ class AdkUnfenceTest {
         assertThat(AdkDiagnosisEngine.unfence(null)).isEmpty();
         assertThat(AdkDiagnosisEngine.unfence("   ")).isEmpty();
     }
+
+    // --- FND-79: shapes the strict fence-strip missed ---------------------------------
+
+    /**
+     * The classic instruction-following miss: a lead-in sentence before the fence. The
+     * response does not START with a backtick, so the strict strip returned it untouched and
+     * the parse failed — burning the one FND-42 repair retry (~8s of stage time and a Copilot
+     * call) on a response whose JSON was perfectly good.
+     */
+    @Test
+    void stripsAFenceThatFollowsALeadInSentence() {
+        String json = "{\"incidentNumber\":\"INC0010005\"}";
+        assertThat(AdkDiagnosisEngine.unfence("Here is the JSON report:\n```json\n" + json + "\n```"))
+                .isEqualTo(json);
+    }
+
+    /** A fence with no newline after the language tag. */
+    @Test
+    void stripsAFenceWithNoNewlineAfterTheOpeningTag() {
+        String json = "{\"incidentNumber\":\"INC0010005\"}";
+        assertThat(AdkDiagnosisEngine.unfence("```json" + json + "```")).isEqualTo(json);
+    }
+
+    /** Trailing commentary after the closing fence. */
+    @Test
+    void stripsTrailingProseAfterTheClosingFence() {
+        String json = "{\"incidentNumber\":\"INC0010005\"}";
+        assertThat(AdkDiagnosisEngine.unfence("```json\n" + json + "\n```\nLet me know if you need more."))
+                .isEqualTo(json);
+    }
+
+    /** Bare prose around an unfenced object. */
+    @Test
+    void recoversAnUnfencedObjectSurroundedByProse() {
+        String json = "{\"incidentNumber\":\"INC0010005\"}";
+        assertThat(AdkDiagnosisEngine.unfence("Sure! " + json + " Hope that helps.")).isEqualTo(json);
+    }
+
+    /**
+     * A response with no object at all must come back UNCHANGED, so the resulting parse error
+     * is about the real problem rather than a mangled substring.
+     */
+    @Test
+    void aResponseWithNoObjectIsLeftAlone() {
+        assertThat(AdkDiagnosisEngine.unfence("I could not complete the investigation."))
+                .isEqualTo("I could not complete the investigation.");
+    }
 }

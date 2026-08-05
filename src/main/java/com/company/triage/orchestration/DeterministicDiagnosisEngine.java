@@ -175,9 +175,25 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String environment = IncidentSignals.environmentCode(
                 inc.environment(), sumoAllowedEnvironments, sumoDefaultEnvironment);
         String scope = sumoProps.sourceCategoryFor(projectSlug, environment);
-        LogSearchRequest sumoRequest = new LogSearchRequest(scope, sumoProps.index(), logQuery,
-                inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10), sumoProps.maxResults());
-        List<LogEvidence> logs = sumo.search(sumoRequest);
+        // J14: `openedAt` is the ANCHOR for the ±10m window, and against a real instance it
+        // can be null — ServiceNow returns `opened_at` in the requesting user's display
+        // format under `sysparm_display_value=true`, and any format `parseTime` doesn't
+        // recognise degrades to null. This line used to dereference it unguarded, so a
+        // ticket whose date didn't parse threw an NPE **inside the deterministic engine** —
+        // the FND-7 fallback, the one path whose entire job is to survive when the other one
+        // fails. The orchestrator would degrade to it and then get a 500 out of it, which is
+        // the single worst failure shape this app has.
+        //
+        // A window is skipped, not faked: anchoring on `now()` for a ticket opened days ago
+        // searches the wrong ten minutes and reports "0 lines" as though the system had been
+        // searched and found quiet — a false negative presented as evidence. Say plainly
+        // that the search did not happen and why, exactly as the gitlab.searchCode branch
+        // below already does.
+        LogSearchRequest sumoRequest = inc.openedAt() == null ? null
+                : new LogSearchRequest(scope, sumoProps.index(), logQuery,
+                        inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10),
+                        sumoProps.maxResults());
+        List<LogEvidence> logs = sumoRequest == null ? List.of() : sumo.search(sumoRequest);
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
         String errorToken = errorLine == null ? null : firstMatch(ERROR_TOKEN, errorLine.message());
@@ -191,8 +207,11 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // the UI whether the _index clause was being applied at all — and without it a
         // real Sumo search returns zero rows every time, so it is the one part of the
         // query most worth being able to see.
-        String traceSumoSearch = "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
-                .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
+        String traceSumoSearch = sumoRequest == null
+                ? "sumo.search → skipped (the ticket's opened_at is missing or unparseable, so "
+                        + "there is no time window to search around)"
+                : "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
+                        .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
         trace.add(traceSumoSearch);
         emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
 
@@ -347,7 +366,15 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
         List<String> missing = new ArrayList<>();
         if (orderId == null) missing.add("No transaction/correlation identifier in the ticket text");
-        if (logs.isEmpty()) missing.add("No log lines matched in the ±10m window around opened_at");
+        // J14: distinguish "we searched and found nothing" from "we could not search at all".
+        // Claiming the former when the latter happened is the FND-8 class — narrating an
+        // investigation step that did not occur.
+        if (sumoRequest == null) {
+            missing.add("Logs were not searched: the ticket's opened_at is missing or unparseable, "
+                    + "so there is no time window to bound the query");
+        } else if (logs.isEmpty()) {
+            missing.add("No log lines matched in the ±10m window around opened_at");
+        }
         if (docs.isEmpty()) missing.add("No runbook or known-error page matched the symptom terms");
         if (inc.environment() == null || inc.environment().isBlank()) missing.add("Environment not set on the ticket");
         if (inc.comments().isEmpty()) missing.add("No caller follow-up comments to narrow scope/timing");

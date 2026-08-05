@@ -90,6 +90,15 @@ is the one place their calls meet, which is also why concurrent-call coalescing
 > shape above stays wire-compatible (additive). J11 also adds a polling endpoint
 > `GET /api/runs/{runId}/steps`; `POST /api/diagnose/{incidentNumber}` is unchanged.
 > See `../J11-live-thinking-trace/README.md`.
+>
+> **…and a 6th component `Map<String,String> connectors`** (FND-72, recorded 2026-08-05):
+> the per-connector `real`/`mock` mode for this run, populated from `ConnectorModeProvider`
+> and rendered as J11's LT7 provenance chips (`DiagnosisResult.java:48-54`, TASK-016). Also
+> additive and wire-compatible. It is a distinct field rather than a flag because real and
+> mock are mixable per connector (FND-10), so no single boolean can express the run's
+> provenance. This note exists because the field shipped without J1 — the card an integrator
+> reads for the contract — ever naming it, the same "cards lag implementation" drift FND-9…32
+> clustered on.
 
 **Error contract (FND-48, fixed 2026-07-31; hardened by FND-53 the same day; extended by
 FND-58/FND-55 the same day)**: `DiagnosisApiExceptionHandler` maps `IncidentNotFoundException`

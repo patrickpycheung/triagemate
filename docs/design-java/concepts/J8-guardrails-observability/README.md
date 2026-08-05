@@ -25,8 +25,15 @@ tools, within these limits").
   payoff, and both `application.yml:117` and `RealServiceNowGateway.java:30` specify
   read+write.)* That write is narrow by design: append to one journal field; never
   reassign, close, or re-prioritise. Allowlisted
-  GitLab projects (`triage.gitlab.allowed-projects`) and Sumo `_sourceCategory`
-  scopes (`triage.sumo.allowed-scopes`); ServiceNow writes go to one configured
+  GitLab projects (`triage.gitlab.allowed-projects`); the Sumo `_sourceCategory` is
+  **composed by the app, never chosen by the model** (FND-70, corrected 2026-08-05 —
+  this line previously named `triage.sumo.allowed-scopes`, a literal scope allowlist
+  removed in `92574ce`). The bound today is three parts: `triage.sumo.allowed-environments`
+  (a hard allowlist), a lowercase-hyphenated slug regex on the project component, and
+  `triage.sumo.source-category-pattern`, which the app expands. Scopes were never an access
+  boundary anyway — any credential that can search sees every environment — so the
+  allowlist was replaced by a shape the model cannot express a wildcard in.
+  ServiceNow writes go to one configured
   field (`triage.servicenow.write-field`), never model-chosen. Confluence search
   has **no space-scoping mechanism at all** (corrected 2026-07-30 — this line
   previously claimed "allowlisted Confluence spaces" as if it were a fourth

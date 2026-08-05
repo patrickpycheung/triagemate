@@ -30,6 +30,10 @@ public class BoundsCallback {
     private final Set<String> allowedTools;
     private final AtomicInteger calls = new AtomicInteger();
 
+    /** FND-78: attempts refused (allowlist or budget) and never executed — counted
+     *  separately so the trace summary can report ran-vs-refused instead of conflating them. */
+    private final AtomicInteger deniedAttempts = new AtomicInteger();
+
     /**
      * @param maxToolCalls max successful tool invocations for this run
      * @param allowedTools exact tool names the app registered. Empty means "budget only,
@@ -53,9 +57,14 @@ public class BoundsCallback {
      */
     public boolean allow(String toolName) {
         if (!allowedTools.isEmpty() && (toolName == null || !allowedTools.contains(toolName))) {
+            deniedAttempts.incrementAndGet();
             return false;
         }
-        return calls.incrementAndGet() <= maxToolCalls;
+        boolean withinBudget = calls.incrementAndGet() <= maxToolCalls;
+        if (!withinBudget) {
+            deniedAttempts.incrementAndGet();
+        }
+        return withinBudget;
     }
 
     /** True when this instance actually enforces an allowlist (vs budget only). */
@@ -73,5 +82,26 @@ public class BoundsCallback {
 
     public int used() {
         return calls.get();
+    }
+
+    /**
+     * FND-78: how many tool calls actually RAN — {@link #used()} counts allowlisted
+     * <i>attempts</i>, so it keeps climbing past the budget as the model retries and is
+     * capped by nothing.
+     *
+     * <p>The final trace line reported {@code used()} as "N tool call(s) observed". With
+     * {@code max-tool-calls=10} and a chatty model attempting 12, it read "12 tool call(s)
+     * observed" — an operator or judge reading that against the stated budget of 10 sees the
+     * J8 leash apparently violated when it in fact held perfectly: calls 11 and 12 were
+     * denied and never executed. The per-attempt DENIED rows were always emitted correctly,
+     * so the trace stayed reconcilable; only the summary was wrong.
+     */
+    public int executed() {
+        return Math.min(calls.get(), maxToolCalls);
+    }
+
+    /** FND-78: attempts refused — by the allowlist or by the budget — and never executed. */
+    public int deniedAttempts() {
+        return deniedAttempts.get();
     }
 }

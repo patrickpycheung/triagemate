@@ -375,6 +375,14 @@ Render a connector chip (`servicenow=real, others=fixtures`) *and* an engine/bac
 (`deterministic · offline` vs `ADK · via Copilot proxy`). Scope the no-network claim to
 *connector* network.
 
+**Response-contract note (FND-72, recorded 2026-08-05).** The connector chip is fed by a
+**6th `DiagnosisResult` component**, `Map<String,String> connectors`
+(`DiagnosisResult.java:48-54`, TASK-016) — additive and wire-compatible, like `steps`, but it
+shipped without either this section or J1's contract section recording it. Both now do.
+The value is normalised to lower case at the provider (FND-74): the bean wiring matches
+`real` case-insensitively, so an un-normalised `Real` built the real gateway while this chip
+rendered `fixtures` — the honesty contract inverted at exactly the moment it matters most.
+
 ## Verification
 - 🔬 **Spike LT1-SPI ✅ DONE** (`verification-lt1-spi/findings.md`) — the 2-arg SPI migration
   compiled and kept the full suite green at spike time (2026-07-31: 34/34 + 50/50; current

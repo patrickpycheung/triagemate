@@ -131,6 +131,66 @@ class DeterministicDiagnosisEngineTest {
                 .doesNotContain("reconcile", "discount", "500");   // the old fixed literal's terms
     }
 
+    /**
+     * J14 — the fallback engine must not throw on a real ticket whose {@code opened_at}
+     * did not parse.
+     *
+     * <p>{@code openedAt} anchors the ±10m Sumo window, and it was dereferenced unguarded.
+     * Against a real instance it can be null: reads use {@code sysparm_display_value=true},
+     * so ServiceNow renders datetimes in the requesting user's display format, and anything
+     * {@code parseTime} did not recognise became null silently. The NPE landed <b>inside the
+     * FND-7 fallback</b> — the one code path whose entire job is to still work when the ADK
+     * engine has already failed — so the orchestrator would degrade to it and then return a
+     * 500. That is the worst failure shape this app has, and no test covered it because every
+     * fixture supplied a parseable date.
+     *
+     * <p>Asserts the honest degrade, not just the absence of a throw: the search must be
+     * reported as SKIPPED with its reason, and {@code missingInformation} must say logs were
+     * never searched rather than claiming a clean empty match (the FND-8 class).
+     */
+    @Test
+    void survivesAnIncidentWhoseOpenedAtIsNull() {
+        var engineForUndatedIncident = new DeterministicDiagnosisEngine(
+                undatedIncidentGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), new MockGitLabGateway(),
+                TriagePropertiesFixture.deterministic());
+
+        var result = engineForUndatedIncident.diagnose("INC0010010");
+
+        DiagnosisReport report = result.report();
+        assertThat(report).isNotNull();
+        assertThat(report.missingInformation())
+                .anySatisfy(m -> assertThat(m).contains("Logs were not searched"))
+                .noneSatisfy(m -> assertThat(m).contains("No log lines matched"));
+        assertThat(result.trace())
+                .anySatisfy(line -> assertThat(line).contains("sumo.search → skipped"));
+    }
+
+    /** A real-shaped ticket whose {@code opened_at} failed to parse (J14). */
+    private static com.company.triage.gateway.ServiceNowGateway undatedIncidentGateway() {
+        return new com.company.triage.gateway.ServiceNowGateway() {
+            @Override
+            public com.company.triage.model.IncidentContext getIncident(String number) {
+                return new com.company.triage.model.IncidentContext(
+                        number,
+                        "Hazards being recorded on handheld are not appearing in Delivery Hazards application",
+                        "See attached for details.",
+                        "Adela Cervantsz", "Inquiry / Help", null,
+                        null,                       // <-- opened_at did not parse
+                        null, null,
+                        List.of(), List.of(), "Delivery Hazards", List.of());
+            }
+            @Override public List<com.company.triage.model.ResolvedIncident> findSimilarIncidents(
+                    com.company.triage.model.IncidentContext c) { return List.of(); }
+            @Override public java.util.Optional<com.company.triage.model.ServiceOwnership> findOwnership(String a) {
+                return java.util.Optional.empty();
+            }
+            @Override public void addWorkNote(String number, String note) {}
+            @Override public List<com.company.triage.model.NewIncident> findIncidentsCreatedSince(
+                    java.time.OffsetDateTime since, int limit) { return List.of(); }
+        };
+    }
+
     /** An incident with nothing to do with the seeded demo scenario. */
     private static com.company.triage.gateway.ServiceNowGateway unrelatedIncidentGateway() {
         return new com.company.triage.gateway.ServiceNowGateway() {

@@ -337,7 +337,10 @@ types, but it compiled and passed.
 #### 1. A real incident can receive evidence from the wrong fixture
 
 The recommended `snow-live` combination uses real ServiceNow with mock Confluence,
-Sumo, and GitLab. The deterministic engine also contains fixed payment searches and
+Sumo, and GitLab. *(FND-73, 2026-08-05: there is no `snow-live` profile — it was replaced
+by per-connector `triage.connectors.*` overrides, and naming it as an active profile
+silently leaves every connector on the mock. The combination this paragraph describes is
+still the recommended one; reach it with `-Dtriage.connectors.servicenow=real`.)* The deterministic engine also contains fixed payment searches and
 fixed conclusions. As a result, almost any real incident number can receive a
 payment-reconciliation diagnosis backed by the seeded `INC-ORD-4471` evidence.
 

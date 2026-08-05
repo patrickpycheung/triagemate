@@ -15,9 +15,12 @@ Sumo Logic Search Job API.
 3. **Add Access Key** → give it a name (e.g. `triagemate-demo`) → **Create**.
 4. Copy both the **Access ID** and **Access Key** immediately — the key is shown once.
 
-Prefer creating the key under a **role scoped to the app's allowed log scopes**
-(`prod/payment`, `prod/order-api` — see `triage.sumo.allowed-scopes` in
-`src/main/resources/application.yml`) rather than a full-admin account.
+Prefer creating the key under a **role scoped to the log sources the app will read**
+rather than a full-admin account. The app composes its `_sourceCategory` from
+`triage.sumo.source-category-pattern` + the allowlisted `triage.sumo.allowed-environments`
+(see `src/main/resources/application.yml`); scope the role to match that pattern.
+(FND-70, corrected 2026-08-05 — this previously cited `triage.sumo.allowed-scopes` and the
+fixture values `prod/payment` / `prod/order-api`, none of which exist any more.)
 
 ## 2. Find your API endpoint (base URL)
 

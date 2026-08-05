@@ -29,7 +29,12 @@ already gathered rather than a fresh people-search.
 The agent must **not** invent arbitrary Sumo syntax and run it unrestricted. The app
 enforces, server-side in `TriageMateTools.searchLogs` (FND-20, fixed 2026-07-30 — the
 window and result count were previously accepted from the model unchecked):
-- an **allowlisted** set of `_sourceCategory` scopes (`triage.sumo.allowed-scopes`),
+- an **app-composed** `_sourceCategory` (FND-70, corrected 2026-08-05 — was an
+  allowlisted scope set, `triage.sumo.allowed-scopes`, removed in `92574ce`): the model
+  supplies a `projectSlug` (validated against a lowercase-hyphenated regex) and an
+  `environment` (validated against `triage.sumo.allowed-environments`), and the app expands
+  `triage.sumo.source-category-pattern` around them — so a wildcard scope is
+  unrepresentable rather than merely rejected,
 - a time window **clamped** to `triage.sumo.max-window-minutes` (default 30), anchored
   on the requested end time — a too-wide request still searches the most recent
   relevant slice, not nothing,

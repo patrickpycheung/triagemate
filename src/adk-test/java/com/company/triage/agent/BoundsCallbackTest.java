@@ -79,4 +79,38 @@ class BoundsCallbackTest {
         assertThat(bounds.allow("get_incident")).isTrue();   // @Schema name
         assertThat(bounds.allow("getIncident")).isFalse();   // Java method name — not what ADK reports
     }
+
+    /**
+     * FND-78: executed vs denied must be counted separately.
+     *
+     * <p>{@code used()} counts allowlisted ATTEMPTS and is capped by nothing, so the trace's
+     * finish line ("N tool call(s) observed") kept climbing past the budget. An over-budget
+     * run therefore reported more calls than the stated limit and looked like the J8 leash
+     * had failed, when it had in fact held — the excess attempts were denied and never ran.
+     */
+    @Test
+    void countsExecutedAndDeniedSeparatelyWhenTheBudgetIsExceeded() {
+        var bounds = new BoundsCallback(2, java.util.Set.of("get_incident"));
+
+        assertThat(bounds.allow("get_incident")).isTrue();
+        assertThat(bounds.allow("get_incident")).isTrue();
+        assertThat(bounds.allow("get_incident")).as("3rd is over budget").isFalse();
+        assertThat(bounds.allow("get_incident")).as("4th is over budget").isFalse();
+
+        assertThat(bounds.executed()).as("only 2 calls actually ran").isEqualTo(2);
+        assertThat(bounds.deniedAttempts()).as("2 attempts were refused").isEqualTo(2);
+        assertThat(bounds.used()).as("used() still reports raw attempts").isEqualTo(4);
+    }
+
+    /** A name outside the allowlist is denied and must not consume budget (existing rule). */
+    @Test
+    void anAllowlistDenialIsCountedButDoesNotConsumeBudget() {
+        var bounds = new BoundsCallback(2, java.util.Set.of("get_incident"));
+
+        assertThat(bounds.allow("rm_minus_rf")).isFalse();
+
+        assertThat(bounds.deniedAttempts()).isEqualTo(1);
+        assertThat(bounds.executed()).isZero();
+        assertThat(bounds.allow("get_incident")).as("budget untouched by the denial").isTrue();
+    }
 }

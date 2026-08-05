@@ -1,9 +1,11 @@
 # STATUS — CDS: Java Triage Copilot (Spring Boot + ADK)
 
-**Phase**: J1–J11 Built — all eleven concepts complete (J11 live-thinking-trace landed
-2026-08-02 via STREAM-001–006, verification sweep TASK-017 confirmed both profiles green
-and the additive-only transport guarantee holds). (FND-32: this line previously said "CDS
-Round 1 — concepts J1–J8 drafted", stale against the table below for some time).
+**Phase**: J1–J11 Built; **J12–J23 designed, not built** (application review, 2026-08-05 —
+see the review-round table below). All eleven original concepts are complete (J11
+live-thinking-trace landed 2026-08-02 via STREAM-001–006, verification sweep TASK-017
+confirmed both profiles green and the additive-only transport guarantee holds). (FND-32:
+this line previously said "CDS Round 1 — concepts J1–J8 drafted", stale against the table
+below for some time).
 **Source**: `docs/discovery/servicenow-triage-java/4-decide/concepts-extracted.md`
 plus `docs/discovery/servicenow-local-trigger/` (J10) and `docs/discovery/
 copilot-cli-runtime/` (the E2 LLM-backend decision).
@@ -44,6 +46,38 @@ subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3
 | J9 | contact-suggestion | Simple | 🟢 Built (wiki authors + recent committers, merged; display-only) | J4, J6 |
 | J10 | incident-poller | Moderate | 🟢 Built, offline-verified (K1 outbound polling; OFF by default; no-duplicate + no-skip tested). Not yet run against a real instance | J1, J5 |
 | J11 | live-thinking-trace | Complex | 🟢 Built (STREAM-001–006, 2026-08-02) — LT1 SPI migration, LT2 ToolRegistry/StepCatalog, LT4's 6 ADK callback edges, LT3/LT4/LT5/LT7 frontend renderers, and the additive-only `X-Triage-Run-Id` transport all landed; `mvn test` 140/140, `mvn -Padk test` 183/183. Verification sweep (TASK-017) confirmed the pre-J11 `DiagnosisResult` shape is unchanged for callers with no run-id header, and the deterministic replay path renders correctly end-to-end. Live ADK round-trip re-verified via the `adk-test` module + TASK-015's own Playwright-driven manual check — no Copilot proxy in this environment for a fresh live round trip | J1, J2, J4, J7, J8 |
+
+### Review round — J12–J23 (2026-08-05, designed not built)
+
+Whole-application review (8-dimension multi-agent sweep with adversarial verification of
+every finding, cross-checked against independent Codex `gpt-5.6-sol` and Gemini
+architecture reviews). 41 findings confirmed, 1 refuted, both test profiles green
+throughout (152 default / 201 adk — the counts in the bullets above are stale by the same
+FND-30 mechanism they warn about). The 28 findings needing a *design decision* became the
+twelve cards below; the 13 whose remedy was already fully specified went to
+`FOUND-ISSUES.md` as FND-70…82 instead of getting ceremony they don't need.
+
+Nothing here is built. **The two cards to read first are J12 and J14** — J12 because the
+live trace's central promise (rows resolving in place) does not currently reach the client
+on the ADK path at all, and J14 because a null `openedAt` from a real ServiceNow ticket
+makes the *fallback* engine throw, which is the one thing the safety net may never do.
+
+| ID | Concept | Complexity | State | Depends on |
+|----|---------|-----------|-------|------------|
+| J12 | live-trace-delivery | Moderate | 🔴 Designed, not built — HIGH. The `since` cursor delivers new *positions*, but J11 models rows as *mutable and keyed by `callId`*; every `ACTIVE → DONE` resolution is therefore dropped until the POST settles. Replaces it with identity-keyed convergent delivery and settles who owns `seq` | J7, J8, J11 (amends J11) |
+| J13 | evidence-citation-integrity | Moderate | 🔴 Designed, not built — HIGH. Makes J4's "every conclusion ties to evidence" enforceable: unique ids (multiple code hits currently all get `e-code`), candidates citing only evidence that names *their* system, and 0.86 code-citation confidence gated on system agreement | J4, J2, J3 (amends J4, J8) |
+| J14 | fallback-real-input-robustness | Moderate | 🔴 Designed, not built — HIGH. Extends FND-63 to real-connector input: null/display-format `openedAt`, `_sourceCategory`-shaped loggers, hyphenated subjects, per-call connector degradation. "Degraded" must mean a weaker report, never a 500 | J2, J3, J5 (amends J2, J5, J3) |
+| J15 | port-contract-demo-runbook | Moderate | 🔴 Designed, not built — HIGH. The rehearsed on-stage fallback flip targets port 8081, which nothing has served since the 2026-08-04 port-80 change. Single-sources the port + proxy-endpoint contract and re-derives the runbook from it | J1, J2, J7 (amends J7) |
+| J16 | run-trace-registry-lifecycle | Moderate | 🔴 Designed, not built. A live buffer belongs to the run in flight, not to whoever last sent a header for that incident — fixes waiter aliasing onto stale/poller-owned runs, and derives the TTL from `timeout-ms` | J1, J10, J11 (amends J11) |
+| J17 | poller-completion-semantics | Moderate | 🔴 Designed, not built. K1 "completed" becomes diagnosed AND delivered AND not-already-done-by-another-trigger, with a no-LLM redelivery queue — today a failed writeback marks the incident done and its only external output is lost permanently | J1, J5, J10 (amends J10, J1) |
+| J18 | guardrail-enforcement-completeness | Simple | 🔴 Designed, not built. A bound is owned by the boundary, not the caller: the GitLab allowlist FND-38 added to `search_code` is bypassed by `find_recent_committers`, and ServiceNow encoded-query values are unconstrained | J2, J5, J6, J8 (amends J8, J5) |
+| J19 | instruction-config-fidelity | Simple | 🔴 Designed, not built. Every bound the prompt states derives from the enforced `TriageProperties` value — no second hardcoded `prod`, budget disclosed up front, exhaustion phrased globally (completes FND-60's discipline) | J2, J8 (amends J8, J2) |
+| J20 | startup-truth-and-validation | Moderate | 🔴 Designed, not built. Boot validates what the run will need (LLM config, nullable allowlists) and the banner reports the *effective* engine, not configured intent — the FND-49/FND-36 class, re-opened | J1, J2, J8 |
+| J21 | network-exposure-posture | Simple | 🔴 Designed, not built. The mutating endpoint is reachable from the whole LAN with no auth while writeback is on by default: loopback bind + a required non-safelisted header that forces an unanswered CORS preflight | J1, J5, J7, J11 (amends J1, J7) |
+| J22 | real-gateway-contract-tests | Moderate | 🔴 Designed, not built. Confluence and GitLab are the only connectors whose real HTTP layer has zero tests — and GitLab double-encodes the project id (`%252F`), which would 404 every real-mode code search. One rule: caller-derived text is a URI variable, never spliced into the template | J3, J6 (amends J3, J6) |
+| J23 | live-ui-honesty | Simple | 🔴 Designed, not built. J11's honesty contract made state-owned rather than renderer-owned: provenance chips during the live window, past-tense caption on a finished run, and a `DEGRADED_TO_DETERMINISTIC` branch so a run that spent 30s on the proxy stops calling itself "offline" | J7, J11 (amends J11) |
+| J24 | servicenow-field-fidelity | Moderate | 🔴 Designed, not built — HIGH. **Field-reported** (sajids4, `6c550ab`, live instance). Reference fields (`cmdb_ci`, `caller_id`) arrive as `{display_value, link}` objects and parse to `""`, so the affected system is derived from the subject line and the Sumo scope is built from a sentence fragment. **Corrects FND-67's premise** — the CMDB was never empty, the parse dropped it | J3, J5, J2 (amends J5, J2, J14) |
+| J25 | knowledge-query-relevance | Moderate | 🔴 Designed, not built. **Field-reported** (same commit). The Confluence query is a 12-term keyword bag; on the live instance it returned five unrelated pages (a Teradata data-model PDF among them) and all five were cited as evidence. Also makes a *failed* search distinguishable from an *empty* one | J6, J3, J24 (amends J6, J2) |
 
 ## Spikes
 

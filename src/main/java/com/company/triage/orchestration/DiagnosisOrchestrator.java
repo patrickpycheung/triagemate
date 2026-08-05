@@ -201,6 +201,24 @@ public class DiagnosisOrchestrator {
             throw e;
         } finally {
             inFlight.remove(incidentNumber, mine);
+            // FND-76: complete the future on EVERY exit path, including a Throwable that is
+            // not a RuntimeException. The catch above covers the normal failure modes, but an
+            // Error raised on THIS thread outside the engine future — an OOM or
+            // StackOverflowError while assembling the trace, the work-note text, or the
+            // result record — used to escape past both `complete` calls while this finally
+            // still removed the map entry. The future then stayed incomplete forever with
+            // nobody left to complete it.
+            //
+            // That matters because `awaitExisting` blocks in an UNTIMED `existing.get()`, and
+            // IncidentPoller is single-threaded (Spring's default scheduler is one thread).
+            // A poller tick that coalesced onto this run as a waiter would block on that
+            // future for the rest of the process lifetime — no WARN, no recovery, K1 simply
+            // stops polling forever. Narrow window, unbounded consequence, two lines to close.
+            if (!mine.isDone()) {
+                mine.completeExceptionally(new IllegalStateException(
+                        "diagnosis for " + incidentNumber + " ended without completing its result "
+                                + "(an Error escaped the run) — failing waiters rather than hanging them"));
+            }
         }
     }
 
@@ -236,6 +254,26 @@ public class DiagnosisOrchestrator {
         TraceCollector collector = hasText(runId)
                 ? runTraceRegistry.register(runId, incidentNumber)
                 : new TraceCollector();
+        try {
+            return runOnceWithCollector(incidentNumber, collector, t0);
+        } finally {
+            // FND-77: "done" is a fact about the run being OVER, and "over by failure" is
+            // still over. markDone() used to sit only on the success path, so a run that
+            // threw (IncidentNotFoundException, a timeout, a fallback that also failed) left
+            // its registered buffer reading done=false until the 5-minute TTL evicted it —
+            // breaking TASK-011's invariant that `done` agrees with the POST outcome, which
+            // held only for 200s.
+            //
+            // No shipped client renders that stale buffer (index.html stops polling in the
+            // POST's finally, which fires on rejection, and a coalesced waiter's POST fails
+            // the same way), so this is contract accuracy rather than a live bug — but the
+            // invariant is load-bearing for the registry work in J16 and for any non-browser
+            // poller, and it costs one try/finally.
+            collector.markDone();
+        }
+    }
+
+    private DiagnosisResult runOnceWithCollector(String incidentNumber, TraceCollector collector, long t0) {
         DiagnosisResult result = diagnoseWithFallback(incidentNumber, collector);
 
         // FND-36: writebackPosted must reflect what ACTUALLY happened, not just whether
@@ -277,7 +315,10 @@ public class DiagnosisOrchestrator {
         // doc, binding), so it cannot flip true merely because the last tool-call step
         // resolved — writeback still had to happen after that. No runId ⇒ collector is a
         // bare local instance nobody polls, so marking it done is harmless.
-        collector.markDone();
+        //
+        // FND-77 moved the CALL to a finally in the caller so failure paths mark done too;
+        // this success-path ordering is unchanged (the finally runs after this returns, and
+        // markDone is idempotent), so the invariant above still holds exactly as written.
         // Reconstruction site 3/3: result.steps() already carries the collector's final
         // snapshot forward from diagnoseWithFallback — nothing emits new steps between
         // there and here (writeback is prose-only, added to `trace`), so no fresh

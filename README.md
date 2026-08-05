@@ -154,9 +154,16 @@ default mock). Auto-trigger on ticket creation is deferred — see
 ## Verify it works
 
 ```bash
-mvn test          # offline demo path            → 3 tests pass
-mvn -Padk test    # + live ADK agent loop        → 5 tests pass
+mvn test          # offline demo path       → ~152 tests, all pass (as of 2026-08-05)
+mvn -Padk test    # + live ADK agent loop   → ~201 tests, all pass (as of 2026-08-05)
 ```
+
+Both profiles must be green before a push. The counts are approximate on purpose
+(FND-30: hand-maintained counts drift) — `mvn` output is the source of truth. What matters
+is zero failures, not the exact number.
+
+`RealSumoGatewayLiveTest` makes a live network call and fails in a sandboxed or offline
+environment; that is an environment failure, not a regression.
 
 ## Live agent mode (optional)
 

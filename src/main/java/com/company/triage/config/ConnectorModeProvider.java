@@ -34,11 +34,34 @@ public class ConnectorModeProvider {
 
     public ConnectorModeProvider(Environment environment) {
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("servicenow", environment.getProperty("triage.connectors.servicenow", DEFAULT_MODE));
-        m.put("confluence", environment.getProperty("triage.connectors.confluence", DEFAULT_MODE));
-        m.put("sumo", environment.getProperty("triage.connectors.sumo", DEFAULT_MODE));
-        m.put("gitlab", environment.getProperty("triage.connectors.gitlab", DEFAULT_MODE));
+        m.put("servicenow", normalize(environment.getProperty("triage.connectors.servicenow", DEFAULT_MODE)));
+        m.put("confluence", normalize(environment.getProperty("triage.connectors.confluence", DEFAULT_MODE)));
+        m.put("sumo", normalize(environment.getProperty("triage.connectors.sumo", DEFAULT_MODE)));
+        m.put("gitlab", normalize(environment.getProperty("triage.connectors.gitlab", DEFAULT_MODE)));
         this.modes = Map.copyOf(m);
+    }
+
+    /**
+     * FND-74: trim + lower-case, so what the UI is told matches which bean Spring actually
+     * built.
+     *
+     * <p>{@code @ConditionalOnProperty(havingValue = "real")} matches
+     * <b>case-insensitively</b>, so {@code triage.connectors.servicenow=Real} constructs
+     * {@code RealServiceNowGateway} and posts two advisory comments to a live,
+     * customer-visible ticket. This provider stored the raw string, and the LT7 provenance
+     * chip compares it strictly — so that same run rendered as {@code fixtures}. The UI
+     * asserting a run used mocks while it was writing to a real ticket is the FND-8
+     * honesty-contract class in its most consequential direction.
+     *
+     * <p>An unrecognised value is left as-is rather than coerced to {@code mock}: silently
+     * rewriting a typo to the safe-looking value is how {@code snow-live} (FND-73) went
+     * unnoticed. The chip shows the odd value verbatim, which is visible; and because the
+     * bean wiring only ever matches {@code real}, an unrecognised value is genuinely mock —
+     * so this under-claims rather than over-claims. Fail-fast validation of the key belongs
+     * with the rest of the startup work in J20.
+     */
+    private static String normalize(String raw) {
+        return raw == null ? DEFAULT_MODE : raw.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     /**

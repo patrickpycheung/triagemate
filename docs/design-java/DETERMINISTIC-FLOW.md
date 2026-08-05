@@ -112,9 +112,9 @@ Demo: `"orders through checkout customers submit order fails error Order Portal"
 
 | Parameter | Derivation |
 |---|---|
-| `scope` | allowlist **ranked then swept** (below) |
+| `scope` | **composed**, not chosen: `source-category-pattern` expanded around `projectSlug` + `environment` (FND-70) |
 | `query` | `primaryIdentifier`, else top-3 keywords, else `"error"` |
-| `from`/`to` | `openedAt` ± 10 minutes |
+| `from`/`to` | `openedAt` ± 10 minutes — **the search is skipped entirely when `openedAt` is null** (J14, 2026-08-05): with no anchor there is no window, and searching ±10m around *now* for a ticket opened days ago reports a false "0 lines" |
 | `maxResults` | `triage.sumo.max-results` (20) |
 
 ### GitLab — `searchCode(project, searchTerm)`
@@ -127,6 +127,14 @@ Demo: `"orders through checkout customers submit order fails error Order Portal"
 Only runs if a log line yielded an error token; otherwise there's nothing to tie code to.
 
 ### How a scope / project gets chosen: **rank, then sweep**
+
+> **Superseded for Sumo (FND-70, `92574ce`).** The rank-then-sweep description below now
+> applies to **GitLab projects only**. Sumo scopes are no longer chosen from an allowlist at
+> all — the `_sourceCategory` is *composed* by the app from the affected app's slug plus the
+> incident's environment, expanded through `triage.sumo.source-category-pattern`. There is no
+> longer a list of candidates to sweep, so there is exactly one Sumo query per run. The
+> reasoning below about why sweeping beat picking still explains the GitLab behaviour, and
+> still records why the demo incident is the case that breaks a single guess.
 
 1. **Rank** every configured allowlist entry by token overlap with the affected app.
    `Ledger Export Service` → `prod/ledger` first. Ranking never *drops* an entry.

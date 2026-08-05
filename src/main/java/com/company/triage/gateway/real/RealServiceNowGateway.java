@@ -268,19 +268,85 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         return (result != null && result.isArray() && !result.isEmpty()) ? result.get(0) : null;
     }
 
+    /**
+     * One field's value as text — unwrapping a ServiceNow <b>reference field</b> when it
+     * arrives as an object rather than a scalar.
+     *
+     * <p>J24/SFF-1 (field-reported by sajids4, {@code docs/Siyad_Findings.md} §2, live
+     * instance 2026-08-05): reference fields — {@code cmdb_ci}, {@code caller_id},
+     * {@code assignment_group} — come back as
+     * <code>{"display_value": "Delivery Hazards", "link": "…/api/now/table/cmdb_ci/…"}</code>.
+     * This method used to be a bare {@code v.asText()}, and {@code asText()} on an
+     * {@code ObjectNode} returns the <b>empty string</b> — so the single most load-bearing
+     * field in the app, the CI naming the affected system, was blank on every real incident.
+     * The live log read {@code getIncident(INC0010010) → CI=, env=null} while the raw row
+     * plainly carried {@code "Delivery Hazards"}.
+     *
+     * <p>Everything downstream then derived the affected app from the ticket's subject line
+     * instead ({@code IncidentSignals.java:97}), which is how a Sumo scope came to be built
+     * from the sentence fragment {@code hazards-being-recorded-on} and matched nothing.
+     *
+     * <p><b>This also corrects FND-67's premise.</b> FND-67 recorded "the first real
+     * ServiceNow ticket had cmdb_ci = "" (empty, not null)" and hardened the deterministic
+     * engine against an empty-named candidate. The observation was real; the diagnosis was
+     * not — the CMDB was never empty, this parse dropped the value. FND-67's blank-check is
+     * still worth keeping (a CI genuinely can be unset), but it was never the whole story.
+     *
+     * <p>Returns {@code null} — never {@code ""} — for a missing/null field or an object
+     * without a {@code display_value}, so "the ticket does not say" stays distinguishable
+     * from "the ticket says something we failed to read". Fixing this at the parse rather
+     * than by adding {@code sysparm_exclude_reference_link=true} to each query is deliberate:
+     * the boundary owns the rule, so a future caller cannot silently re-open it.
+     */
     private static String text(JsonNode n, String field) {
         JsonNode v = n.get(field);
-        return v == null || v.isNull() ? null : v.asText();
+        if (v == null || v.isNull()) return null;
+        if (v.isObject()) {
+            JsonNode display = v.get("display_value");
+            if (display == null || display.isNull()) return null;
+            String s = display.asText();
+            return s == null || s.isBlank() ? null : s;
+        }
+        String s = v.asText();
+        return s == null || s.isBlank() ? null : s;
     }
 
     private static String firstKeyword(String s) {
         return s == null || s.isBlank() ? "error" : s.split("\\s+")[0];
     }
 
+    /**
+     * J14: {@code opened_at} anchors the deterministic engine's ±10m Sumo window, so a null
+     * here silently removes the log-search step (and, before J14's guard, threw an NPE
+     * inside the fallback engine).
+     *
+     * <p>The wire format is not one thing. Reads use {@code sysparm_display_value=true},
+     * which renders datetimes in the <b>requesting user's</b> display format — the live
+     * instance returned the raw-looking {@code 2026-08-02 21:37:16}
+     * ({@code docs/Siyad_Findings.md} §2), but a service account with a UK/AU locale profile
+     * returns {@code 02/08/2026 21:37:16} instead, which the original single-format parse
+     * dropped to null without a word. Try the shapes ServiceNow actually emits, and log at
+     * WARN when none match so an unparseable date is visible rather than merely absent.
+     */
     private static OffsetDateTime parseTime(String s) {
-        try { return s == null ? null : OffsetDateTime.parse(s.replace(' ', 'T') + "+00:00"); }
-        catch (Exception e) { return null; }
+        if (s == null || s.isBlank()) return null;
+        String raw = s.trim();
+        // ISO-8601 with an explicit offset, if the instance is configured that way.
+        try { return OffsetDateTime.parse(raw); } catch (Exception ignored) { /* try next */ }
+        for (java.time.format.DateTimeFormatter fmt : DATETIME_FORMATS) {
+            try {
+                return java.time.LocalDateTime.parse(raw, fmt).atOffset(java.time.ZoneOffset.UTC);
+            } catch (Exception ignored) { /* try next */ }
+        }
+        log.warn("could not parse ServiceNow datetime '{}' — the log-search window will be skipped", raw);
+        return null;
     }
+
+    private static final List<java.time.format.DateTimeFormatter> DATETIME_FORMATS = List.of(
+            SNOW_DATETIME,                                                        // 2026-08-02 21:37:16
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"),  // AU/UK profile
+            java.time.format.DateTimeFormatter.ofPattern("MM-dd-yyyy HH:mm:ss"),  // US profile
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
 
     private static final ObjectMapper JSON = new ObjectMapper();
 

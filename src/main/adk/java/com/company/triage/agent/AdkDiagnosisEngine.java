@@ -157,7 +157,7 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
         the JSON in ```json or ``` of any kind; the response must begin with { and end with }.
 
         {
-          "incidentNumber","generatedAt","reportedSymptom","affectedFunction",
+          "incidentNumber","reportedSymptom","affectedFunction",
           "environment","identifiers":{"correlationId","errorCode","orderId"},
           "candidateSystems":[{"name","confidence":<NUMBER 0.0-1.0>,"evidenceRefs":[]}],
           "suggestedAssignment":{"group","confidence":"LOW|MEDIUM|HIGH","evidenceRefs":[]},
@@ -433,12 +433,19 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 })
                 .build();
 
-        DiagnosisReport report = runAgentAndParse(agent, incidentNumber, trace);
+        DiagnosisReport report = stampGeneratedAt(runAgentAndParse(agent, incidentNumber, trace));
         // Schema-shaped JSON can still violate the J4 contract's semantic rules (FND-17):
         // an empty candidate list, or an evidenceRef pointing at no Evidence in this
         // report. Deserialization alone would let the UI render that without complaint.
         com.company.triage.model.DiagnosisReportValidator.validate(report);
-        timed.accept(trace, "adk agent finished: %d tool call(s) observed".formatted(bounds.used()));
+        // FND-78: report what RAN and what was REFUSED separately. This used to print
+        // bounds.used() — allowlisted attempts, uncapped — so an over-budget run read
+        // "12 tool call(s) observed" against a stated budget of 10 and looked like the J8
+        // leash had failed, when it was the leash working exactly as designed.
+        timed.accept(trace, bounds.deniedAttempts() == 0
+                ? "adk agent finished: %d tool call(s) executed".formatted(bounds.executed())
+                : "adk agent finished: %d tool call(s) executed, %d attempt(s) denied"
+                        .formatted(bounds.executed(), bounds.deniedAttempts()));
         return new DiagnosisResult(report, trace);
     }
 
@@ -663,6 +670,32 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     }
 
     /**
+     * FND-75: the server stamps {@code generatedAt}; the model is not asked for it.
+     *
+     * <p>It was in the prompt's schema block, which cost two things. It is <b>metadata about
+     * our own run</b>, so a model-invented value is a small fabrication flowing into the API
+     * response and the ServiceNow work note — the FND-8 class. And it is parse-fragile in a
+     * way nothing else in the contract is: a very common LLM timestamp shape
+     * ({@code 2026-08-05 14:32:10} — no {@code T}, no offset) throws
+     * {@code InvalidFormatException} and burns the single FND-42 repair retry (~8s of stage
+     * time and one Copilot call) on a field carrying no model judgment whatsoever.
+     *
+     * <p>{@code DeterministicDiagnosisEngine} has always stamped it server-side
+     * ({@code DeterministicDiagnosisEngine.java:371}); this brings the two engines into
+     * agreement. The field stays non-null in the J4 contract — it is simply filled in by the
+     * side that actually knows the answer.
+     */
+    private static DiagnosisReport stampGeneratedAt(DiagnosisReport parsed) {
+        return new DiagnosisReport(
+                parsed.incidentNumber(), java.time.OffsetDateTime.now(),
+                parsed.reportedSymptom(), parsed.affectedFunction(), parsed.environment(),
+                parsed.identifiers(), parsed.candidateSystems(), parsed.suggestedAssignment(),
+                parsed.evidence(), parsed.suggestedContacts(), parsed.contradictingEvidence(),
+                parsed.missingInformation(), parsed.recommendedNextAction(),
+                parsed.confidenceOverall(), parsed.advisory());
+    }
+
+    /**
      * Runs the agent loop and returns a parsed J4 report — with one repair retry
      * (FND-42) on the SAME session if the first final response doesn't parse, so the
      * retry re-prompts the model with the parse error rather than re-investigating
@@ -719,14 +752,48 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
     static String unfence(String raw) {
         if (raw == null) return "";
         String s = raw.strip();
-        if (!s.startsWith("`")) return s;
-        // Handles both a language-tagged fence and a bare one: the first line is the
-        // opening fence (with or without "json"), the last one closes it.
-        int firstNewline = s.indexOf('\n');
-        if (firstNewline < 0) return s;
-        String body = s.substring(firstNewline + 1);
-        int closing = body.lastIndexOf("```");
-        return (closing >= 0 ? body.substring(0, closing) : body).strip();
+        if (s.startsWith("`")) {
+            // Handles both a language-tagged fence and a bare one: the first line is the
+            // opening fence (with or without "json"), the last one closes it.
+            int firstNewline = s.indexOf('\n');
+            if (firstNewline >= 0) {
+                String body = s.substring(firstNewline + 1);
+                int closing = body.lastIndexOf("```");
+                String stripped = (closing >= 0 ? body.substring(0, closing) : body).strip();
+                if (stripped.startsWith("{")) return stripped;
+            }
+        }
+        if (s.startsWith("{")) return s;
+        return extractOutermostObject(s);
+    }
+
+    /**
+     * FND-79: last-resort recovery of the JSON object from a response the strict fence-strip
+     * above did not normalise.
+     *
+     * <p>FND-66 established the governing fact: fencing JSON is trained in deeply enough that
+     * asking nicely is not a control, and each miss costs the ~8s repair round trip plus one
+     * Copilot call, leaving the run one failure from {@code DEGRADED_TO_DETERMINISTIC}. The
+     * strict strip only fired when the response <i>started</i> with a backtick and had a
+     * newline after the opening fence, which left two shapes at least as common as the bare
+     * fence it fixed:
+     * <ul>
+     *   <li>a lead-in sentence — {@code Here is the report:\n```json\n{…}\n```} — the classic
+     *       instruction-following miss, and the same class of behaviour as fencing itself;</li>
+     *   <li>a fence with no newline — <code>```json{…}```</code>.</li>
+     * </ul>
+     *
+     * <p>Deliberately attempted ONLY after the strict paths fail, so a well-behaved response
+     * is never touched by this heuristic. Takes the first {@code &#123;} to the last
+     * {@code &#125;} — object-valued by contract (J4), so the outermost braces are the object;
+     * anything that does not parse still falls through to the FND-42 repair retry exactly as
+     * before, and a response containing no braces returns unchanged so the error message
+     * stays about the real problem.
+     */
+    private static String extractOutermostObject(String s) {
+        int open = s.indexOf('{');
+        int close = s.lastIndexOf('}');
+        return (open >= 0 && close > open) ? s.substring(open, close + 1) : s;
     }
 
     private static String send(InMemoryRunner runner, Session session, RunConfig runConfig, String text) {

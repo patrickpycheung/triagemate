@@ -218,4 +218,60 @@ class RealServiceNowGatewayTest {
 
         f.server().verify();
     }
+
+    /**
+     * J24/SFF-1 — the response body below is the row a teammate captured from the REAL
+     * AusPost instance (INC0010010, {@code docs/Siyad_Findings.md} §2, commit {@code
+     * 6c550ab}), verbatim: {@code cmdb_ci} and {@code caller_id} as
+     * {@code {display_value, link}} objects, {@code assignment_group} as an empty string,
+     * {@code subcategory} null.
+     *
+     * <p>Before SFF-1 this returned {@code CI=""} — {@code JsonNode.asText()} on an
+     * {@code ObjectNode} yields the empty string — which is what made every real incident
+     * derive its affected system from the subject line instead of the CMDB.
+     *
+     * <p>The fixture matters more than the assertions: every other test in this class uses
+     * a body we wrote ourselves, so they encoded our beliefs about ServiceNow rather than
+     * ServiceNow's behaviour. That is precisely how this shipped.
+     */
+    @Test
+    void referenceFieldsUnwrapToTheirDisplayValue() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/now/table/incident?")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"result":[{
+                          "sys_id": "54724710c3628350061cd64d050131ae",
+                          "number": "INC0010010",
+                          "short_description": "Hazards being recorded on handheld are not appearing in Delivery Hazards application.",
+                          "opened_at": "2026-08-02 21:37:16",
+                          "assignment_group": "",
+                          "cmdb_ci": {
+                            "display_value": "Delivery Hazards",
+                            "link": "https://dev409441.service-now.com/api/now/table/cmdb_ci/a977367a"
+                          },
+                          "caller_id": {
+                            "display_value": "Adela Cervantsz",
+                            "link": "https://dev409441.service-now.com/api/now/table/sys_user/0a826bf0"
+                          },
+                          "description": "Hazards being recorded on handheld are not appearing.",
+                          "category": "Inquiry / Help",
+                          "subcategory": null
+                        }]}""", MediaType.APPLICATION_JSON));
+        expectEmptyJournals(f.server());
+
+        var incident = f.gateway().getIncident("INC0010010");
+
+        // The value the whole downstream chain depends on: CI -> app -> Sumo scope.
+        org.junit.jupiter.api.Assertions.assertEquals("Delivery Hazards", incident.configurationItem());
+        org.junit.jupiter.api.Assertions.assertEquals("Adela Cervantsz", incident.caller());
+        // Absent/blank stays null, never "" — "the ticket does not say" must remain
+        // distinguishable from "the ticket says something we failed to read".
+        org.junit.jupiter.api.Assertions.assertNull(incident.currentAssignment());
+        org.junit.jupiter.api.Assertions.assertNull(incident.subcategory());
+        // The instance's raw datetime format still parses (J14 covers the display-format case).
+        org.junit.jupiter.api.Assertions.assertNotNull(incident.openedAt());
+
+        f.server().verify();
+    }
 }

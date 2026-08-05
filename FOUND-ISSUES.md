@@ -1,6 +1,15 @@
 # Found issues
 
-**Backlog: 0 open.** FND-55/56 (deferred pending a design decision) and FND-57/58
+**Backlog: 0 open.** FND-70…FND-83 were all resolved on 2026-08-05 and moved to
+[`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md) with a
+**Resolution** and an **Escape** line each. Thirteen came from that day's whole-application
+review (8-dimension multi-agent sweep + adversarial verification, cross-checked against
+Codex `gpt-5.6-sol` and Gemini); FND-83 was field-reported by sajids4 from a live run. The
+28 review findings that needed a *design decision* went to concept cards **J12–J25**, not
+here — those cards remain 🔴 designed-not-built and are tracked in
+[`docs/design-java/STATUS.md`](docs/design-java/STATUS.md).
+
+**Earlier history — backlog was 0 before that too.** FND-55/56 (deferred pending a design decision) and FND-57/58
 (deferred pending the `TriageProperties` refactor) were all fixed 2026-07-31 once
 `/found-issues-resolve` re-tested each deferral's premise and found it decidable.
 FND-59 (found by code review, not `/doc-test`) fixed the same day. Full detail in
@@ -54,3 +63,5 @@ The two most consequential, both real bugs rather than doc drift:
   no server-side check at all. All three are now enforced and tested.
 
 Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
+
+---
