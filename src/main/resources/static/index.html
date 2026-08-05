@@ -4,6 +4,12 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>TriageMate</title>
+<!-- Favicon from the TriageMate shield (docs/ui/TriageMate_Logo_v2.png). A browser tab
+     showing the default globe is the sort of detail that reads as unfinished on a
+     projector, and the mark is already in the repo. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="brand/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
   <!-- Apply the saved theme before first paint. Without this the page renders in
        the default dark theme for a frame and then repaints — very visible on a
        projector, and the exact kind of flicker you don't want mid-demo. -->
@@ -119,16 +125,69 @@
     .wrap { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
     h1 { font-size:22px; margin:0 0 4px; }
     .sub { color:var(--muted); margin:0 0 20px; }
-    /* Brand row: the Australia Post mark beside the app title. */
-    .brand { display:flex; align-items:flex-start; gap:14px; }
-    .brand-mark { flex:0 0 auto; width:40px; height:40px; color:var(--brand); margin-top:-2px; }
-    @media (max-width:520px) { .brand-mark { width:32px; height:32px; } }
+    /* ---- Masthead -------------------------------------------------------
+       Laid out from the project one-pager (docs/ui/One_Pager.png): the
+       TriageMate lockup hard left, the Australia Post mark hard right, a
+       tagline beneath the lockup, and a red rule under the whole band. The
+       rule is the poster's own device — it fades out to the right rather
+       than stopping square, which is what stops a full-width line reading
+       like a <hr>. */
+    .masthead { display:flex; align-items:flex-start; justify-content:space-between;
+                gap:20px; padding-bottom:14px; margin-bottom:6px; position:relative; }
+    .masthead::after { content:''; position:absolute; left:0; right:0; bottom:0; height:2px;
+                       background:linear-gradient(90deg, var(--acc) 0%, var(--acc) 42%,
+                                   color-mix(in srgb, var(--acc) 22%, transparent) 100%); }
+    .brand { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0; }
+    /* The lockup is a bitmap with a keyed-out background (see brand/README), so it sits on
+       any theme surface. height, not width, so the wordmark keeps its proportions. */
+    /* align-self guards the intrinsic ratio even if .brand's alignment changes again:
+       inside a flex COLUMN the default align-items:stretch makes width:auto resolve to the
+       column's width, which silently squashed the lockup to a 5:1 blob against its true
+       3:1. Belt and braces with the explicit aspect-ratio. */
+    .brand-logo { height:52px; width:auto; align-self:flex-start; aspect-ratio:889/294;
+                  display:block; }
+    .brand-tag { font-size:13.5px; color:var(--muted); margin:0; letter-spacing:.01em; }
+    /* The lockup is a bitmap, so unlike --acc it cannot follow a theme. The dark theme
+       lifts its red to #ff4b57 precisely because #dc1928 on near-black sits under the
+       contrast floor — the same is true of the logo's wordmark, so lift it the same way
+       rather than leaving one red on screen that is measurably dimmer than the other. */
+    [data-theme="auspost-dark"] .brand-logo { filter:brightness(1.28) saturate(1.05); }
+    /* Australia Post lock-up on the right, mirroring the poster. The mark stays SVG (see
+       its comment below) so it inherits the theme accent and stays sharp; the wordmark is
+       real text for the same reason and so it is selectable and screen-readable. */
+    .org { display:flex; align-items:center; gap:9px; flex:0 0 auto; padding-top:3px; }
+    .org-mark { width:27px; height:27px; color:var(--brand); flex:0 0 auto; }
+    .org-name { font-size:17px; font-weight:600; color:var(--ink); letter-spacing:-.01em;
+                white-space:nowrap; }
+    /* The app title sits BELOW the masthead now — the logo already says TriageMate, so
+       repeating it as an <h1> would say the name twice in 60px of screen. */
+    .page-title { display:flex; align-items:center; gap:8px; margin:18px 0 4px; }
+    .page-title h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
+    @media (max-width:620px) {
+      .masthead { flex-direction:column; gap:12px; }
+      .brand-logo { height:38px; }
+      .org-name { font-size:15px; }
+    }
     .row { display:flex; gap:10px; margin-bottom:22px; }
     input { flex:1; padding:11px 13px; border-radius:9px; border:1px solid var(--input-border); background:var(--input-bg); color:var(--ink); font-size:15px; }
     button { padding:11px 20px; border:0; border-radius:9px; background:var(--acc); color:var(--btn-ink); font-weight:600; cursor:pointer; }
     button:disabled { opacity:.5; cursor:default; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
-    .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
+    /* Poster cards: white, softly rounded, a hairline border and a very low shadow so
+       they lift off the light ground the way the one-pager's panels do. */
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+            padding:18px 20px; margin-bottom:16px;
+            box-shadow:0 1px 2px rgba(16,24,32,.04), 0 4px 14px rgba(16,24,32,.035); }
+    /* Poster styling (docs/ui/One_Pager.png): section headings are the ACCENT, not muted
+       grey. On the one-pager every section — THE PROBLEM, THE IDEA, HOW TRIAGEMATE WORKS,
+       KEY BENEFITS — is red small-caps, and that is the single most recognisable thing
+       about the layout. Grey headings read as a generic admin console; red ones read as
+       this product. */
+    .card h2 { font-size:12.5px; text-transform:uppercase; letter-spacing:.07em;
+               color:var(--acc); font-weight:700; margin:0 0 11px;
+               display:flex; align-items:center; gap:7px; }
+    /* The little red rule that opens each heading on the poster. */
+    .card h2::before { content:''; width:3px; height:13px; border-radius:2px;
+                       background:var(--acc); flex:0 0 auto; opacity:.85; }
     .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
     .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
     .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:var(--inset); margin-bottom:7px; border-radius:0 6px 6px 0; }
@@ -376,28 +435,41 @@
 </div>
 
 <div class="wrap">
-  <!-- Australia Post mark. Traced from the corporate ServiceNow instance's own header
-       (theme-AusPost-ServiceNow.png) as geometry — circle, vertical cut, elliptical
-       counter — rather than embedded as a bitmap, so it stays sharp at any size and
-       inherits its colour from the theme. `currentColor` on the fill means it picks up
-       --acc, which is the real Australia Post red (#dc1928) in both AusPost themes and
-       the theme's own accent elsewhere. Internal hackathon app; the mark is here to
-       identify whose system this is, not as third-party branding. -->
-  <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 80 80" role="img" aria-label="Australia Post">
-      <mask id="auspost-mark">
-        <rect width="80" height="80" fill="black"/>
-        <circle cx="39" cy="41.5" r="27.5" fill="white"/>
-        <rect x="30" y="0" width="7.5" height="80" fill="black"/>
-        <ellipse cx="42.5" cy="34" rx="13" ry="16" fill="black"/>
-      </mask>
-      <rect width="80" height="80" fill="currentColor" mask="url(#auspost-mark)"/>
-    </svg>
-    <div>
-      <h1>TriageMate <span class="pill">advisory</span></h1>
-      <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
+  <!-- Masthead, laid out from docs/ui/One_Pager.png: TriageMate lockup left,
+       Australia Post right, red rule beneath.
+
+       Two different techniques on purpose. The TriageMate lockup is the supplied
+       artwork (docs/ui/TriageMate_Logo_v2.png) cropped with its flat background keyed
+       to transparent — it is a real logo with a gradient shield and a hand-drawn pulse
+       trace, and re-drawing that by hand would produce a worse copy of a thing we were
+       given. The Australia Post mark stays as traced SVG geometry (circle, vertical cut,
+       elliptical counter) because it must inherit --acc across the themes and stay sharp
+       on a projector at any size; it identifies whose system this is, not third-party
+       branding on an internal hackathon app. -->
+  <header class="masthead">
+    <div class="brand">
+      <img class="brand-logo" src="brand/triagemate-logo.png"
+           alt="TriageMate" width="889" height="294"/>
+      <p class="brand-tag">AI-Powered Incident Triage Copilot</p>
     </div>
+    <div class="org">
+      <svg class="org-mark" viewBox="0 0 80 80" role="img" aria-label="">
+        <mask id="auspost-mark">
+          <rect width="80" height="80" fill="black"/>
+          <circle cx="39" cy="41.5" r="27.5" fill="white"/>
+          <rect x="30" y="0" width="7.5" height="80" fill="black"/>
+          <ellipse cx="42.5" cy="34" rx="13" ry="16" fill="black"/>
+        </mask>
+        <rect width="80" height="80" fill="currentColor" mask="url(#auspost-mark)"/>
+      </svg>
+      <span class="org-name">Australia Post</span>
+    </div>
+  </header>
+
+  <div class="page-title">
+    <h1>Incident diagnosis <span class="pill">advisory</span></h1>
   </div>
+  <p class="sub">Enter a ServiceNow incident number and run a bounded, evidence-gathering diagnosis.</p>
 
   <!-- FND-80: a <form> rather than a bare .row, so Enter submits. On stage the presenter
        types the incident number and hits Enter — the universal reflex — and previously
