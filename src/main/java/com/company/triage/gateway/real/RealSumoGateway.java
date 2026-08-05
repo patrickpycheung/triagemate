@@ -92,8 +92,13 @@ public class RealSumoGateway implements SumoGateway {
                 String raw = f.path("_raw").asText("");
                 out.add(new LogEvidence(
                         f.path("_messagetime").asText(),
-                        // J29/LLF-1: this estate never sets loglevel — fall back to _raw.
-                        parseLevel(f.path("loglevel").asText(""), f.path("_raw").asText("")),
+                        // FND-85 + J29/LLF-1. The key is `_loglevel`, WITH the leading
+                        // underscore — verified live: a real row carries `_loglevel = ERROR`
+                        // and has no `loglevel` key at all. Reading the unprefixed name
+                        // yielded "" on every row ever returned, which is the whole defect.
+                        // The _raw fallback behind it covers a source with no field-extraction
+                        // rule configured, so the hole cannot reopen from the estate side.
+                        parseLevel(f.path("_loglevel").asText(""), raw),
                         f.path("_sourcecategory").asText(""),
                         raw));
             });
@@ -120,9 +125,18 @@ public class RealSumoGateway implements SumoGateway {
      * J29/LLF-1: resolve a log level, preferring the structured Sumo field and falling back to
      * scanning {@code _raw}.
      *
-     * <p>Verified live 2026-08-05: this estate's responses carry no {@code loglevel} key at all,
-     * so every row used to arrive at {@code ""}, the engine's {@code "ERROR".equals(level)} filter
-     * matched nothing, and both GitLab steps skipped on real data.
+     * <p><b>The root cause was a one-character key typo, not a missing field</b> (FND-85).
+     * The caller read {@code map.loglevel}; Sumo returns {@code map._loglevel}, with a leading
+     * underscore. Verified live 2026-08-05: real rows carry {@code _loglevel} = ERROR/WARN and
+     * carry no unprefixed {@code loglevel} at all. So every row arrived at {@code ""}, the
+     * engine's {@code "ERROR".equals(level)} filter matched nothing, and both GitLab steps
+     * skipped on real data.
+     *
+     * <p>An earlier revision of this javadoc claimed the estate simply "never sets loglevel"
+     * and treated configuring an extraction rule as someone else's problem. That was wrong,
+     * and wrong in the direction that matters: it framed a bug in our code as a limitation of
+     * their tenant. The absence was real; the explanation was not. Recorded because a merge
+     * briefly reinstated it over the correct fix.
      *
      * <p>The structured field keeps priority: an estate that DOES configure a field-extraction
      * rule is better served by its own parsed value than by our regex, and must not be regressed

@@ -37,23 +37,45 @@ class RealSumoGatewayLevelParseTest {
             List<String> levels = new ArrayList<>();
             for (JsonNode m : root.get("messages")) {
                 JsonNode f = m.path("map");
-                // Exactly how the gateway sources the two inputs.
+                // Exactly how the gateway sources the two inputs — INCLUDING THE KEY NAME.
+                // That detail is the point of this helper: FND-85 was a one-character typo
+                // (`loglevel` for `_loglevel`), and a test that takes the level as a ready-made
+                // String cannot see it. Keep this reading the map, not a parameter.
                 levels.add(RealSumoGateway.parseLevel(
-                        f.path("loglevel").asText(""), f.path("_raw").asText("")));
+                        f.path("_loglevel").asText(""), f.path("_raw").asText("")));
             }
             return levels;
         }
     }
 
     @Test
-    void levelsAreRecoveredFromRawWhenTheStructuredFieldIsAbsent() throws Exception {
+    void everyRowOfTheCapturedRealResponseResolvesToItsTrueLevel() throws Exception {
         assertThat(levelsFromCapturedResponse()).containsExactly(
-                "ERROR",   // row 0 — no loglevel key, five-char level
-                "ERROR",   // row 1 — no loglevel key, five-char level
-                "WARN",    // row 2 — no loglevel key, FOUR-char level → two spaces (%5p padding)
-                "INFO",    // row 3 — no loglevel key, four-char level
-                "ERROR",   // row 4 — loglevel IS populated and must win over the _raw scan (INFO)
-                "");       // row 5 — no known layout → unknown, never a guess
+                "ERROR",   // row 0 — _loglevel set, five-char level
+                "ERROR",   // row 1 — _loglevel set
+                "WARN",    // row 2 — _loglevel set; _raw would also work (two-space %5p padding)
+                "INFO",    // row 3 — _loglevel set
+                "WARN",    // row 4 — NO _loglevel (no extraction rule) → recovered from _raw
+                "ERROR",   // row 5 — THE DISCRIMINATOR: _loglevel set, _raw unparseable
+                "");       // row 6 — neither → unknown, never a guess
+    }
+
+    /**
+     * The regression guard for FND-85, stated as its own test because the defect was a single
+     * character in a key name and every other assertion here would survive it.
+     *
+     * <p>Row 5 carries {@code _loglevel = ERROR} and a {@code _raw} in no recognised layout.
+     * Read the correct key and it resolves; read {@code loglevel} (no underscore) and the
+     * structured value is missed, the {@code _raw} fallback finds nothing, and the row comes
+     * back {@code ""} — which is exactly what shipped, and exactly what a merge later
+     * reinstated over the fix. Nothing else in this suite fails when that happens.
+     */
+    @Test
+    void theLevelIsReadFromUnderscoreLoglevelNotLoglevel() throws Exception {
+        assertThat(levelsFromCapturedResponse().get(5))
+                .as("row 5 is resolvable ONLY via the `_loglevel` key — a \"\" here means the "
+                        + "gateway is reading `loglevel` without the leading underscore again")
+                .isEqualTo("ERROR");
     }
 
     @Test

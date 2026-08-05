@@ -55,7 +55,7 @@ Query: `_sourceCategory=IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_deliv
 
 | # | What | Where | Failure |
 |---|---|---|---|
-| 1 | `loglevel` is **absent**, not merely blank | [`RealSumoGateway.java:94`](../../../../src/main/java/com/company/triage/gateway/real/RealSumoGateway.java#L94) | The API response carries no `loglevel` key at all on any row (`map.loglevel` → JSON absent → `asText("")` → `""`). The severity exists only inside `_raw`. **HIGH** |
+| 1 | the level key is `_loglevel`, and we read `loglevel` | [`RealSumoGateway.java:94`](../../../../src/main/java/com/company/triage/gateway/real/RealSumoGateway.java#L94) | **CORRECTED — see below.** The response carries no unprefixed `loglevel` key, which is true but was the wrong conclusion: Sumo returns `map._loglevel`, WITH a leading underscore, populated on every row. A one-character typo in our code, not a gap in the estate (FND-85). **HIGH** |
 | 2 | The ERROR filter therefore matches nothing | [`DeterministicDiagnosisEngine.java:263`](../../../../src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java#L263) | `errorLine` is `null` on every real run despite 105 matching rows; `errorToken` is `null`; both GitLab steps skip with "no error token" / "no code file was located". **HIGH** |
 | 3 | Every log-derived candidate is under-scored | [`DeterministicDiagnosisEngine.java:420`](../../../../src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java#L420) | 0.45 instead of 0.70, on every live run, invisibly. **Not in the field report.** **MEDIUM** |
 | 4 | The token regex picks a data value over the exception | [`DeterministicDiagnosisEngine.java:44`](../../../../src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java#L44) | On the real first-ERROR line, `\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b` returns `GNAF_FRONTAGE` (4 occurrences, all from the SQL `Detail: Failing row contains (…)` tail). `DataIntegrityViolationException` — present in the source, and the identifier a human would search — is not matched. **HIGH** |
@@ -68,6 +68,27 @@ org.springframework.dao.DataIntegrityViolationException: could not execute state
 [ERROR: null value in column "facility_id" of relation "hazard" violates not-null constraint
   Detail: Failing row contains (4630355, unsafe_assets, null, 194117, HEAD INJURY …
 ```
+
+## Correction to THIS CARD (2026-08-06)
+
+**The root cause stated above was wrong, and wrong in the direction that matters.** This card
+claimed the estate never populates the level and treated fixing that as someone else's job.
+`worktree-hack-222` found the truth independently (FND-85): the key is **`_loglevel`**, with a
+leading underscore, and it is populated on every row — re-verified live, rows return
+`_loglevel` = ERROR/ERROR/WARN/ERROR and carry no unprefixed `loglevel` at all.
+
+The observation ("`loglevel` is absent") was correct; the explanation was not. The `_raw`
+fallback this card designed still earns its place — it covers a source with no extraction rule
+configured — but it is a **safety net behind the real fix, not the fix itself**.
+
+Two process failures worth recording, because both were silent:
+
+1. **The fixture was built from the wrong premise**, so it omitted `_loglevel` entirely. Code
+   and test then used the same wrong key and agreed with each other. 248 tests green, defect
+   fully intact. A captured-response fixture only pins reality if it was captured faithfully.
+2. **A merge reinstated the typo over the correct fix** and no test failed, because no test
+   asserted the KEY. `theLevelIsReadFromUnderscoreLoglevelNotLoglevel` now does; it fails with
+   `expected: "ERROR" but was: ""` when the underscore is dropped.
 
 ## Correction to the field report
 
@@ -173,9 +194,9 @@ the suite ever sees.
 
 ## Out of scope
 
-- **Configuring a Sumo field-extraction rule** so `loglevel` is populated upstream. That is
-  the cleaner fix and it is not ours to make — it is an estate change on someone else's
-  tenant, and the app must work against the estate as found.
+- ~~**Configuring a Sumo field-extraction rule** so `loglevel` is populated upstream.~~
+  **Struck — the premise was false.** The rule IS configured; the field arrives as
+  `_loglevel` and we were reading the wrong name. There is nothing to ask the estate for.
 - **The ADK path's search terms.** The agent chooses its own GitLab query, so LLF-3 does not
   apply to it. LLF-1 does — it shares the gateway.
 - **Rewriting `ERROR_TOKEN`.** Narrowing it to exclude data values needs domain knowledge the

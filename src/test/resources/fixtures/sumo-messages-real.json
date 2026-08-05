@@ -1,8 +1,18 @@
 {
+  "_comment": [
+    "Captured from the real Sumo Search Job API (delivery-hazards, 2026-08-05).",
+    "The level key is `_loglevel`, WITH a leading underscore (FND-85). No row carries an",
+    "unprefixed `loglevel`; reading that name is the original defect. An earlier revision of",
+    "this fixture omitted `_loglevel` entirely, so the code and the test used the same wrong",
+    "name and agreed with each other — green, and blind. Row 5 is the discriminator:",
+    "`_loglevel` present, `_raw` in no recognised layout, so ONLY reading the correct key",
+    "resolves it. Do not delete row 5."
+  ],
   "messages": [
     {
       "map": {
         "_messagetime": "1785904006173",
+        "_loglevel": "ERROR",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
         "_raw": "2026-08-05 14:26:46.173 ERROR 1 --- [http-nio-8080-exec-546] a.c.a.h.c.e.CustomRestExceptionHandler   : 9bc066ca org.springframework.dao.DataIntegrityViolationException: could not execute statement"
       }
@@ -10,6 +20,7 @@
     {
       "map": {
         "_messagetime": "1785904006171",
+        "_loglevel": "ERROR",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
         "_raw": "2026-08-05 14:26:46.171 ERROR 1 --- [http-nio-8080-exec-546] o.h.engine.jdbc.spi.SqlExceptionHelper   : ERROR: null value in column"
       }
@@ -17,6 +28,7 @@
     {
       "map": {
         "_messagetime": "1785904006171",
+        "_loglevel": "WARN",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
         "_raw": "2026-08-05 14:26:46.171  WARN 1 --- [http-nio-8080-exec-546] o.h.engine.jdbc.spi.SqlExceptionHelper   : SQL Error: 0, SQLState: 23"
       }
@@ -24,6 +36,7 @@
     {
       "map": {
         "_messagetime": "1785904006170",
+        "_loglevel": "INFO",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
         "_raw": "2026-08-05 14:26:46.170  INFO 1 --- [http-nio-8080-exec-546] a.c.a.h.service.HazardService            : persisting hazard 4630355"
       }
@@ -31,14 +44,21 @@
     {
       "map": {
         "_messagetime": "1785904006169",
-        "loglevel": "ERROR",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
-        "_raw": "2026-08-05 14:26:46.169  INFO 1 --- [http-nio-8080-exec-546] a.c.a.h.service.HazardService            : an estate that DOES configure loglevel"
+        "_raw": "2026-08-05 14:26:46.169  WARN 1 --- [http-nio-8080-exec-546] o.h.engine.jdbc.spi.SqlExceptionHelper   : a source with no field-extraction rule — _raw is the only signal"
       }
     },
     {
       "map": {
         "_messagetime": "1785904006168",
+        "_loglevel": "ERROR",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "{\"ts\":\"2026-08-05T14:26:46.168Z\",\"msg\":\"structured JSON logger, no Spring Boot console layout\"}"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006167",
         "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
         "_raw": "<134>Aug  5 14:26:46 gateway-nginx: 10.4.2.11 - - \"GET /health HTTP/1.1\" 200"
       }
