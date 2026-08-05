@@ -45,7 +45,7 @@
 ## design-java
 
 - [**Running TriageMate on a custom domain (instead of `localhost:8080`)**](design-java/CUSTOM-DOMAIN.md) — **Goal:** the browser address bar reads `http://triagemate.auspost.local` rather than  `2026-08-04`
-- [**Live demo runbook — Copilot-backed triage (Option 1: D1 + D2 + D3)**](design-java/DEMO-RUNBOOK.md) — The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:  `2026-08-04`
+- [**Live demo runbook — Copilot-backed triage (Option 1: D1 + D2 + D3)**](design-java/DEMO-RUNBOOK.md) — The demo strategy chosen in DDS `orchestrator-vs-copilot-cli`:  `2026-08-05`
 - [**Demo Walkthrough — TriageMate**](design-java/DEMO.md) — What the running Spring Boot app does, end to end, and how to run it.  `2026-08-04`
 - [**How the deterministic engine searches**](design-java/DETERMINISTIC-FLOW.md) — What `DeterministicDiagnosisEngine` actually does, step by step: which fields it reads from  `2026-08-05`
 - [**CDS Workspace — Java Triage Copilot (Spring Boot + Google ADK)**](design-java/README.md) — Active design workspace. Turns the Java-pivot DDS decision  `2026-08-04`
@@ -56,10 +56,10 @@
 - [**J1 — Spring Boot Orchestrator**](design-java/concepts/J1-spring-boot-orchestrator/README.md) — The Spring Boot skeleton and the shared entry point both triggers call through.  `2026-08-05`
 - [**J10 — Incident Poller (the K1 trigger)**](design-java/concepts/J10-incident-poller/README.md) — · **Carries**: K1–K3 from DDS `servicenow-local-trigger`  `2026-08-04`
 - [**J11 — Live Thinking Trace (animated per-step agent trace)**](design-java/concepts/J11-live-thinking-trace/README.md) — guarantee holds with no `X-Triage-Run-Id` header, and the deterministic replay path  · 5 docs  `2026-08-05`
-- [**J12 — Live Trace Delivery (convergent, identity-keyed)**](design-java/concepts/J12-live-trace-delivery/README.md) — **What the client shows after any poll must equal what the buffer holds — not what the  `2026-08-05`
-- [**J13 — Evidence & Citation Integrity (the citation contract made enforceable)**](design-java/concepts/J13-evidence-citation-integrity/README.md) — the contract), J8 (its bounds inventory claims a per-call result cap on `TriageMateTools`  `2026-08-05`
-- [**J14 — Fallback Robustness on Real Input**](design-java/concepts/J14-fallback-real-input-robustness/README.md) — J5 (`getIncident`'s field contract), J3 (what a gateway may put in `LogEvidence.logger`)  `2026-08-05`
-- [**J15 — The Run Contract (ports, endpoints, and a runbook that matches the scripts)**](design-java/concepts/J15-port-contract-demo-runbook/README.md) — findings + 1 unverified tail item  `2026-08-05`
+- [**J12 — Live Trace Delivery (convergent, identity-keyed)**](design-java/concepts/J12-live-trace-delivery/README.md) — full re-read + client upsert on `(attempt, callId)`, so a row now resolves IN PLACE during  `2026-08-05`
+- [**J13 — Evidence & Citation Integrity (the citation contract made enforceable)**](design-java/concepts/J13-evidence-citation-integrity/README.md) — own evidence, or is omitted and disclosed), ECI-3 (0.86 requires system agreement) and ECI-4  `2026-08-05`
+- [**J14 — Fallback Robustness on Real Input**](design-java/concepts/J14-fallback-real-input-robustness/README.md) — display formats ServiceNow actually emits, with a WARN when none match) and **FRI-2** (a  `2026-08-05`
+- [**J15 — The Run Contract (ports, endpoints, and a runbook that matches the scripts)**](design-java/concepts/J15-port-contract-demo-runbook/README.md) — re-derived from what the scripts actually do, both stale `application.yml says 8080`  `2026-08-05`
 - [**J16 — Run-Trace Registry Lifecycle (who owns a live buffer, and for how long)**](design-java/concepts/J16-run-trace-registry-lifecycle/README.md) — findings + 1 unverified tail item  `2026-08-05`
 - [**J17 — Poller Completion Semantics (diagnosed ≠ delivered ≠ nobody-else-did-it)**](design-java/concepts/J17-poller-completion-semantics/README.md) — the same incident twice" property), J1 (writeback failure disclosure) ·  `2026-08-05`
 - [**J18 — Guardrail Enforcement Completeness (a bound is owned by the boundary, not by the caller)**](design-java/concepts/J18-guardrail-enforcement-completeness/README.md) — per-*gateway*), J5 (ServiceNow query construction) ·  `2026-08-05`
@@ -67,9 +67,9 @@
 - [**J2 — ADK Agent Loop**](design-java/concepts/J2-adk-agent-loop/README.md) — Gates on Spike JS-1  `2026-08-04`
 - [**J20 — Startup Truth & Validation**](design-java/concepts/J20-startup-truth-and-validation/README.md) — findings + 4 unverified tail items  `2026-08-05`
 - [**J21 — Network Exposure Posture (who may reach the mutating endpoint)**](design-java/concepts/J21-network-exposure-posture/README.md) — J7 (the UI must send it) ·  `2026-08-05`
-- [**J22 — Real Gateway Request Contracts (proved offline, not on stage)**](design-java/concepts/J22-real-gateway-contract-tests/README.md) — gap this closes), J6 (the real Confluence/GitLab request shapes it describes are  `2026-08-05`
+- [**J22 — Real Gateway Request Contracts (proved offline, not on stage)**](design-java/concepts/J22-real-gateway-contract-tests/README.md) — the GitLab `%252F` double-encoding is fixed and pinned (proved fails-before/passes-after),  `2026-08-05`
 - [**J23 — Live UI Honesty (the honesty contract holds in every UI state)**](design-java/concepts/J23-live-ui-honesty/README.md) — one branch short) ·  `2026-08-05`
-- [**J24 — ServiceNow Field Fidelity (the incident's own fields must survive the parse)**](design-java/concepts/J24-servicenow-field-fidelity/README.md) — (siyad.sajid4@auspost.com.au), commit `6c550ab`, from a **live run against the real  `2026-08-05`
+- [**J24 — ServiceNow Field Fidelity (the incident's own fields must survive the parse)**](design-java/concepts/J24-servicenow-field-fidelity/README.md) — disclosure, unmatched-scope skip, the environment ladder, and the captured-response fixture  `2026-08-05`
 - [**J25 — Knowledge Query Relevance (a search the app issues must be a search a human would recognise)**](design-java/concepts/J25-knowledge-query-relevance/README.md) — (siyad.sajid4@auspost.com.au), commit `6c550ab`, from a **live run against the real AusPost  `2026-08-05`
 - [**J3 — Connector Tools (gateways + FunctionTool adapters)**](design-java/concepts/J3-connector-tools/README.md) — Each enterprise system is a Spring `@Service` behind a narrow interface, with a  `2026-08-04`
 - [**J4 — Diagnosis Report (JSON contract)**](design-java/concepts/J4-diagnosis-report/README.md) — The strict JSON contract every run produces. Building the report **before** the  `2026-08-04`
