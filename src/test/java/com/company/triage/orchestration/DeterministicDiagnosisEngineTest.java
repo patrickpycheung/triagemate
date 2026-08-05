@@ -673,4 +673,78 @@ class DeterministicDiagnosisEngineTest {
                 .as("no caveat when every level was readable")
                 .noneSatisfy(m -> assertThat(m).contains("severity could not be read"));
     }
+
+    /** The captured real delivery-hazards ERROR line, abridged to one line (J29/LLF-3). */
+    private static final String REAL_ERROR_MESSAGE =
+            "9bc066ca org.springframework.dao.DataIntegrityViolationException: could not execute "
+            + "statement [ERROR: null value in column \"facility_id\" of relation \"hazard\" "
+            + "violates not-null constraint  Detail: Failing row contains (4630355, "
+            + "unsafe_assets, null, 194117, HEAD INJURY, GNAF_FRONTAGE";
+
+    private DeterministicDiagnosisEngine engineLogging(String level, String logger, String message) {
+        var sumo = new MockSumoGateway() {
+            @Override
+            public List<com.company.triage.model.LogEvidence> search(
+                    com.company.triage.model.LogSearchRequest request) {
+                return List.of(new com.company.triage.model.LogEvidence(
+                        "2026-08-05T14:26:46Z", level, logger, message));
+            }
+        };
+        return new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                sumo, new MockGitLabGateway(), TriagePropertiesFixture.deterministic());
+    }
+
+    private static String errorTokenIn(java.util.List<String> trace) {
+        return trace.stream().filter(l -> l.contains("errorToken=")).findFirst()
+                .map(l -> l.substring(l.indexOf("errorToken=") + "errorToken=".length()))
+                .orElse(null);
+    }
+
+    /**
+     * J29/LLF-3 — on the real line the SCREAMING_SNAKE {@code ERROR_TOKEN} matches
+     * {@code GNAF_FRONTAGE}, a location-data COLUMN NAME out of the SQL {@code Detail: Failing
+     * row contains (…)} tail. Searching GitLab for it is a wasted call; the thrown class is
+     * what a human would search. A stack-trace shape on the line therefore outranks the
+     * free-text token.
+     */
+    @Test
+    void aThrownExceptionClassOutranksASnakeCaseDataValueOnTheRealErrorLine() {
+        var result = engineLogging("ERROR", "a.c.a.h.c.e.CustomRestExceptionHandler",
+                REAL_ERROR_MESSAGE).diagnose("INC0010005");
+
+        assertThat(errorTokenIn(result.trace()))
+                .as("the thrown class, not a column name from the SQL detail tail")
+                .isEqualTo("DataIntegrityViolationException")
+                .isNotEqualTo("GNAF_FRONTAGE")
+                // Spring Boot abbreviates the logger name, so `\\w+(\\.\\w+)+Exception` — the
+                // naive detector — matches a class that exists in no source file and returns
+                // nothing from GitLab. The detector must read the thrown FQN instead.
+                .isNotEqualTo("a.c.a.h.c.e.CustomRestException");
+    }
+
+    /**
+     * J29/LLF-3 — the other direction, and the one that matters for the demo: a line carrying
+     * a genuine error CODE and no exception FQN must still yield that code. Preferring the
+     * class unconditionally would regress every such line to nothing.
+     */
+    @Test
+    void aGenuineErrorCodeWithNoExceptionFqnStillWins() {
+        var result = engineLogging("ERROR", "payment_service",
+                "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471 expected=11.50 charged=11.25")
+                .diagnose("INC0010005");
+
+        assertThat(errorTokenIn(result.trace())).isEqualTo("PAYMENT_RECONCILE_MISMATCH");
+    }
+
+    /** J29/LLF-3 — neither shape present: no term, and GitLab is skipped as it already was. */
+    @Test
+    void aLineWithNeitherShapeYieldsNoTermAndSkipsGitLab() {
+        var result = engineLogging("ERROR", "payment_service",
+                "connection reset by peer while reconciling").diagnose("INC0010005");
+
+        assertThat(errorTokenIn(result.trace())).isEqualTo("null");
+        assertThat(result.trace()).anySatisfy(l -> assertThat(l)
+                .contains("gitlab.searchCode → skipped (no error token"));
+    }
 }

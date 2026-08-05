@@ -44,6 +44,29 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private static final Pattern ERROR_TOKEN = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b");
 
     /**
+     * J29/LLF-3: does this line carry a THROWN exception's fully-qualified name?
+     *
+     * <p>The card originally proposed {@code \w+(\.\w+)+Exception}. Against the captured real
+     * delivery-hazards line that matches {@code a.c.a.h.c.e.CustomRestException} — Spring
+     * Boot's ABBREVIATED logger name, truncated mid-word — a class that exists in no source
+     * file, so a GitLab search for it returns nothing. Requiring three or more dotted segments
+     * and a word boundary after {@code Exception} is what makes this read the thrown
+     * {@code org.springframework.dao.DataIntegrityViolationException} instead.
+     */
+    private static final Pattern EXCEPTION_FQN =
+            Pattern.compile("\\b\\w+(?:\\.\\w+){2,}\\.\\w*Exception\\b");
+
+    /**
+     * J29/LLF-3: the class's own name, which is what a human searches GitLab for.
+     *
+     * <p>Safe to run over the whole line rather than only over the {@link #EXCEPTION_FQN}
+     * match: the trailing {@code \b} skips {@code CustomRestExceptionHandler}, since there is
+     * no word boundary after {@code Exception} there.
+     */
+    private static final Pattern EXCEPTION_CLASS =
+            Pattern.compile("\\b[A-Z][a-zA-Z0-9]*(?:Exception|Error|Violation|Failure)\\b");
+
+    /**
      * J13/ECI-4: most code citations one reader can use for a single error token.
      *
      * <p>Bounds two things at once, because {@code codeHits} is also what
@@ -261,7 +284,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         List<LogEvidence> logs = sumoRequest == null ? List.of() : sumo.search(sumoRequest);
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
-        String errorToken = errorLine == null ? null : firstMatch(ERROR_TOKEN, errorLine.message());
+        String errorToken = errorLine == null ? null : searchTermFor(errorLine.message());
         if (errorLine != null) {
             evidence.add(new Evidence("e-log", "sumo",
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),
@@ -716,6 +739,31 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     /** How many distinct sources independently surfaced this contact (source is "a+b+c"). */
     private static int sourceCount(Contact c) {
         return c.source() == null || c.source().isBlank() ? 0 : c.source().split("\\+").length;
+    }
+
+    /**
+     * J29/LLF-3: the term the GitLab code search is issued with, chosen from ONE log line.
+     *
+     * <p>{@link #ERROR_TOKEN} alone matched {@code GNAF_FRONTAGE} on the real
+     * delivery-hazards line — a location-data COLUMN NAME lifted out of the SQL
+     * {@code Detail: Failing row contains (…)} tail, which appears there four times. It is
+     * not a thing anyone would search for, and it is not in the source. The thrown
+     * {@code DataIntegrityViolationException} on the same line is both.
+     *
+     * <p>So a stack-trace shape OUTRANKS the free-text token — option (a) on the card. Option
+     * (b), searching GitLab for both terms and keeping whichever returns a hit, was rejected:
+     * it adds a network round trip per candidate to a path already budgeted at 120s, and it
+     * can still tie. {@code ERROR_TOKEN} itself is left alone; narrowing it to exclude data
+     * values needs domain knowledge this engine does not have (out of scope on the card).
+     */
+    private static String searchTermFor(String message) {
+        String token = firstMatch(ERROR_TOKEN, message);
+        boolean carriesAThrownClass = EXCEPTION_FQN.matcher(message == null ? "" : message).find();
+        if (!carriesAThrownClass && token != null) return token;
+        // Fall back to the token when there is no class name to be had — including the
+        // no-FQN case, where a line can still NAME an exception without qualifying it.
+        String exceptionClass = firstMatch(EXCEPTION_CLASS, message);
+        return exceptionClass != null ? exceptionClass : token;
     }
 
     private static String firstMatch(Pattern p, String text) {
