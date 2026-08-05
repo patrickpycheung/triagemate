@@ -269,6 +269,51 @@ class AdkLiveRoundTripTest {
      * the {@code TraceSink}-carrying overload so this can be verified against a live round
      * trip rather than just assumed.
      */
+    /**
+     * J13/ECI-6 — a report that PARSES but violates the J4 contract is repaired, not degraded.
+     *
+     * <p>This is the behaviour change. Before ECI-6, {@code validate} ran one line after
+     * {@code runAgentAndParse} returned: syntax errors got a second chance, semantic ones did
+     * not. So an empty candidate list — after a full ~37s investigation, on stage — threw
+     * straight through to the FND-7 fallback and the run was announced as degraded, despite
+     * the fix costing exactly one more LLM call from a budget already sized for it.
+     *
+     * <p>The asymmetry was accidental rather than designed: FND-42 wired a retry for parsing,
+     * and validation simply lived somewhere else. The validator's own javadoc had been
+     * describing this repair loop ("a model retrying benefits from seeing the whole list at
+     * once") since before anything called it that way.
+     */
+    @Test
+    void aContractViolationIsRepairedRatherThanDegradingTheRun() throws Exception {
+        try (FakeOpenAiServer fake = FakeOpenAiServer.startWithOneContractViolatingFinalResponse()) {
+            System.setProperty("LLM_BASE_URL", "http://127.0.0.1:" + fake.port() + "/v1");
+            System.setProperty("LLM_API_KEY", "test-key");
+            System.setProperty("LLM_MODEL", "fake");
+
+            AdkDiagnosisEngine engine = new AdkDiagnosisEngine(
+                    new MockServiceNowGateway(), new MockConfluenceGateway(),
+                    new MockSumoGateway(), new MockGitLabGateway(),
+                    props(List.of("prod/payment", "prod/order-api"), 20, 30, 8,
+                            List.of("order-payments/payment-service")));
+
+            TraceCollector collector = new TraceCollector();
+            DiagnosisResult result = engine.diagnose("INC0010005", collector.forAttempt(0));
+
+            // Reaching this line IS the assertion. Before ECI-6 this call threw
+            // DiagnosisReportInvalidException straight out to DiagnosisOrchestrator's FND-7
+            // fallback, which is what "degrade" means here — the engine itself does not label
+            // the run (it returns the 2-arg DiagnosisResult and the ORCHESTRATOR decides
+            // ADK vs DETERMINISTIC), so a returning call is precisely the absence of a degrade.
+            assertThat(result.report().candidateSystems())
+                    .as("the repaired report satisfies the rule the first response broke")
+                    .isNotEmpty();
+            assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
+            assertThat(result.trace())
+                    .as("and it got there by repairing, not by the violation going unnoticed")
+                    .anyMatch(s -> s.contains("one repair retry"));
+        }
+    }
+
     @Test
     void malformedFinalResponseGetsOneRepairRetryThenSucceeds() throws Exception {
         try (FakeOpenAiServer fake = FakeOpenAiServer.startWithOneMalformedFinalResponse()) {
@@ -286,7 +331,11 @@ class AdkLiveRoundTripTest {
             DiagnosisResult result = engine.diagnose("INC0010005", collector.forAttempt(0));
 
             assertThat(result.report().incidentNumber()).isEqualTo("INC0010005");
-            assertThat(result.trace()).anyMatch(s -> s.contains("one repair retry (FND-42)"));
+            // Asserts the repair retry HAPPENED, not how the line is worded. The exact
+            // phrasing changed with J13/ECI-6 (the same retry now covers contract violations,
+            // not just unparseable JSON, so "did not parse as JSON" became wrong) and FND-8's
+            // own resolution records that trace wording was never a contract.
+            assertThat(result.trace()).anyMatch(s -> s.contains("one repair retry"));
 
             // TASK-007: two model-think rows for the two LLM calls after the tool call —
             // the first malformed "final" turn and the repair retry — neither of which

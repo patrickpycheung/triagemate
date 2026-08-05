@@ -42,7 +42,26 @@ final class FakeOpenAiServer implements AutoCloseable {
         return start(1);
     }
 
+    /**
+     * J13/ECI-6 fixture: one final response that PARSES but violates the J4 contract, then a
+     * valid one.
+     *
+     * <p>Distinct from {@link #startWithOneMalformedFinalResponse()} on purpose. That one is
+     * broken syntax, which always got a repair turn. This one is well-formed JSON carrying an
+     * empty candidate list — the failure that used to sail past the parser, fail validation
+     * one line later outside the retry, and degrade the whole run to the deterministic engine
+     * after the agent had already finished. It is the case ECI-6 changes.
+     */
+    static FakeOpenAiServer startWithOneContractViolatingFinalResponse() throws IOException {
+        return start(0, 1);
+    }
+
     private static FakeOpenAiServer start(int malformedFinalResponses) throws IOException {
+        return start(malformedFinalResponses, 0);
+    }
+
+    private static FakeOpenAiServer start(int malformedFinalResponses, int invalidFinalResponses)
+            throws IOException {
         HttpServer s = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicInteger finalTurnsSeen = new AtomicInteger(0);
         s.createContext("/v1/chat/completions", exchange -> {
@@ -53,8 +72,11 @@ final class FakeOpenAiServer implements AutoCloseable {
             String json;
             if (!toolResultsPresent) {
                 json = toolCallResponse();
-            } else if (finalTurnsSeen.getAndIncrement() < malformedFinalResponses) {
+            } else if (finalTurnsSeen.get() < malformedFinalResponses) {
+                finalTurnsSeen.getAndIncrement();
                 json = malformedFinalResponse();
+            } else if (finalTurnsSeen.getAndIncrement() < malformedFinalResponses + invalidFinalResponses) {
+                json = contractViolatingFinalResponse();
             } else {
                 json = finalResponse();
             }
@@ -99,6 +121,29 @@ final class FakeOpenAiServer implements AutoCloseable {
         Map<String, Object> message = new HashMap<>();
         message.put("role", "assistant");
         message.put("content", "here is my diagnosis: {not actually valid json,,,");
+        return completion(message, "stop");
+    }
+
+    /**
+     * J13/ECI-6 fixture: schema-shaped and parseable, but {@code candidateSystems} is empty —
+     * which J4 forbids ("ranked shortlist required, never zero candidates"). Jackson accepts
+     * it happily; only the validator objects.
+     */
+    private static String contractViolatingFinalResponse() {
+        Map<String, Object> message = new HashMap<>();
+        message.put("role", "assistant");
+        try {
+            // Edited through Jackson rather than by regex: candidateSystems contains nested
+            // evidenceRefs arrays, so a "up to the next ]" pattern truncates mid-object and
+            // yields UNPARSEABLE json — which would silently test the FND-42 path instead of
+            // this one, passing for the wrong reason.
+            com.fasterxml.jackson.databind.node.ObjectNode node =
+                    (com.fasterxml.jackson.databind.node.ObjectNode) M.readTree(J4_JSON);
+            node.putArray("candidateSystems");
+            message.put("content", M.writeValueAsString(node));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         return completion(message, "stop");
     }
 

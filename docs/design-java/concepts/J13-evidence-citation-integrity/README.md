@@ -1,10 +1,6 @@
 # J13 — Evidence & Citation Integrity (the citation contract made enforceable)
 
-**State**: 🟡 Partly built (2026-08-05) — ECI-1 (unique ids), ECI-2 (a candidate cites its
-own evidence, or is omitted and disclosed), ECI-3 (0.86 requires system agreement) and ECI-4
-(capped fan-out) are implemented and tested on the DETERMINISTIC path, with the validator
-enforcing ECI-1/ECI-2 for both engines. **Not yet done**: ECI-5 (typed identifier fields) and
-ECI-6's ADK repair-turn wiring. `mvn test` 180 / `mvn -Padk test` 236 green · **Complexity**: Moderate · **Priority**: HIGH ·
+**State**: 🟡 Partly built — **ECI-6 landed 2026-08-06** (validation moved inside `runAgentAndParse`, so a contract violation now costs one repair turn instead of an FND-7 degrade; the loop this validator's javadoc always described is finally wired). ECI-1…ECI-4 were already built and tested. **Remaining: ECI-5 only** (typed identifier fields). `mvn test` 248 / `mvn -Padk test` 307 green · **Complexity**: Moderate · **Priority**: HIGH ·
 **Depends on**: J4 (report contract), J2 (ADK engine), J3 (connector tools) ·
 **Amends**: J4 (adds two enforceable rules to the validator and an id-uniqueness clause to
 the contract), J8 (its bounds inventory claims a per-call result cap on `TriageMateTools`

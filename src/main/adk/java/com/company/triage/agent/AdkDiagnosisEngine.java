@@ -168,7 +168,9 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
           "evidence":[{"id","source","summary","link"}],
           "suggestedContacts":[{"name","handle","source","reason","link","signal"}],
           "contradictingEvidence":[],"missingInformation":[],
-          "recommendedNextAction","confidenceOverall":"LOW|MEDIUM|HIGH","advisory":true
+          "recommendedNextAction","confidenceOverall":"LOW|MEDIUM|HIGH","advisory":true,
+          "likelyCause":null,
+          "likelyResolution":null
         }
 
         NOTE the two DIFFERENT kinds of "confidence" above — getting this wrong fails the
@@ -178,6 +180,38 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
             "LOW", "MEDIUM" or "HIGH"
 
         Every candidate/assignment must reference evidence ids you actually gathered.
+
+        WHY IT BROKE, AND WHAT WAS DONE LAST TIME (likelyCause / likelyResolution) — J28.
+        You have NO way to determine the cause of THIS incident. You may only CITE what a
+        human concluded about a PAST one. Leave BOTH fields null unless find_similar_incidents
+        returned an incident with a non-empty resolutionNotes. Null is the correct, expected
+        answer and costs you nothing; inventing one fails the report.
+
+        When you do have such an incident:
+          "likelyCause": {
+            "quotedFinding": "<that incident's resolutionNotes, COPIED EXACTLY — whole,
+                               unedited, not summarised, not shortened>",
+            "citedArtifacts": ["INC..."],          // the incident number(s) you quoted
+            "basis": "PRIOR_RESOLUTION",           // the ONLY value you may use
+            "evidenceRefs": ["e-sim-INC..."],      // MUST be servicenow-incident evidence
+            "supportingCount": <how many similar incidents had resolution notes>,
+            "consideredCount": <how many similar incidents you looked at>
+          },
+          "likelyResolution": {
+            "mitigation":   {"verb","resolutionCode","citedArtifact","evidenceRefs":[]},
+            "permanentFix": {"verb","resolutionCode","citedArtifact","evidenceRefs":[]}
+          }
+
+        Rules that WILL fail the report if broken:
+          - quotedFinding must appear VERBATIM in the evidence you cite. Do not paraphrase,
+            trim, or tidy it. It is someone else's sentence and it stays their words.
+          - basis PRIOR_RESOLUTION must cite servicenow-incident evidence, not a log line.
+          - resolutionCode is the past incident's close code copied exactly
+            (e.g. "Resolved - Code Fix"). Never write your own prose there.
+          - verb is one of CHECK, COMPARE, REPRODUCE_NON_PROD, CONTACT, CONSULT_RUNBOOK,
+            GATHER. There is no other value. Never suggest restarting, rolling back, clearing
+            a cache or re-running a job — you advise looking, never changing.
+          - confidenceOverall may not be "HIGH" when likelyCause is present.
         """;
     }
 
@@ -437,11 +471,13 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 })
                 .build();
 
+        // J13/ECI-6: validation now happens INSIDE runAgentAndParse, where a failure can be
+        // repaired by the model instead of degrading the run. It used to happen here, one line
+        // too late to be fixable — the model had already been let go, so a contract violation
+        // meant an FND-7 degrade after the full agent run rather than a retry costing one LLM
+        // call. Schema-shaped JSON can still violate the J4 contract's semantic rules (FND-17),
+        // which is exactly why the check exists; it simply belongs where it can be acted on.
         DiagnosisReport report = stampGeneratedAt(runAgentAndParse(agent, incidentNumber, trace));
-        // Schema-shaped JSON can still violate the J4 contract's semantic rules (FND-17):
-        // an empty candidate list, or an evidenceRef pointing at no Evidence in this
-        // report. Deserialization alone would let the UI render that without complaint.
-        com.company.triage.model.DiagnosisReportValidator.validate(report);
         // FND-78: report what RAN and what was REFUSED separately. This used to print
         // bounds.used() — allowlisted attempts, uncapped — so an over-budget run read
         // "12 tool call(s) observed" against a stated budget of 10 and looked like the J8
@@ -697,31 +733,43 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 parsed.evidence(), parsed.suggestedContacts(), parsed.contradictingEvidence(),
                 parsed.missingInformation(), parsed.recommendedNextAction(),
                 parsed.confidenceOverall(), parsed.advisory(),
-                // J28/PGC-7 — the agent path emits NO cause or resolution yet, so these are
-                // dropped here rather than carried through even if a model volunteers them.
+                // J28/PGC-7 — GATE OPENED 2026-08-06, in the same change that landed ECI-6.
                 //
-                // Not a validation asymmetry: CR-6/7/8 are identical and hard on both engines.
-                // What is gated is EMISSION, and because those rules fire only on positive
-                // claims, gating emission means they can never trigger on this path — so J28
-                // adds zero new ways to degrade mid-run.
-                //
-                // The reason is J13/ECI-6: validation still runs at :440, OUTSIDE
-                // runAgentAndParse's retry, so today any new hard rule turns a violation into
-                // an immediate throw and an FND-7 degrade to the deterministic engine — after
-                // the full ~37s agent run, on stage. When ECI-6 moves validation inside the
-                // retry, delete these two nulls and pass them through.
-                //
-                // Engine-asymmetric VALIDATION was explicitly rejected by J13 (it is FND-39 by
-                // name); this is deliberately not that.
-                null, null);
+                // These were dropped as nulls while validation ran outside the repair retry:
+                // any CR-6/7/8 violation would have been an immediate FND-7 degrade after the
+                // full agent run. Now that runAgentAndParse validates inside the retry, a
+                // model that cites the wrong KIND of evidence or invents a quotation gets one
+                // chance to correct it — which is the behaviour the rules were designed
+                // against. So the components pass through.
+                parsed.likelyCause(), parsed.likelyResolution());
     }
 
     /**
-     * Runs the agent loop and returns a parsed J4 report — with one repair retry
-     * (FND-42) on the SAME session if the first final response doesn't parse, so the
-     * retry re-prompts the model with the parse error rather than re-investigating
-     * from scratch. Still fails (same as before FND-42) if the repair attempt also
-     * doesn't parse; {@code DiagnosisOrchestrator}'s FND-7 fallback degrades from there.
+     * Runs the agent loop and returns a parsed <b>and validated</b> J4 report — with one
+     * repair retry (FND-42) on the SAME session if the first final response fails either
+     * check, so the retry re-prompts the model with what was wrong rather than
+     * re-investigating from scratch. Still fails if the repair also fails;
+     * {@code DiagnosisOrchestrator}'s FND-7 fallback degrades from there.
+     *
+     * <p><b>J13/ECI-6.</b> Validation used to run <em>after</em> this method returned, so the
+     * two failure modes were treated completely differently: a malformed <em>syntax</em> got a
+     * second chance, while a malformed <em>contract</em> — an empty candidate list, a dangling
+     * evidenceRef — was an immediate throw and a degrade to the deterministic engine, on stage,
+     * after the full ~37s agent run. The asymmetry was accidental: FND-42 wired a retry for
+     * parsing and validation simply lived somewhere else.
+     *
+     * <p>Both now share the <b>one</b> retry the {@code maxToolCalls + 5} budget was already
+     * sized for. No new budget, no second retry, and if the repair fails the outcome is
+     * exactly today's. This is also the loop {@code DiagnosisReportValidator} was written for:
+     * its javadoc explains it reports <em>every</em> violation rather than the first
+     * specifically so "a model retrying on a single-line error message benefits from seeing
+     * the whole list at once". That loop had never been wired. This wires it.
+     *
+     * <p>Note this is symmetric in the RULES, which is what J13 requires — both engines run
+     * the same validator with the same hard rules. What differs is only what the ADK path does
+     * when it fails: it gets one chance to fix its own output, which a hand-assembled
+     * deterministic report has no use for. Engine-asymmetric <em>validation</em> is FND-39 and
+     * remains rejected.
      *
      * <p>Isolated so JS-1b touches exactly one method when adjusting the runner API.
      */
@@ -739,23 +787,34 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 "Diagnose ServiceNow incident " + incidentNumber
                         + ". Investigate with the tools, then return ONLY the JSON report.");
         try {
-            return JSON.readValue(unfence(finalJson), DiagnosisReport.class);
+            return parseAndValidate(finalJson);
         } catch (Exception firstError) {
-            log.warn("agent returned unparseable JSON for {} — one repair retry (FND-42)",
+            log.warn("agent output failed the J4 contract for {} — one repair retry (ECI-6/FND-42)",
                     incidentNumber, firstError);
-            trace.add("adk: final response did not parse as JSON — one repair retry (FND-42)");
+            trace.add("adk: final response did not satisfy the J4 contract — one repair retry (ECI-6)");
             String repaired = send(runner, session, runConfig,
-                    "Your last response did not parse as the required JSON contract ("
+                    "Your last response did not satisfy the required JSON contract ("
                             + firstError.getMessage() + "). Return ONLY the corrected JSON object — "
                             + "no prose, no markdown code fences.");
             try {
-                return JSON.readValue(unfence(repaired), DiagnosisReport.class);
+                return parseAndValidate(repaired);
             } catch (Exception secondError) {
-                log.warn("repair retry also failed to parse for {} — degrading", incidentNumber, secondError);
+                log.warn("repair retry also failed for {} — degrading", incidentNumber, secondError);
                 throw new IllegalStateException(
                         "agent JSON did not match the J4 contract after one repair retry", secondError);
             }
         }
+    }
+
+    /**
+     * Parse, then check the semantic contract. Both failures are repairable in the same way,
+     * so they are raised from the same place — and the validator's message names every
+     * violation, which is what makes the repair prompt worth sending.
+     */
+    private static DiagnosisReport parseAndValidate(String raw) throws Exception {
+        DiagnosisReport parsed = JSON.readValue(unfence(raw), DiagnosisReport.class);
+        com.company.triage.model.DiagnosisReportValidator.validate(parsed);
+        return parsed;
     }
 
     /**
