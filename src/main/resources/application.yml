@@ -189,11 +189,34 @@ triage:
     index: ""      # empty = no `and _index=` clause
     # The {environment} allowlist — the one part of the composed category the model
     # genuinely chooses, so it stays bounded to real environment codes.
+    #
+    # NARROWED TO prod ONLY, 2026-08-05 (operator instruction), on a measurement rather than
+    # a preference. delivery-hazards over a SEVEN-DAY window, per environment:
+    #
+    #     env      any rows   ERROR rows
+    #     pdev            0            0
+    #     ptest           0            0
+    #     stest           0            0
+    #     vtest           0            0
+    #     prod           20           14
+    #
+    # Only prod carries data at all. Leaving the others allowed meant a ticket (or the ADK
+    # model) naming one would target a scope that is guaranteed empty and get back a
+    # confident "no logs found" — a false negative indistinguishable from a real one, which
+    # is the FND-85 failure shape all over again.
+    #
+    # Both engines already do the right thing with a narrowed list, which is why this needs
+    # no code change:
+    #   - deterministic: IncidentSignals.resolveEnvironment only honours a ticket's value if
+    #     it is IN this list, else falls back to prod and records the source as
+    #     TICKET_VALUE_NOT_CONFIGURED — so the report says the ticket and the config disagreed
+    #     rather than silently substituting (J24/SFF-4).
+    #   - ADK: TriageMateTools.searchLogs rejects anything not in this list, naming the valid
+    #     values so the model self-corrects within budget (FND-60).
+    #
+    # Re-add an environment here the moment it starts carrying logs — the mechanism is intact,
+    # this is a data-availability call, not a design one.
     allowed-environments:
-      - pdev
-      - ptest
-      - stest
-      - vtest
       - prod
     max-results: 20
     # 1 day. The deterministic engine now searches the LAST DAY OF DATA rather than a

@@ -141,6 +141,42 @@ class RealSumoGatewayLiveTest {
                 assertThat(l.logger()).isEqualTo(req.sourceCategory()));
     }
 
+    /**
+     * FND-85, against the real instance: an ERROR-scoped search must come back with rows whose
+     * {@code level()} is actually {@code "ERROR"}.
+     *
+     * <p>{@link RealSumoGatewayLevelTest} pins the parse against a captured row; this pins the
+     * thing that row was captured FROM, because the bug was a field-name mismatch with the
+     * live API and only a live call can catch that drifting again. Measured 2026-08-05 on
+     * {@code delivery-hazards/prod}: 14 of 20 rows at level ERROR, engine deriving
+     * {@code errorToken=GNAF_FRONTAGE}.
+     *
+     * <p>Asserts "at least one", not a count: how many errors an application logs in 24h is
+     * not this test's business, and pinning it would make a real service's quiet day look like
+     * a regression.
+     */
+    @Test
+    void errorRowsComeBackWithTheirLevelParsed() {
+        RealSumoGateway gateway = liveGateway();
+
+        var sumo = TriagePropertiesFixture.sumo();
+        OffsetDateTime to = OffsetDateTime.now();
+        List<LogEvidence> logs = gateway.search(new LogSearchRequest(
+                sumo.sourceCategoryFor(probeProject(), probeEnvironment()),
+                sumo.index(), "ERROR", to.minusHours(24), to, sumo.maxResults()));
+
+        Assumptions.assumeFalse(logs.isEmpty(),
+                "no rows in the last 24h for " + probeProject() + "/" + probeEnvironment()
+                        + " — nothing to assert a level on");
+
+        assertThat(logs)
+                .as("every row came back with an empty level ⇒ the `_loglevel` field name "
+                        + "regressed; the engine's errorToken would be permanently null and the "
+                        + "GitLab code search would never run (FND-85). Levels seen: %s",
+                        logs.stream().map(LogEvidence::level).distinct().toList())
+                .anySatisfy(l -> assertThat(l.level()).isEqualTo("ERROR"));
+    }
+
     @Test
     void aNonsenseScopeReturnsNothingRatherThanFailing() {
         RealSumoGateway gateway = liveGateway();

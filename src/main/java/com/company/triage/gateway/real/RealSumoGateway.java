@@ -89,11 +89,12 @@ public class RealSumoGateway implements SumoGateway {
             JsonNode arr = msgs == null ? null : msgs.get("messages");
             if (arr != null) arr.forEach(m -> {
                 JsonNode f = m.path("map");
+                String raw = f.path("_raw").asText("");
                 out.add(new LogEvidence(
                         f.path("_messagetime").asText(),
-                        f.path("loglevel").asText(""),
+                        level(f, raw),
                         f.path("_sourcecategory").asText(""),
-                        f.path("_raw").asText("")));
+                        raw));
             });
             return out;
         } catch (InterruptedException e) {
@@ -104,6 +105,42 @@ public class RealSumoGateway implements SumoGateway {
             catch (Exception ignore) { /* best-effort cleanup */ }
         }
     }
+
+    /**
+     * The log level of one row — {@code "ERROR"}, {@code "WARN"}, … or {@code ""}.
+     *
+     * <p><b>FND-85.</b> This read {@code map.loglevel}. The field Sumo actually returns is
+     * {@code map._loglevel}, <b>with a leading underscore</b> (verified against the live AU
+     * instance 2026-08-05: a real row carries {@code _loglevel = ERROR}). The misspelled key
+     * silently yielded {@code ""} on every row ever returned, and nothing downstream could
+     * tell that apart from "this log line genuinely has no level".
+     *
+     * <p>That single character disabled a whole limb of the deterministic engine.
+     * {@code DeterministicDiagnosisEngine:262} selects the error line with
+     * {@code "ERROR".equals(l.level())}, which could never be true, so {@code errorLine} was
+     * always null → {@code errorToken} always null → the {@code if (errorToken != null)} guard
+     * at {@code :298} never opened → <b>the GitLab code search never ran against real data</b>,
+     * and no log↔code citation was ever produced. The trace reported this as the innocuous
+     * {@code errorToken=null} while the Sumo search itself was working perfectly and returning
+     * rows, which is why it read as "no errors today" rather than as a defect.
+     *
+     * <p>Falls back to parsing the level out of {@code _raw} when the field is absent: the
+     * field comes from a Sumo field-extraction rule, so a source without that rule configured
+     * would otherwise reopen exactly this hole. The raw line is Spring Boot's default layout,
+     * {@code 2026-08-05 14:26:46.173 ERROR 1 --- [thread] logger : message} — the level is the
+     * first standalone level word in it.
+     */
+    static String level(JsonNode fields, String raw) {
+        String declared = fields.path("_loglevel").asText("");
+        if (!declared.isBlank()) return declared.trim().toUpperCase(java.util.Locale.ROOT);
+        if (raw == null || raw.isBlank()) return "";
+        java.util.regex.Matcher m = RAW_LEVEL.matcher(raw);
+        return m.find() ? m.group(1) : "";
+    }
+
+    /** Standalone level word, as emitted by Spring Boot / Logback default layouts. */
+    private static final java.util.regex.Pattern RAW_LEVEL =
+            java.util.regex.Pattern.compile("\\b(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\b");
 
     /**
      * The timestamp format Sumo's Search Job API accepts: UTC, second precision, no offset
