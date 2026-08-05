@@ -33,6 +33,8 @@ at java.base/java.lang.VirtualThread.run(VirtualThread.java:329) ~[na:na]
 
 ### Fix 
 remove "/wiki" from the secrets.properties  
+
+ie; the confluence base url should be like as shown below
 ```
 triage.integrations.confluence.base-url=https://auspost.atlassian.net
 ```
@@ -47,12 +49,23 @@ This means that the query will not return any results for "Delivery Hazard", and
 3. sumo query is constructed incorrectly, and does not return any results for "Delivery Hazard".
 
 ### Details
-se the query it is wrong 
+sumologic query is constructed incorrectly 
 ```
 sumo.search(_sourceCategory=IDT/ITServices/Tomcat/hazards-being-recorded-on/prod/AppEvt_hazards-being-recorded-on and _index=Global_Standard_Infrequent hazards being recorded)
 ```
 
-it is supposed to be created something simlar to this 
+it is supposed to be created something similar to this 
 ```
 sumo.search(_sourceCategory=IDT/ITServices/Tomcat/delivery-hazards/ptest/AppEvt_delivery-hazards and _index=Global_Standard_Infrequent and "hazards being recorded")
+```
+
+### root cause
+the service now query identified the app as "Hazards being recorded on" which is wrong it has to be set from the configuration item which is "Delivery Hazard" and the query should be constructed based on that.
+
+```
+
+servicenow.getIncident(INC0010010) → CI=, env=null
+servicenow
+
+understand: id=null, keywords=[hazards, being, recorded, handheld, appearing, delivery, application, attached], app=Hazards being recorded on
 ```
