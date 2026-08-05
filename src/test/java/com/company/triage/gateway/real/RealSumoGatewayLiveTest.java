@@ -23,11 +23,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * repo root carries live {@code triage.integrations.sumo.*} values, so a normal
  * {@code mvn test} on a machine with no credentials stays green and offline.
  *
- * <p>This exists because every other Sumo test is a stub, and the failure this guards is
- * one only the real API can show: a query missing the {@code _index} clause is perfectly
- * well-formed and returns <b>zero rows</b> against the corporate instance. That reads as
- * "no logs for this incident", not as a bug — exactly the kind of wrong that survives a
- * green test suite. Verified 2026-08-03 against the AU instance.
+ * <p>This exists because every other Sumo test is a stub, and the failures it guards are
+ * ones only the real API can show: a perfectly well-formed query that returns <b>zero rows</b>
+ * reads as "no logs for this incident", not as a bug — exactly the kind of wrong that survives
+ * a green test suite.
+ *
+ * <p><b>Correction (2026-08-05).</b> This javadoc previously asserted that the zero-row cause
+ * was a missing {@code _index} clause. That is not true on this estate: measured against the
+ * AU instance, the scoped query returns 105 ERROR rows over 24h with <b>no {@code _index}
+ * clause at all</b>, and the clause has since been disabled in {@code application.yml} by
+ * operator instruction. The real discriminator is the {@code _sourceCategory} — an
+ * environment segment naming an environment that exists but is quiet ({@code ptest} carries
+ * traffic yet no ERROR lines) returns zero just as convincingly.
  *
  * <p>Run explicitly: {@code mvn test -Dtest=RealSumoGatewayLiveTest}. The project and
  * environment it probes are injectable — see the probe keys below.
@@ -54,7 +61,10 @@ class RealSumoGatewayLiveTest {
     private static final String PROBE_PROJECT_KEY = "sumo.probe.project";
     private static final String PROBE_ENVIRONMENT_KEY = "sumo.probe.environment";
     private static final String DEFAULT_PROBE_PROJECT = "delivery-hazards";
-    private static final String DEFAULT_PROBE_ENVIRONMENT = "ptest";
+    // prod, not ptest: measured 2026-08-05, ptest carries traffic but no ERROR lines while
+    // prod carries 105 in 24h. The demo searches for errors, so prod is the environment that
+    // actually exercises the path. Still injectable — see the probe keys above.
+    private static final String DEFAULT_PROBE_ENVIRONMENT = "prod";
 
     private static Properties secrets;
 

@@ -57,6 +57,22 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      */
     private static final int MAX_CODE_EVIDENCE = 3;
 
+    /**
+     * The one and only Sumo search term (operator instruction, 2026-08-05).
+     *
+     * <p>The scope already targets the affected application — {@code _sourceCategory} is
+     * composed from its slug and environment — so the term's job is only to select the
+     * interesting lines within it. {@code ERROR} does exactly that and nothing more.
+     *
+     * <p>What this replaced: a term derived from the ticket (a transaction identifier, else
+     * the top extracted keywords, else the literal {@code "error"}). Those derived words were
+     * narrowing real searches to zero rows — the same class of failure J25 found in the
+     * Confluence query, where our own cleverness about which words to send was the problem
+     * rather than the solution. Scope by config, filter by severity, and let the human read
+     * what came back.
+     */
+    private static final String SUMO_QUERY_TERM = "ERROR";
+
     private final ServiceNowGateway serviceNow;
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
@@ -218,10 +234,30 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // searched and found quiet — a false negative presented as evidence. Say plainly
         // that the search did not happen and why, exactly as the gitlab.searchCode branch
         // below already does.
-        LogSearchRequest sumoRequest = (inc.openedAt() == null || slugIsAGuess) ? null
-                : new LogSearchRequest(scope, sumoProps.index(), logQuery,
-                        inc.openedAt().minusMinutes(10), inc.openedAt().plusMinutes(10),
-                        sumoProps.maxResults());
+        // Operator instruction, 2026-08-05 — three changes to what we send Sumo:
+        //
+        //  1. NO derived search terms. `signals.logQuery()` built a term from the ticket
+        //     (identifier, else top keywords, else "error"), and those custom words were
+        //     narrowing real searches to nothing. The term is now the single literal
+        //     SUMO_QUERY_TERM below: scope the search to the application, then look for its
+        //     errors. `logQuery()` is still used by nothing else on this path — see its
+        //     javadoc for why it is retained for the ADK path's benefit.
+        //  2. NO `_index` clause — disabled in application.yml (the mechanism survives).
+        //  3. The window is the LAST DAY OF DATA, not ±10m around opened_at. A ticket is
+        //     routinely raised hours or days after the event, and on a real instance the
+        //     data near opened_at may no longer be retained; searching recent data is what
+        //     actually returns log lines.
+        //
+        // Change (3) has a consequence worth stating: the window no longer depends on
+        // opened_at AT ALL, so J14/FRI-2's "skip the search when there is no anchor" guard is
+        // now unreachable for this reason and has been removed. The NPE it existed to prevent
+        // is likewise gone — nothing dereferences openedAt here any more. J24/SFF-3's skip
+        // (the derived scope matches no configured project) is a different rule and stays.
+        OffsetDateTime searchTo = OffsetDateTime.now();
+        OffsetDateTime searchFrom = searchTo.minusDays(1);
+        LogSearchRequest sumoRequest = slugIsAGuess ? null
+                : new LogSearchRequest(scope, sumoProps.index(), SUMO_QUERY_TERM,
+                        searchFrom, searchTo, sumoProps.maxResults());
         List<LogEvidence> logs = sumoRequest == null ? List.of() : sumo.search(sumoRequest);
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
@@ -238,11 +274,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // query most worth being able to see.
         String traceSumoSearch;
         if (sumoRequest != null) {
-            traceSumoSearch = "sumo.search(%s) [window=±10m, max=%d] → %d line(s); errorToken=%s"
+            traceSumoSearch = "sumo.search(%s) [window=last 24h, max=%d] → %d line(s); errorToken=%s"
                     .formatted(sumoRequest.toSumoQuery(), sumoProps.maxResults(), logs.size(), errorToken);
-        } else if (inc.openedAt() == null) {
-            traceSumoSearch = "sumo.search → skipped (the ticket's opened_at is missing or "
-                    + "unparseable, so there is no time window to search around)";
         } else {
             // J24/SFF-3: say WHAT was rejected and why, so the trace shows a decision rather
             // than an absence — and name the guessed slug, because that is the thing an
@@ -451,16 +484,13 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // J14: distinguish "we searched and found nothing" from "we could not search at all".
         // Claiming the former when the latter happened is the FND-8 class — narrating an
         // investigation step that did not occur.
-        if (sumoRequest == null && inc.openedAt() == null) {
-            missing.add("Logs were not searched: the ticket's opened_at is missing or unparseable, "
-                    + "so there is no time window to bound the query");
-        } else if (sumoRequest == null) {
+        if (sumoRequest == null) {
             // J24/SFF-3
             missing.add("Logs were not searched: the affected system was inferred from the subject "
                     + "line rather than read from the CMDB, and the resulting scope matches no "
                     + "configured project — searching it would have reported a false 'no logs found'");
         } else if (logs.isEmpty()) {
-            missing.add("No log lines matched in the ±10m window around opened_at");
+            missing.add("No ERROR lines for this application in the last 24 hours");
         }
         // J24/SFF-2: the affected system is the pivot every other derivation turns on — the
         // Sumo scope, the candidate systems, the Confluence query. When it was inferred rather
@@ -500,7 +530,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             nextAction = "Trace '%s' to its emitting source; no allowlisted project matched it."
                     .formatted(errorToken);
         } else if (orderId != null) {
-            nextAction = "Widen the log window around %s — no ERROR line matched in ±10m of opened_at."
+            nextAction = ("Widen the log search beyond the last 24 hours, or check the scope — "
+                    + "no ERROR line for this application matched, though the ticket cites %s.")
                     .formatted(orderId);
         } else {
             nextAction = "Reproduce the failure and capture a correlation id; the ticket text carries none.";

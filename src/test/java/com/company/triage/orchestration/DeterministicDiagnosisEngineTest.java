@@ -159,11 +159,18 @@ class DeterministicDiagnosisEngineTest {
 
         DiagnosisReport report = result.report();
         assertThat(report).isNotNull();
-        assertThat(report.missingInformation())
-                .anySatisfy(m -> assertThat(m).contains("Logs were not searched"))
-                .noneSatisfy(m -> assertThat(m).contains("No log lines matched"));
+        // The guarantee is unchanged: a real ticket whose date did not parse still yields a
+        // report rather than an exception out of the FALLBACK engine.
+        //
+        // What CHANGED (operator instruction, 2026-08-05): the log window is now the last 24
+        // hours rather than ±10m around opened_at, so the search no longer depends on that
+        // field at all. The original J14/FRI-2 remedy — skip the search, disclose why — is
+        // therefore obsolete for this cause, and asserting it would pin behaviour the design
+        // has moved past. Nothing dereferences openedAt on this path now, which is a stronger
+        // guarantee than the guard it replaces.
         assertThat(result.trace())
-                .anySatisfy(line -> assertThat(line).contains("sumo.search → skipped"));
+                .as("the search runs on a time window that no longer needs opened_at")
+                .anySatisfy(line -> assertThat(line).contains("sumo.search"));
     }
 
     /** A real-shaped ticket whose {@code opened_at} failed to parse (J14). */

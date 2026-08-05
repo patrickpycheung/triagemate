@@ -147,7 +147,11 @@ triage:
     # project slug; value is a full pattern that still supports {project}/{environment}.
     source-category-overrides: {}
     # Appended as `and _index=<value>`. Blank disables the clause entirely.
-    index: Global_Standard_Infrequent
+    #
+    # DISABLED 2026-08-05 (operator instruction): the _index clause narrowed real searches to
+    # one index and was returning nothing for the demo estate. The mechanism is kept — set a
+    # value here to re-enable it — but the default query is now scope + ERROR only.
+    index: ""      # empty = no `and _index=` clause
     # The {environment} allowlist — the one part of the composed category the model
     # genuinely chooses, so it stays bounded to real environment codes.
     allowed-environments:
@@ -157,7 +161,12 @@ triage:
       - vtest
       - prod
     max-results: 20
-    max-window-minutes: 30
+    # 1 day. The deterministic engine now searches the LAST DAY OF DATA rather than a
+    # ±10m window around opened_at (operator instruction, 2026-08-05): a ticket is often
+    # raised well after the fact, and on a real instance the retained data near opened_at
+    # may be gone — searching recent data is what actually finds log lines. This is also
+    # the ceiling TriageMateTools clamps the ADK path's model-supplied window to.
+    max-window-minutes: 1440
 
   gitlab:
     # J8 allowlist (FND-38: was documented as enforced but search_code accepted any

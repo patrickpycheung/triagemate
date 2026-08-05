@@ -20,9 +20,14 @@ public final class TriagePropertiesFixture {
         return new TriageProperties.Sumo(
                 "IDT/ITServices/Tomcat/{project}/{environment}/AppEvt_{project}",
                 java.util.Map.of(),
-                "Global_Standard_Infrequent",
+                // Mirrors application.yml: the _index clause is DISABLED (operator
+                // instruction, 2026-08-05) and the window ceiling is a day. Verified against
+                // the live AU instance — the scoped query returns 105 ERROR rows for
+                // delivery-hazards/prod over 24h with no _index clause at all, so the clause
+                // is not load-bearing on this estate.
+                "",
                 List.of("pdev", "ptest", "stest", "vtest", "prod"),
-                20, 30);
+                20, 1440);
     }
 
     public static TriageProperties withEngine(TriageProperties.Engine engine) {
