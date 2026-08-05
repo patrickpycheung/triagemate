@@ -155,9 +155,15 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // ---- Step 3: similar incidents + ownership ----------------------------
         List<ResolvedIncident> similar = serviceNow.findSimilarIncidents(inc);
         for (ResolvedIncident r : similar) {
+            // J28: the resolution NOTE is appended so the evidence carries what the cause
+            // section quotes. Without it, CR-8 (quote fidelity) could never pass — a
+            // quotation must be checkable against the thing it cites — and the "Sources
+            // consulted" note would show a close code while the diagnosis quoted prose the
+            // reader could not see the origin of.
             evidence.add(new Evidence("e-sim-" + r.number(), "servicenow-incident",
-                    "%s (%.0f%% similar) resolved by %s: %s".formatted(
-                            r.number(), r.similarity() * 100, r.resolutionGroup(), r.resolutionCode()),
+                    "%s (%.0f%% similar) resolved by %s: %s%s".formatted(
+                            r.number(), r.similarity() * 100, r.resolutionGroup(), r.resolutionCode(),
+                            notBlank(r.resolutionNotes()) ? " — " + r.resolutionNotes().trim() : ""),
                     r.number()));
         }
         String traceFindSimilar = "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
@@ -537,6 +543,11 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             nextAction = "Reproduce the failure and capture a correlation id; the ticket text carries none.";
         }
 
+        // J28 — why it may be happening, and what was done about it last time. Both are
+        // CITATIONS of past incidents, never assertions about this one, and both may be null.
+        LikelyCause likelyCause = buildLikelyCause(similar, gathered);
+        LikelyResolution likelyResolution = buildLikelyResolution(similar, gathered);
+
         DiagnosisReport report = new DiagnosisReport(
                 incidentNumber, OffsetDateTime.now(),
                 reportedSymptom,
@@ -545,7 +556,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 List.copyOf(contradicting),
                 List.copyOf(missing),
                 nextAction,
-                Confidence.MEDIUM, true);
+                Confidence.MEDIUM, true,
+                likelyCause, likelyResolution);
 
         // FND-39: J4's validator was previously wired only into the ADK engine — an
         // asymmetric-trust gap (2 independent architecture reviews, 2026-07-30). This
@@ -718,6 +730,90 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      */
     private static List<String> refsThatExist(java.util.Set<String> gathered, List<String> wanted) {
         return wanted.stream().filter(gathered::contains).distinct().toList();
+    }
+
+    /**
+     * J28/PGC-1 — the causal narrative, <b>quoted whole from the incidents that carry one</b>.
+     *
+     * <p>Returns {@code null} when no similar incident recorded a resolution note. That is the
+     * expected outcome much of the time and is NOT a degraded state: real {@code close_notes}
+     * are frequently "Issue resolved" or blank. Abstaining is the honest answer, and the note
+     * renders it explicitly with the denominator.
+     *
+     * <p>The note is quoted <b>whole and verbatim</b>. {@code close_notes} routinely carries
+     * both the cause and the fix in one sentence — "Discount was applied after tax…; reconcile
+     * check failed. Fixed order of operations in payment_service." — and splitting it would be
+     * inference dressed as extraction. The fix half is expressed separately by
+     * {@link #buildLikelyResolution}, using the controlled {@code close_code} rather than prose.
+     *
+     * <p>Only {@link InferenceBasis#PRIOR_RESOLUTION} is emitted (PGC-5). The other two bases
+     * rest on J25 and J13, neither of which is built; enabling them now would quote irrelevant
+     * pages faithfully, or cite the wrong system precisely.
+     */
+    private static LikelyCause buildLikelyCause(List<ResolvedIncident> similar,
+                                                java.util.Set<String> gathered) {
+        List<ResolvedIncident> withNotes = similar.stream()
+                .filter(r -> notBlank(r.resolutionNotes()))
+                .toList();
+        if (withNotes.isEmpty()) return null;
+
+        ResolvedIncident best = withNotes.get(0);   // already ranked by J26
+        List<String> refs = refsThatExist(gathered, List.of("e-sim-" + best.number()));
+        if (refs.isEmpty()) return null;            // never cite what we did not gather
+
+        return new LikelyCause(
+                best.resolutionNotes().trim(),
+                List.of(best.number()),
+                InferenceBasis.PRIOR_RESOLUTION,
+                refs,
+                withNotes.size(),
+                similar.size());
+    }
+
+    /**
+     * J28/PGC-2 + PGC-1a — how similar incidents were resolved, built <b>entirely from closed
+     * vocabularies</b>: our {@link ResolutionVerb} and ServiceNow's {@code close_code}.
+     *
+     * <p>No gathered free text reaches this component. That is the concept's central safety
+     * property: text from a ticket, a wiki page or a log line is attacker- and
+     * mistake-influenceable, and it may appear in the CAUSE section as an attributed quotation
+     * the reader can trace — but never in the section that tells them what to do.
+     *
+     * <p>Mitigation and permanent fix are split on the close code, because a workaround and a
+     * code fix carry very different risk if the reader applies them with the wrong reflex.
+     */
+    private static LikelyResolution buildLikelyResolution(List<ResolvedIncident> similar,
+                                                          java.util.Set<String> gathered) {
+        ResolutionStep mitigation = null;
+        ResolutionStep permanentFix = null;
+
+        for (ResolvedIncident r : similar) {
+            // Both are required. A close CODE alone tells you the ticket was closed, not what
+            // was DONE — "Closed - No fault found" is a real close code and reporting it under
+            // "how similar incidents were resolved" would be false. Requiring a resolution
+            // NOTE means this section only ever describes incidents where a human recorded an
+            // action, which is what the heading claims.
+            if (!notBlank(r.resolutionCode()) || !notBlank(r.resolutionNotes())) continue;
+            List<String> refs = refsThatExist(gathered, List.of("e-sim-" + r.number()));
+            if (refs.isEmpty()) continue;
+
+            boolean isPermanent = r.resolutionCode().toLowerCase().contains("code fix");
+            ResolutionStep step = new ResolutionStep(
+                    // CONSULT_RUNBOOK for a known error (there is documented guidance to read
+                    // first); CHECK otherwise. Both are observation-only by construction —
+                    // ResolutionVerb has no constant that mutates state.
+                    r.resolutionCode().toLowerCase().contains("known error")
+                            ? ResolutionVerb.CONSULT_RUNBOOK : ResolutionVerb.CHECK,
+                    r.resolutionCode().trim(),
+                    r.number(),
+                    refs);
+
+            if (isPermanent && permanentFix == null) permanentFix = step;
+            else if (!isPermanent && mitigation == null) mitigation = step;
+        }
+
+        if (mitigation == null && permanentFix == null) return null;
+        return new LikelyResolution(mitigation, permanentFix);
     }
 
     /** {@code payment_service} / {@code order-payments/payment-service} → {@code Payment Service}. */

@@ -32,8 +32,23 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private final java.util.concurrent.atomic.AtomicBoolean newIncidentAvailable =
             new java.util.concurrent.atomic.AtomicBoolean(true);
 
-    /** The one incident this ground-truth dataset actually models (J7). */
+    /** The primary incident this ground-truth dataset models (J7) — the strong case. */
     static final String KNOWN_INCIDENT = "INC0010005";
+
+    /**
+     * J28/PGC-8 — the <b>abstention</b> incident: a real-looking ticket whose similar
+     * incidents were closed without anyone recording what was wrong.
+     *
+     * <p>It exists because abstention is the <em>common</em> production path, not an edge
+     * case: real {@code close_notes} are frequently "Issue resolved" or blank. Before this,
+     * the mock modelled only the strong case, so the demo could only ever show a confident
+     * cause — selling a version of the feature nobody would meet against real data. That is
+     * the same mock-fidelity blind spot that hid FND-84/85/86/87.
+     *
+     * <p>It is also the better demo beat: <i>"and here's what it does when it doesn't know —
+     * it says so, and tells you what it looked at."</i>
+     */
+    static final String ABSTENTION_INCIDENT = "INC0010009";
 
     @Override
     public IncidentContext getIncident(String number) {
@@ -44,7 +59,11 @@ public class MockServiceNowGateway implements ServiceNowGateway {
         // FND-8 failure class (asserting something untrue) in its purest form. It also made
         // FND-48's 404 path unreachable in the demo config, since only the REAL gateway threw.
         // The dataset models exactly one incident (J7); say so rather than fabricate.
-        if (!KNOWN_INCIDENT.equalsIgnoreCase(number == null ? "" : number.trim())) {
+        String n = number == null ? "" : number.trim();
+        if (ABSTENTION_INCIDENT.equalsIgnoreCase(n)) {
+            return abstentionIncident(number);
+        }
+        if (!KNOWN_INCIDENT.equalsIgnoreCase(n)) {
             throw new com.company.triage.gateway.IncidentNotFoundException(number);
         }
         return new IncidentContext(
@@ -91,8 +110,46 @@ public class MockServiceNowGateway implements ServiceNowGateway {
         return List.of(new NewIncident("INC0010005", since.plusSeconds(1)));
     }
 
+    /**
+     * J28/PGC-8 — the abstention fixture. A perfectly ordinary ticket; the difference is
+     * entirely in what its precedents recorded (see {@link #findSimilarIncidents}).
+     */
+    private static IncidentContext abstentionIncident(String number) {
+        return new IncidentContext(
+                number,
+                "Reports timing out for some users in the morning",
+                "Two users said the daily reconciliation report spins and then errors. "
+                        + "Both were on the VPN. Not reproducible from the office network.",
+                "d.okafor",
+                "Software",
+                "Performance",
+                OffsetDateTime.parse("2026-08-04T08:15:00+10:00"),
+                "Production",
+                "Service Desk",
+                List.of("d.okafor: happens most mornings, fine by lunchtime"),
+                List.of(),
+                "Reporting Service",
+                List.of("Service Desk (initial)")
+        );
+    }
+
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
+        // J28/PGC-8: this incident's precedents were closed WITHOUT resolution notes — the
+        // ordinary state of a real queue. The ranker still finds them (they match on symptom
+        // and CI), so this is not "no similar incidents": it is "similar incidents exist and
+        // none of them recorded what was wrong", which is exactly the case where the honest
+        // answer is "not established" and the denominator is the useful part.
+        if (ABSTENTION_INCIDENT.equalsIgnoreCase(incident.number() == null ? "" : incident.number().trim())) {
+            return List.of(
+                    new ResolvedIncident("INC0009918",
+                            "Reporting slow for VPN users",
+                            "Reporting Platform", "Closed - No fault found", "", 0.74),
+                    new ResolvedIncident("INC0009655",
+                            "Daily report timed out",
+                            "Reporting Platform", "Closed - Resolved by caller", null, 0.61)
+            );
+        }
         return List.of(
                 new ResolvedIncident("INC0011902",
                         "Checkout 500 error — payment reconcile mismatch on discounted orders",

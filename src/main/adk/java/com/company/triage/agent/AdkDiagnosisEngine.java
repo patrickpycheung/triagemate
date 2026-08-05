@@ -692,7 +692,24 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                 parsed.identifiers(), parsed.candidateSystems(), parsed.suggestedAssignment(),
                 parsed.evidence(), parsed.suggestedContacts(), parsed.contradictingEvidence(),
                 parsed.missingInformation(), parsed.recommendedNextAction(),
-                parsed.confidenceOverall(), parsed.advisory());
+                parsed.confidenceOverall(), parsed.advisory(),
+                // J28/PGC-7 — the agent path emits NO cause or resolution yet, so these are
+                // dropped here rather than carried through even if a model volunteers them.
+                //
+                // Not a validation asymmetry: CR-6/7/8 are identical and hard on both engines.
+                // What is gated is EMISSION, and because those rules fire only on positive
+                // claims, gating emission means they can never trigger on this path — so J28
+                // adds zero new ways to degrade mid-run.
+                //
+                // The reason is J13/ECI-6: validation still runs at :440, OUTSIDE
+                // runAgentAndParse's retry, so today any new hard rule turns a violation into
+                // an immediate throw and an FND-7 degrade to the deterministic engine — after
+                // the full ~37s agent run, on stage. When ECI-6 moves validation inside the
+                // retry, delete these two nulls and pass them through.
+                //
+                // Engine-asymmetric VALIDATION was explicitly rejected by J13 (it is FND-39 by
+                // name); this is deliberately not that.
+                null, null);
     }
 
     /**

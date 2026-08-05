@@ -10,6 +10,10 @@ import java.util.List;
  * <p>Rules: candidates and assignment are ranked shortlists (never one forced
  * answer); every conclusion ties to {@code evidence} via evidenceRefs; conflicting
  * evidence is surfaced, not hidden; {@code advisory} is always true this phase.
+ *
+ * <p>J28 appends {@code likelyCause} and {@code likelyResolution} — the only two fields that
+ * answer <em>why</em> and <em>what was done</em>. Both are nullable, and null is not a
+ * degraded state but the honest and frequent one: see {@link LikelyCause}.
  */
 public record DiagnosisReport(
         String incidentNumber,
@@ -26,7 +30,12 @@ public record DiagnosisReport(
         List<String> missingInformation,
         String recommendedNextAction,
         Confidence confidenceOverall,
-        boolean advisory
+        boolean advisory,
+        // J28 — appended rather than inserted so the arity change breaks every positional
+        // constructor at COMPILE time. AdkDiagnosisEngine#stampGeneratedAt rebuilds this
+        // record positionally; had these been optional, it would have silently dropped them.
+        LikelyCause likelyCause,
+        LikelyResolution likelyResolution
 ) {
     /**
      * Prefix on every work note this app writes. Both notes below start with it, and it is
@@ -96,11 +105,68 @@ public record DiagnosisReport(
         if (recommendedNextAction != null) {
             b.append("Recommended next check: ").append(recommendedNextAction).append("\n");
         }
+        b.append(causeSection());
+        b.append(resolutionSection());
         if (missingInformation != null && !missingInformation.isEmpty()) {
             b.append("Still missing: ").append(String.join(", ", missingInformation)).append("\n");
         }
         b.append("\nAI-assisted and advisory. No reassignment, closure, or priority change has been made — "
                 + "the assigned engineer decides. Sources are in the comment above.");
         return b.toString();
+    }
+
+    /**
+     * J28/PGC-6 — "Why this may be happening", or an explicit statement that it is not
+     * established.
+     *
+     * <p>The abstention branch says <b>"not established"</b> rather than "unknown" on
+     * purpose: it implies work was done, and paired with the denominator it is genuinely
+     * actionable negative information — "we looked at three similar tickets and none of them
+     * recorded what was wrong" tells an engineer something real.
+     */
+    private String causeSection() {
+        if (likelyCause == null) {
+            // Carry the denominator even when abstaining — "we looked at 2 and none of them
+            // recorded what was wrong" is actionable; a bare "not established" is not. The
+            // count is derived from evidence already on the report rather than by threading a
+            // second carrier through, so `null likelyCause` stays the single encoding of
+            // abstention.
+            long considered = evidence == null ? 0 : evidence.stream()
+                    .filter(e -> e != null && e.id() != null && e.id().startsWith("e-sim-"))
+                    .count();
+            return considered == 0
+                    ? "\nWhy this may be happening: not established — no similar resolved incidents were found.\n"
+                    : "\nWhy this may be happening: not established — 0 of %d similar resolved incidents recorded what was wrong.\n"
+                            .formatted(considered);
+        }
+        StringBuilder b = new StringBuilder("\nWhy this may be happening: ");
+        b.append(String.join(", ", likelyCause.citedArtifacts()))
+         .append(likelyCause.citedArtifacts().size() == 1 ? " was closed with this note —\n  \"" : " were closed with this note —\n  \"")
+         .append(likelyCause.quotedFinding()).append("\"\n");
+        b.append("  Based on ").append(likelyCause.supportingCount()).append(" of ")
+         .append(likelyCause.consideredCount()).append(" similar resolved incidents.\n");
+        return b.toString();
+    }
+
+    /**
+     * J28/PGC-6 — "How similar incidents WERE resolved". Past tense and closed-vocabulary
+     * only: every value rendered here is a {@link ResolutionVerb} or a ServiceNow
+     * {@code close_code}, never gathered free text.
+     */
+    private String resolutionSection() {
+        if (likelyResolution == null
+                || (likelyResolution.mitigation() == null && likelyResolution.permanentFix() == null)) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder("\nHow similar incidents were resolved:\n");
+        appendStep(b, "Mitigation", likelyResolution.mitigation());
+        appendStep(b, "Permanent fix", likelyResolution.permanentFix());
+        return b.toString();
+    }
+
+    private static void appendStep(StringBuilder b, String label, ResolutionStep step) {
+        if (step == null) return;
+        b.append("  ").append(label).append(" — ").append(step.citedArtifact())
+         .append(", closed as: ").append(step.resolutionCode()).append("\n");
     }
 }

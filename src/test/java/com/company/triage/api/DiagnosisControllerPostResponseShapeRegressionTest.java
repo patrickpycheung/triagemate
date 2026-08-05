@@ -57,7 +57,7 @@ class DiagnosisControllerPostResponseShapeRegressionTest {
                 List.of(new Evidence("e-log", "sumo", "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471", "prod/payment")),
                 List.of(new Contact("Priya Nair", "priya.nair@example.com", "confluence+gitlab",
                         "edited the runbook and committed reconcile()", "https://confluence.example.com/x", "recent")),
-                List.of(), List.of("user id"), "Check payment_service.reconcile()", Confidence.MEDIUM, true);
+                List.of(), List.of("user id"), "Check payment_service.reconcile()", Confidence.MEDIUM, true, null, null);
     }
 
     private static final String EXPECTED_JSON = """
@@ -96,7 +96,9 @@ class DiagnosisControllerPostResponseShapeRegressionTest {
                 "missingInformation": ["user id"],
                 "recommendedNextAction": "Check payment_service.reconcile()",
                 "confidenceOverall": "MEDIUM",
-                "advisory": true
+                "advisory": true,
+                "likelyCause": null,
+                "likelyResolution": null
               },
               "trace": ["diagnose"],
               "engine": "DETERMINISTIC",
