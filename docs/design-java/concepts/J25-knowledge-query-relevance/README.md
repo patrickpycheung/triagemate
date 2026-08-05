@@ -51,22 +51,47 @@ this by itself. J25 is what remains once that term is right.
 
 ## Design
 
-### KQR-1 — the query is structured, not concatenated
+### KQR-1 — use `siteSearch`, and send the symptom as written
 
-CQL supports field-scoped clauses; the app uses one string. Build the query from **at most
-two parts**, each doing a distinct job:
+> **REVISED BY MEASUREMENT, 2026-08-05.** What follows replaces this section's original
+> design, which called for a structured two-part query of IDF-ranked keywords and explicitly
+> **rejected** sending the raw subject line. Both halves of that reasoning were wrong, and
+> the error is instructive: it assumed the problem was *which words we send*, when the
+> problem was *which operator we send them to*.
 
-- a **system term** — the affected application from J24's CMDB-sourced `app`
-- a **symptom term** — the top-N distinctive keywords (N configurable, default 4), ranked by
-  inverse document frequency against a small stop-list, *not* the raw extraction order
+Run against the real instance (INC0010010, top 8 titles scored for Delivery Hazards
+relevance):
 
-with the system term as a `title ~` / `text ~` conjunct rather than more words in the same
-phrase. Duplicated words between the two parts are dropped.
+| CQL | results | relevant |
+|---|---|---|
+| `text ~ "<the app's own query>"` | 8 | **0** |
+| `text ~ "Delivery Hazards"` | 8 | **0** |
+| `text ~ "Delivery Hazards" AND type = page` | 8 | **0** |
+| `siteSearch ~ "<the SAME app query>"` | 8 | **8** |
+| `siteSearch ~ "Delivery Hazards"` | 8 | **8** |
+| `siteSearch ~ "<the subject line>"` | 8 | **8** |
 
-Rejected: sending the raw subject line. That is what the Confluence *UI* search does well
-(the report notes the UI finds results), but the UI applies its own relevance ranking on top
-of a full-text index; CQL `text ~ "<12 words>"` does not, which is exactly why the two
-diverged.
+Row 4 settles it: the identical noisy string that returned nothing useful under `text`
+returns entirely relevant results under `siteSearch`. `text ~` is a raw content match with
+**no relevance ranking**; `siteSearch ~` is the operator backing Confluence's own UI search.
+That is the whole explanation for the field report's central puzzle — the same words worked
+in the UI and failed in the app.
+
+**The rule**: `siteSearch ~ "<symptom as written>[ + app]" AND type = page`, with the app
+appended only when it came from the CMDB (J24/SFF-2) and is not already in the text.
+
+The subject line beats the keyword bag, measurably. With `siteSearch` doing the retrieval,
+subject-line queries surfaced `INC2616763 - Hazards captured on handhelds not being saved` —
+a **prior incident of the same fault** — plus `UC17.30 Hazards created by handheld for
+facility not setup`, while the keyword bag returned only generic application documentation.
+Keyword extraction discards exactly the connective structure ("not appearing in", "being
+recorded on") that a relevance-ranked search uses to rank one hazard page above another. A
+prior incident for the same symptom is the most useful single thing a triage can surface, and
+only the unabridged form finds it.
+
+Still rejected, and now for a tested reason: field-scoped conjuncts (`title ~ … AND text ~ …`).
+`siteSearch` already ranks across title and body; splitting the query into conjuncts narrows
+the result set without improving its ordering.
 
 ### KQR-2 — a result must clear a relevance floor to become evidence
 
@@ -104,9 +129,9 @@ above changes the same call site. **Coordinate — do not implement twice.**
 
 | Guarantee | Test |
 |---|---|
-| KQR-1 | `IncidentSignalsTest#confluenceQueryIsStructured` — asserts no duplicated terms, ≤ N symptom terms, and the system term present as its own clause; a regression case pinning the exact live query string from the field report as **not** producible |
+| KQR-1 | `RealConfluenceGatewayTest#searchUsesSiteSearchNotRawTextMatch` (offline, pins the operator) · `IncidentSignalsTest#confluenceQueryCombinesTheSymptomAsWrittenWithTheAffectedSystem` and `#anInferredAppIsNotAppendedToTheConfluenceQuery` · **live**: `RealConfluenceGatewayLiveTest#aDeliveryHazardsIncidentRetrievesDeliveryHazardsPages`, plus a control (`#evenTheOldNoisyQueryIsRelevantNowThatTheOperatorIsCorrect`) that fails if the fix ever silently degenerates into a query-text fix |
 | KQR-2 | `DeterministicDiagnosisEngineTest#irrelevantPagesAreNotCited` — the five live titles from the report as the canned result set; asserts zero `e-kb-*` Evidence and the honest trace line |
-| KQR-3 | `RealConfluenceGatewayTest#searchRequestExcludesAttachments` — `MockRestServiceServer`, asserts `type=page` in the CQL (this gateway has **zero** tests today — see [J22](../J22-real-gateway-contract-tests/README.md)) |
+| KQR-3 | `RealConfluenceGatewayTest#searchRequestsPagesOnly` (offline) · **live**: `RealConfluenceGatewayLiveTest#resultsArePagesNotAttachments` |
 | KQR-4 | `RealConfluenceGatewayTest#httpErrorIsNotAnEmptyResult` — a canned 404 (the report's own response body) must not yield `List.of()` silently |
 
 Baseline to hold: 152 default / 201 adk, both green.
