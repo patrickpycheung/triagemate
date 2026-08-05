@@ -59,7 +59,7 @@ class RealServiceNowGatewayTest {
     void rejectsAnUnrecognisedWriteField() {
         var props = TriagePropertiesFixture.withEngine(TriageProperties.Engine.DETERMINISTIC);
         var badProps = new TriageProperties(props.engine(), props.writeback(), props.orchestrator(),
-                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority", "6,7", 0.25, 5),
+                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority", "6,7", 0.25, 5, java.util.Map.of()),
                 props.sumo(), props.gitlab());
         try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
             var violations = factory.getValidator().validate(badProps);
@@ -111,6 +111,13 @@ class RealServiceNowGatewayTest {
     @Test
     void similarIncidentSearchQueriesByConfigurationItemAndSymptomTerms() {
         var f = build();
+        // Derived from the fixture rather than written out, so this keeps proving the point
+        // it was written to prove — that the states come from CONFIG, not a literal in the
+        // query builder — without also pinning WHICH states are configured. The default
+        // moved to "1,6,7" (application.yml explains why: every candidate on the live dev
+        // instance is state=New, so "6,7" retrieves nothing), and a hardcoded expectation
+        // here turned that config change into a false test failure.
+        String states = TriagePropertiesFixture.deterministic().servicenow().resolvedStates();
         var queries = new java.util.ArrayList<String>();
         // Two retrieval passes (CI, then symptom terms); capture what each actually sent.
         for (int i = 0; i < 2; i++) {
@@ -133,7 +140,7 @@ class RealServiceNowGatewayTest {
         String ciPass = queries.get(0);
         org.assertj.core.api.Assertions.assertThat(ciPass)
                 .contains("cmdb_ci.name=Delivery Hazards")   // the key the old query never used
-                .contains("stateIN6,7");                     // from config, not a literal
+                .contains("stateIN" + states);               // from config, not a literal
 
         String symptomPass = queries.get(1);
         org.assertj.core.api.Assertions.assertThat(symptomPass)
@@ -151,9 +158,9 @@ class RealServiceNowGatewayTest {
         // each alternative would make it one of the OR'd branches instead, matching every
         // resolved incident regardless of its text — a query that "works" and means nothing.
         org.assertj.core.api.Assertions.assertThat(symptomPass)
-                .containsOnlyOnce("stateIN6,7")
+                .containsOnlyOnce("stateIN" + states)
                 .doesNotContain("^ORstateIN");
-        org.assertj.core.api.Assertions.assertThat(symptomPass.indexOf("stateIN6,7"))
+        org.assertj.core.api.Assertions.assertThat(symptomPass.indexOf("stateIN" + states))
                 .isLessThan(symptomPass.indexOf("short_descriptionLIKE"));
     }
 

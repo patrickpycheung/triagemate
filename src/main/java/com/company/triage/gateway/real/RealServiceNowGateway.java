@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Real ServiceNow connector via the REST Table API. Active when
@@ -46,6 +47,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
     private final String resolvedStates;   // J26: encoded-query IN list, e.g. "6,7"
     private final double similarityFloor;  // J26: minimum score worth reporting
     private final int maxSimilar;          // J26: cap on reported similar incidents
+    private final TriageProperties properties;   // operator-pinned similar incidents
 
     public RealServiceNowGateway(RestClient.Builder builder, IntegrationProperties integrationProps,
                                  TriageProperties props) {
@@ -73,6 +75,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         this.resolvedStates = props.servicenow().resolvedStates();
         this.similarityFloor = props.servicenow().similarityFloor();
         this.maxSimilar = props.servicenow().maxSimilar();
+        this.properties = props;
     }
 
     @Override
@@ -198,7 +201,43 @@ public class RealServiceNowGateway implements ServiceNowGateway {
                 incident, candidates, similarityFloor, maxSimilar);
         log.debug("similar incidents for {}: {} candidate(s) retrieved, {} above floor {}",
                 incident.number(), candidates.size(), ranked.size(), similarityFloor);
-        return ranked;
+
+        // Operator pins go in front of everything the search+ranker produced. They are an
+        // assertion by a human that two tickets ARE the same problem, which no score can
+        // outrank — and they are the only path that still answers on an instance where the
+        // retrieval passes legitimately find nothing.
+        List<ResolvedIncident> pinned = pinnedSimilar(incident.number());
+        if (pinned.isEmpty()) return ranked;
+
+        Set<String> pinnedNumbers = new java.util.HashSet<>();
+        pinned.forEach(p -> pinnedNumbers.add(p.number()));
+        List<ResolvedIncident> out = new ArrayList<>(pinned);
+        ranked.stream().filter(r -> !pinnedNumbers.contains(r.number())).forEach(out::add);
+        return out;
+    }
+
+    /**
+     * Operator-pinned duplicates, fetched by number so they carry their real subject and
+     * close notes rather than a bare id. A pin naming an incident that does not exist is
+     * dropped with a warning — a stale config entry must not put a ticket in front of a
+     * triager that they cannot open.
+     */
+    private List<ResolvedIncident> pinnedSimilar(String number) {
+        List<ResolvedIncident> out = new ArrayList<>();
+        for (String pin : properties.servicenow().pinsFor(number)) {
+            JsonNode row = firstRow("/api/now/table/incident", "number=" + pin,
+                    "number,short_description,assignment_group,close_code,close_notes");
+            if (row == null) {
+                log.warn("[ServiceNow] pinned similar incident {} for {} does not exist — skipping",
+                        pin, number);
+                continue;
+            }
+            // 1.0 — a human asserted this pairing; nothing the ranker computes outranks it.
+            out.add(new ResolvedIncident(text(row, "number"), text(row, "short_description"),
+                    text(row, "assignment_group"), text(row, "close_code"),
+                    text(row, "close_notes"), 1.0));
+        }
+        return out;
     }
 
     /** Distinctive terms to OR together. Enough to be findable; few enough to stay a query. */
@@ -238,11 +277,25 @@ public class RealServiceNowGateway implements ServiceNowGateway {
     @Override
     public Optional<ServiceOwnership> findOwnership(String applicationName) {
         if (applicationName == null || applicationName.isBlank()) return Optional.empty();
-        JsonNode row = firstRow("/api/now/table/cmdb_ci_service",
+        // Query the BASE cmdb_ci table, not cmdb_ci_service. ServiceNow table inheritance
+        // means cmdb_ci returns every CI class; cmdb_ci_service returns only service-class
+        // CIs. Applications are NOT service-class — the demo's "Delivery Hazards" is a
+        // cmdb_ci_web_application — so the old query missed every application CI and this
+        // method could only ever answer for CIs it was never asked about. Verified live:
+        // cmdb_ci_service?nameLIKEDelivery Hazards -> 0 rows; cmdb_ci -> the CI.
+        JsonNode row = firstRow("/api/now/table/cmdb_ci",
                 "nameLIKE" + applicationName, "name,support_group,business_criticality");
         if (row == null) return Optional.empty();
+
+        // A CI with no support_group answers nothing useful. Returning a ServiceOwnership
+        // with a blank group is worse than empty: callers (and the ADK agent, which is told
+        // ownership is "the strongest routing signal") read a present record as "ownership
+        // found" and would route on a blank. Absent is honest; blank is a false positive.
+        String supportGroup = text(row, "support_group");
+        if (supportGroup == null || supportGroup.isBlank()) return Optional.empty();
+
         return Optional.of(new ServiceOwnership(text(row, "name"),
-                text(row, "support_group"), text(row, "business_criticality"), "cmdb_ci_service"));
+                supportGroup, text(row, "business_criticality"), "cmdb_ci"));
     }
 
     /**

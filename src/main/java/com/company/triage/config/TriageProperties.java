@@ -99,7 +99,21 @@ public record TriageProperties(
              */
             @DecimalMin("0.0") @DecimalMax("1.0") double similarityFloor,
             /** J26: how many ranked similar incidents to report at most. */
-            @Min(1) int maxSimilar
+            @Min(1) int maxSimilar,
+            /**
+             * Operator-curated "these two tickets are the same problem" links, keyed by the
+             * incident being triaged:
+             * {@code triage.servicenow.similar-incidents.INC0010010[0]=INC0010012}.
+             *
+             * <p>Retrieval + {@link com.company.triage.gateway.SimilarIncidentRanker} can only
+             * find what the instance's own text search and CMDB support. When a human already
+             * KNOWS two tickets are duplicates, saying so beats any heuristic — and it is the
+             * difference between the triager seeing "we resolved this last week, close it" and
+             * seeing nothing. Pins are additive and rank above every scored hit.
+             *
+             * <p>Unset means "no pins", never null.
+             */
+            java.util.Map<String, List<String>> similarIncidents
     ) {
         /**
          * Defaults applied here rather than only in {@code application.yml} so a partial
@@ -112,6 +126,15 @@ public record TriageProperties(
             if (resolvedStates == null || resolvedStates.isBlank()) resolvedStates = "6,7";
             if (similarityFloor <= 0.0) similarityFloor = 0.25;
             if (maxSimilar <= 0) maxSimilar = 5;
+            // Same FND-57 shape as the three above: a null map here would NPE on the first
+            // pin lookup rather than simply meaning "no pins configured".
+            similarIncidents = similarIncidents == null ? java.util.Map.of() : similarIncidents;
+        }
+
+        /** Pinned similar-incident numbers for {@code number}, never null. */
+        public List<String> pinsFor(String number) {
+            if (number == null) return List.of();
+            return similarIncidents.getOrDefault(number, List.of());
         }
     }
 

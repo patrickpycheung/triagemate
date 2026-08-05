@@ -34,7 +34,7 @@ class AdkAllowlistVisibilityTest {
                 new TriageProperties.Orchestrator(90000),
                 new TriageProperties.Agent(10),
                 new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, false)),
-                new TriageProperties.ServiceNow("work_notes", "6,7", 0.25, 5),
+                new TriageProperties.ServiceNow("work_notes", "6,7", 0.25, 5, java.util.Map.of()),
                 com.company.triage.config.TriagePropertiesFixture.sumo(),
                 new TriageProperties.GitLab(PROJECTS));
     }
@@ -66,7 +66,7 @@ class AdkAllowlistVisibilityTest {
                 new TriageProperties.Orchestrator(90000),
                 new TriageProperties.Agent(10),
                 new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, false)),
-                new TriageProperties.ServiceNow("work_notes", "6,7", 0.25, 5),
+                new TriageProperties.ServiceNow("work_notes", "6,7", 0.25, 5, java.util.Map.of()),
                 new TriageProperties.Sumo("Custom/{project}/{environment}", java.util.Map.of(),
                         "Custom_Index", List.of("sandbox"), 20, 30),
                 new TriageProperties.GitLab(List.of("team/other-repo")));
