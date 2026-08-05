@@ -72,3 +72,21 @@ replay_pid*
 # of view), so a plain `git add -A` stages it as a gibberish gitlink — a commit that
 # looks like a submodule nobody can clone. Ignored so that cannot happen again.
 .claude/
+
+# Generated documentation index — regenerate with:
+#   python3 ~/.claude/scripts/gen-docs-index.py <repo-root>
+#
+# Untracked 2026-08-05 after it was silently deleted from develop FOUR times. Two
+# independent reasons it cannot be tracked in this repo:
+#
+#  1. RACE. push.sh's `wip: auto-commit` is a blind `git commit -a`, and the generator
+#     rewrites this file by removing and recreating it. Commits landed inside that window
+#     and recorded a DELETION while the file sat on disk with an mtime in the same second.
+#  2. NOT REPRODUCIBLE ACROSS WORKTREES. Per-entry dates come from file mtimes, and the H1
+#     is named after the containing directory — so each worktree legitimately generates a
+#     different INDEX.md for identical docs. It was never going to stay clean.
+#
+# It is a derived artifact ("do not edit by hand" is its own first line) and regenerating
+# costs one command, so tracking it bought nothing and cost four deletions plus a failed
+# push. To go back: `git add -f docs/INDEX.md` and delete this block.
+docs/INDEX.md
