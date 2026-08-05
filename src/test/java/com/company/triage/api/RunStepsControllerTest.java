@@ -37,7 +37,7 @@ class RunStepsControllerTest {
     // --- single-attempt happy path --------------------------------------------------
 
     @Test
-    void sinceMinusOneReturnsEverythingFromTheStart() {
+    void aFreshPollReturnsEverythingSoFar() {
         TraceCollector collector = new TraceCollector();
         TraceSink sink = collector.forAttempt(0);
         sink.before(step(0, 0, "c1", StepState.ACTIVE));
@@ -56,35 +56,92 @@ class RunStepsControllerTest {
         assertThat(attempt0.steps().get(1).state()).isEqualTo(StepState.ACTIVE); // c2, in flight
     }
 
+    /**
+     * SUPERSEDED BY J12 — this asserted the INCREMENTAL contract ("only the new step, not
+     * c1 again"). That contract was the bug: it is incompatible with rows being mutable and
+     * keyed by callId, because a row that RESOLVES occupies the same position and therefore
+     * looks "already delivered". Delivery is now convergent — every poll returns the whole
+     * buffer and the client upserts by (attempt, callId).
+     */
     @Test
-    void aSecondPollWithAHigherSinceReturnsOnlyNewSteps() {
+    void everyPollReturnsTheWholeBufferNotJustTheNewSteps() {
         TraceCollector collector = new TraceCollector();
         TraceSink sink = collector.forAttempt(0);
         sink.before(step(0, 0, "c1", StepState.ACTIVE));
         sink.after(step(0, 0, "c1", StepState.DONE));
 
         RunStepsResponse first = RunStepsController.buildResponse(collector, -1);
-        assertThat(first.attempts()).hasSize(1);
         assertThat(first.attempts().get(0).steps()).hasSize(1);
 
-        // Client advances `since` to the highest index it has seen (0 here — one step).
-        long since = 0;
         sink.before(step(1, 0, "c2", StepState.ACTIVE));
 
-        RunStepsResponse second = RunStepsController.buildResponse(collector, since);
+        // A client that still sends a cursor gets the same answer — `since` is accepted and
+        // ignored, so an older client degrades to duplicate rows, never to missing ones.
+        RunStepsResponse second = RunStepsController.buildResponse(collector, 0);
 
-        assertThat(second.attempts()).hasSize(1);
         assertThat(second.attempts().get(0).steps())
-                .as("only the new step (c2), not c1 again")
-                .extracting(TraceStep::callId).containsExactly("c2");
+                .as("the complete current buffer, so a dropped poll costs nothing")
+                .extracting(TraceStep::callId).containsExactly("c1", "c2");
     }
 
+    /**
+     * THE regression this card exists for: a row that resolves ACTIVE -> DONE must reach a
+     * later poll.
+     *
+     * <p>Under the old since-as-position scheme it never did. {@code TraceSink} replaces by
+     * {@code callId}, so the resolution reuses the SAME slot; its index was therefore
+     * {@code <= since} and it was skipped as "already delivered". On the ADK path that was
+     * every single resolution, so rows pulsed ACTIVE for the whole 37-77 s run and only
+     * settled when the POST returned — the "resolves in place" animation the card is named
+     * for never played live.
+     */
     @Test
-    void aPollWithNoNewStepsReturnsAnEmptyAttemptsArray() {
+    void aRowThatResolvesAfterAnEarlierPollIsDeliveredWithItsNewState() {
+        TraceCollector collector = new TraceCollector();
+        TraceSink sink = collector.forAttempt(0);
+        sink.before(step(0, 0, "c1", StepState.ACTIVE));
+
+        // Poll 1: the client sees c1 in flight and (under the old scheme) advanced past it.
+        RunStepsResponse first = RunStepsController.buildResponse(collector, -1);
+        assertThat(first.attempts().get(0).steps().get(0).state()).isEqualTo(StepState.ACTIVE);
+
+        // The tool comes back — same callId, same slot, new state.
+        sink.after(step(0, 0, "c1", StepState.DONE));
+
+        RunStepsResponse second = RunStepsController.buildResponse(collector, 0);
+
+        assertThat(second.attempts()).as("the resolution must not be swallowed").isNotEmpty();
+        assertThat(second.attempts().get(0).steps())
+                .extracting(TraceStep::callId).contains("c1");
+        assertThat(second.attempts().get(0).steps().stream()
+                        .filter(st -> "c1".equals(st.callId())).findFirst().orElseThrow().state())
+                .as("the client must be able to see c1 resolve, during the run")
+                .isEqualTo(StepState.DONE);
+    }
+
+    /**
+     * SUPERSEDED BY J12: "no NEW steps" is no longer a meaningful state, because delivery is
+     * not incremental. A poll against an unchanged buffer returns that buffer unchanged, and
+     * the client's upsert makes re-delivery a no-op on screen. An genuinely EMPTY buffer
+     * still yields empty attempts — that case is preserved below.
+     */
+    @Test
+    void aPollAgainstAnUnchangedBufferReturnsThatBufferAgain() {
         TraceCollector collector = new TraceCollector();
         collector.forAttempt(0).before(step(0, 0, "c1", StepState.ACTIVE));
 
         RunStepsResponse response = RunStepsController.buildResponse(collector, 0);
+
+        assertThat(response.attempts()).hasSize(1);
+        assertThat(response.attempts().get(0).steps()).extracting(TraceStep::callId)
+                .containsExactly("c1");
+        assertThat(response.done()).isFalse();
+    }
+
+    /** An empty buffer still has nothing to report — the one genuinely empty case. */
+    @Test
+    void aPollAgainstAnEmptyBufferReturnsNoAttempts() {
+        RunStepsResponse response = RunStepsController.buildResponse(new TraceCollector(), -1);
 
         assertThat(response.attempts()).isEmpty();
         assertThat(response.done()).isFalse();

@@ -599,7 +599,11 @@ function traceRowHtml(step) {
   // fill="currentColor" path inherits .trace-badge's per-platform `color`
   // (var(--sn)/--cf/--sl/--gl), same theming mechanism the badge text used.
   const badge = subordinate ? '' : `<div class="trace-badge">${step.badgeSvg || ''}</div>`;
-  return `<div class="${cls}" data-state="${esc(dataState)}" data-platform="${esc(step.platform || '')}">
+  // J12: data-key carries the row's identity so upsertTraceRows can find and REPLACE the
+  // row a resolution belongs to. Absent (LT3 replay builds rows without one), the row is
+  // simply appended — which is correct there, since a replay never mutates a row.
+  const keyAttr = step.rowKey ? ` data-key="${esc(step.rowKey)}"` : '';
+  return `<div class="${cls}"${keyAttr} data-state="${esc(dataState)}" data-platform="${esc(step.platform || '')}">
     ${badge}
     <div class="trace-body">
       <div class="trace-label">${esc(step.label)}</div>
@@ -679,15 +683,46 @@ function traceCardShell(cardEl, mode, captionText) {
   };
 }
 
-/** Appends rows and keeps the header count in step — the one growth path both use. */
-function appendTraceRows(shell, steps) {
+/**
+ * J12 — upserts rows by their (attempt, callId) identity and keeps the header count in
+ * step. The one growth path both the live and replay renderers use.
+ *
+ * <p>Was a blind append, which is what made the server's convergent full-re-read
+ * impossible: re-sending a row would have duplicated it. The two changes are one change.
+ * A row already on screen is REPLACED IN PLACE — which is precisely the "resolves in
+ * place" animation LT3/LT4 specify, and it now actually happens during the run rather
+ * than at the settle-render after it.
+ *
+ * <p>Rows without a key (the LT3 replay path) always append: a replay renders an
+ * already-finished run, so no row it draws will ever mutate.
+ */
+function upsertTraceRows(shell, steps) {
   if (!steps.length) return;
-  shell.rowsEl.insertAdjacentHTML('beforeend', steps.map(traceStepRowHtml).join(''));
+  for (const step of steps) {
+    const html = traceStepRowHtml(step);
+    const key = `${step.attempt}:${step.callId}`;
+    const existing = step.callId != null
+      ? shell.rowsEl.querySelector(`[data-key="${CSS.escape(key)}"]`)
+      : null;
+    if (existing) {
+      existing.outerHTML = html;      // resolve in place — same slot, new state
+    } else {
+      shell.rowsEl.insertAdjacentHTML('beforeend', html);
+    }
+  }
   shell.countEl.textContent = shell.rowsEl.children.length;
 }
 
+/** Back-compat alias: the replay path's semantics are unchanged (append-only). */
+const appendTraceRows = upsertTraceRows;
+
 function traceStepRowHtml(step) {
   const platform = stepPlatformToLower(step.platform);
+  // J12: the row's IDENTITY. (attempt, callId) is what the backend keys a row by
+  // (TraceSink replaces by callId; attempt separates a degrade's two segments), so it
+  // is what the client must key by too — otherwise a resolved row cannot be matched to
+  // the ACTIVE row it resolves and gets appended as a duplicate instead.
+  const rowKey = `${step.attempt}:${step.callId}`;
   // Un-resolved rows (queued on the replay path, in-flight on the live path) show the
   // catalog's friendly label ("Searching Confluence for a runbook…"); resolved rows show
   // what actually came back. Both paths use the SAME rule — the replay path used to fall
@@ -703,6 +738,7 @@ function traceStepRowHtml(step) {
     badgeSvg: PLATFORM_LOGO_SVG[platform] || '',
     label,
     meta: stepMetaText(platform, step.state),
+    rowKey,
   });
 }
 
@@ -770,8 +806,10 @@ function renderLt3Replay(cardEl, data) {
 
    The protocol (README.md "The runId protocol", Round 3): the client mints a
    runId BEFORE the POST (the only channel to learn one before the run ends),
-   sends it as X-Triage-Run-Id, and polls GET /api/runs/{runId}/steps?since={n}
-   concurrently with the in-flight POST. `since` is a GLOBAL flattened-position
+   sends it as X-Triage-Run-Id, and polls GET /api/runs/{runId}/steps
+   concurrently with the in-flight POST. Delivery is CONVERGENT (J12): each
+   response carries the buffer's whole current contents and the client upserts
+   by (attempt, callId). The former `since` flattened-position
    index (RunStepsController's javadoc), not a per-attempt seq — tracked here as
    a running total of steps received so far (see startLt4Poll).
 
@@ -843,7 +881,9 @@ function startLt4Poll(runId, cardEl) {
   // line, then the growing row list. The caption is the live counterpart of
   // LT3's replay frame: same slot, same styling, opposite claim.
   const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
-  let since = -1; // -1 == "send everything so far" (RunStepsController default)
+  // J12: no cursor. Delivery is convergent — every poll returns the whole buffer and the
+  // client upserts by (attempt, callId). `since` is still accepted by the endpoint for
+  // wire compatibility, and deliberately not sent.
   let stopped = false;
   let timer = null;
   let everSawData = false;
@@ -858,7 +898,7 @@ function startLt4Poll(runId, cardEl) {
   async function poll() {
     if (stopped) return;
     try {
-      const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/steps?since=${since}`);
+      const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/steps`);
       if (res.status === 404) {
         notFoundStreak++;
         // Once the run has been seen alive, a later 404 is the endpoint's
@@ -879,18 +919,14 @@ function startLt4Poll(runId, cardEl) {
         everSawData = true;
         notFoundStreak = 0;
         const data = await res.json();
-        let newCount = 0;
+        // J12: each response is the buffer's COMPLETE current contents, and
+        // upsertTraceRows keys on (attempt, callId) — so re-delivered rows resolve
+        // in place instead of duplicating, and a dropped poll costs nothing because
+        // the next one carries the whole truth again. No cursor to advance, and
+        // none to get wrong.
         for (const attempt of (data.attempts || [])) {
-          const steps = attempt.steps || [];
-          if (steps.length) {
-            appendTraceRows(shell, steps);
-            newCount += steps.length;
-          }
+          upsertTraceRows(shell, attempt.steps || []);
         }
-        // since indexes a POSITION in the flattened, strictly-append-only step
-        // list (RunStepsController javadoc) — every step index > since was just
-        // delivered, contiguously, so advancing by the count received is exact.
-        since += newCount;
         if (data.done) { stop(); return; }
       }
       // A non-404, non-ok response (transient 5xx) is swallowed here rather
@@ -908,11 +944,12 @@ function startLt4Poll(runId, cardEl) {
 // Fills cardEl with the run's FINAL, fully-settled steps once the POST's own
 // 200 has landed — data.steps (DiagnosisResult, always populated regardless
 // of engine) is the ground truth. This corrects any staleness the poll loop
-// could not see: RunStepsController's since-index scheme only ever re-sends
-// a genuinely NEW position, so a step whose row resolved (ACTIVE -> DONE)
-// AFTER an earlier poll had already delivered its ACTIVE row at that index
-// never gets a live update (its javadoc calls this "bounded and
-// self-healing") — this settle-render is exactly that healing step. Also
+// could not see. Before J12 that was a great deal: the since-index scheme
+// only re-sent genuinely NEW positions, so EVERY ACTIVE -> DONE resolution
+// was invisible until this point. With convergent delivery the live view is
+// already correct, and this render's job shrinks to what it should always
+// have been — drawing the authoritative POST result for a client that never
+// polled (no runId) or whose polling was cut short. Also
 // still governed by "no pacing, ever": rendered in one shot, no setTimeout.
 function renderLt4Final(cardEl, data) {
   const steps = Array.isArray(data.steps) ? data.steps : [];

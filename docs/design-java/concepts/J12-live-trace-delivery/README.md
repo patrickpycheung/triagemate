@@ -1,6 +1,11 @@
 # J12 — Live Trace Delivery (convergent, identity-keyed)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: HIGH
+**State**: 🟢 Built (LTD-1/LTD-2, 2026-08-05) — the `since` cursor is replaced by convergent
+full re-read + client upsert on `(attempt, callId)`, so a row now resolves IN PLACE during
+the run. Verified three ways (unit test, live run, node harness on the real upsert logic).
+**LTD-3/LTD-4 (seq ownership under parallel ADK dispatch) are NOT done** — convergent
+delivery makes the swallowed-row race unreachable through the transport, but the
+collector-side ordering question stands · **Complexity**: Moderate · **Priority**: HIGH
 **Depends on**: J7 (UI), J8 (guardrail edges), J11 (LT1 spine, LT4 transport, LT5 states)
 **Amends**: J11 (LT4's `since` cursor binding; LT1's `seq` ownership; the LT4 caption's timing clause)
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 5 confirmed findings
