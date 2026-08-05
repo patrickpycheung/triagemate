@@ -247,6 +247,26 @@
     .advisory { color:var(--warn); font-size:12px; }
     .link { color:var(--acc); text-decoration:underline; }
 
+    /* ---- Overflow containment: nothing may escape the 900px page column.
+       A long unbroken token (a Confluence/ServiceNow URL, a stack frame, an
+       incident id) has no break opportunity, so the browser lets it stick out
+       past .wrap and the whole page gains a horizontal scrollbar — the poster
+       layout reads as broken. break-word only splits tokens that ACTUALLY
+       overflow, so normal prose wraps exactly as before. min-width:0 is the
+       flex counterpart: a flex item defaults to min-width:auto and refuses to
+       shrink below its longest word, which defeats the wrap on .cand/.ev rows. */
+    .wrap { overflow-x:clip; }
+    .card, .ev, .cand, .src, .trace, .diag-problem, .advisory {
+      overflow-wrap:break-word; min-width:0;
+    }
+    .cand > *, .ev > * { min-width:0; }
+    /* URLs get the stronger rule — they are one token with no spaces, and
+       break-word alone still leaves a >900px path segment hanging out. */
+    .ev-link { color:var(--acc); text-decoration:underline; overflow-wrap:anywhere; }
+    /* Preformatted trace output cannot wrap mid-token without lying about the
+       payload, so it scrolls INSIDE its own box rather than widening the page. */
+    .trace { max-width:100%; overflow-x:auto; }
+
     /* ---- Diagnosis card: logical grouping (initial problem / context facts /
        confidence), so the top-of-page report reads as distinct blocks instead
        of two run-on paragraphs. */
@@ -1192,10 +1212,10 @@ function render(data) {
   ).join('');
   // FND-25: J7 always claimed "source badges + links" here; the link half was never
   // rendered (only the reconstructed sources-comment preview below had it).
-  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</div>`).join('');
+  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
-  const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span style="color:var(--acc);text-decoration:underline">[${esc(e.link)}]</span>`:''}</li>`).join('');
+  const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
   const contacts = (r.suggestedContacts||[]).map(c => `
     <div class="ev" style="border-left-color:var(--ok)">
       <div><b style="color:var(--ok)">${esc(c.source)}</b> &nbsp;<span style="font-weight:600">${esc(c.name)}</span>${c.handle?` <span class="src">&lt;${esc(c.handle)}&gt;</span>`:''}</div>
