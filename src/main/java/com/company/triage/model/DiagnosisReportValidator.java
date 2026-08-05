@@ -52,8 +52,64 @@ public final class DiagnosisReportValidator {
                     report.suggestedAssignment().evidenceRefs())), knownIds, problems);
         }
 
+        duplicateEvidenceIds(report, problems);
+        uncitedCandidates(report, problems);
+
         if (!problems.isEmpty()) {
             throw new DiagnosisReportInvalidException(report.incidentNumber(), problems);
+        }
+    }
+
+    /**
+     * J13/ECI-1 — evidence ids must be unique.
+     *
+     * <p>The dangling-ref rule above asks "does this id exist?", which a DUPLICATE id passes
+     * trivially — so a report could carry three different GitLab hits all labelled
+     * {@code e-code}, and every {@code evidenceRefs: ["e-code"]} would validate while pointing
+     * at whichever one the reader happened to scroll to first. An id that does not identify is
+     * not an id, and the whole citation contract rests on it doing so.
+     *
+     * <p>Reported as a list of the offending ids rather than the first, matching this class's
+     * report-everything contract: a model repairing its output benefits from the full set.
+     */
+    private static void duplicateEvidenceIds(DiagnosisReport report, List<String> problems) {
+        if (report.evidence() == null) return;
+        Set<String> seen = new java.util.LinkedHashSet<>();
+        Set<String> duplicated = new java.util.LinkedHashSet<>();
+        for (Evidence e : report.evidence()) {
+            if (e != null && e.id() != null && !seen.add(e.id())) {
+                duplicated.add(e.id());
+            }
+        }
+        for (String id : duplicated) {
+            problems.add("duplicate evidence id '" + id + "' — ids must be unique, or an "
+                    + "evidenceRef naming it cannot identify which item it cites");
+        }
+    }
+
+    /**
+     * J13/ECI-2 — a candidate system must cite at least one piece of evidence.
+     *
+     * <p>J4's rule is "every conclusion ties to evidenceRefs". A candidate with an EMPTY
+     * {@code evidenceRefs} is a conclusion with no tie at all — it passed validation only
+     * because the dangling-ref check iterates the refs, and an empty list has nothing to
+     * iterate. On the deterministic path this happened whenever a system was observed in logs
+     * but no {@code e-log} Evidence was gathered for it; the report then named a suspect
+     * system and pointed at nothing.
+     *
+     * <p>Deliberately NOT extended to {@code suggestedAssignment}: the honest
+     * "Unassigned — no ownership or similar-incident signal" fallback legitimately has only
+     * the ticket itself to cite, and forcing a citation there would push the code toward
+     * inventing one.
+     */
+    private static void uncitedCandidates(DiagnosisReport report, List<String> problems) {
+        if (report.candidateSystems() == null) return;
+        for (CandidateSystem c : report.candidateSystems()) {
+            if (c == null) continue;
+            if (c.evidenceRefs() == null || c.evidenceRefs().isEmpty()) {
+                problems.add("candidate system '" + c.name() + "' cites no evidence — every "
+                        + "conclusion must tie to at least one evidenceRef (J4 Rules)");
+            }
         }
     }
 

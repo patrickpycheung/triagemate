@@ -92,11 +92,56 @@ class DiagnosisReportValidatorTest {
                 .hasMessageContaining("dangling evidenceRef 'e-ghost'");
     }
 
+    /**
+     * SUPERSEDED BY J13/ECI-2 — deliberately, not accidentally.
+     *
+     * <p>This test used to assert that a candidate with {@code null} evidenceRefs VALIDATES.
+     * Its real intent was null-SAFETY (a null list must not NPE), and that guarantee is
+     * unchanged and still asserted below. What changed is the verdict: J4's rule is "every
+     * conclusion ties to evidenceRefs", and a candidate citing nothing is a conclusion with no
+     * tie at all. It passed before only because the dangling-ref check iterates the refs, and
+     * an empty list has nothing to iterate — so the rule was silently unenforced at exactly
+     * the point it mattered.
+     *
+     * <p>The distinction that matters: a clean validation PROBLEM (repairable by the FND-42
+     * retry on the ADK path) rather than a NullPointerException.
+     */
     @Test
-    void nullEvidenceRefsListIsTreatedAsEmptyNotAsAnError() {
+    void aCandidateCitingNothingIsAProblemNotAnNpe() {
         var report = report(
                 List.of(new CandidateSystem("Order Portal", 0.8, null)),
                 List.of(E1), null);
+
+        assertThatThrownBy(() -> DiagnosisReportValidator.validate(report))
+                .isInstanceOf(DiagnosisReportInvalidException.class)
+                .hasMessageContaining("cites no evidence");
+    }
+
+    /** J13/ECI-1: an id that does not identify is not an id. */
+    @Test
+    void duplicateEvidenceIdsAreRejected() {
+        var dup = new Evidence("e-code", "gitlab", "emitted at a.py:1", "p/a.py#L1");
+        var dup2 = new Evidence("e-code", "gitlab", "emitted at b.py:2", "p/b.py#L2");
+        var report = report(
+                List.of(new CandidateSystem("Payment Service", 0.86, List.of("e-code"))),
+                List.of(dup, dup2), null);
+
+        assertThatThrownBy(() -> DiagnosisReportValidator.validate(report))
+                .isInstanceOf(DiagnosisReportInvalidException.class)
+                .hasMessageContaining("duplicate evidence id 'e-code'");
+    }
+
+    /**
+     * J13/ECI-2 does NOT extend to suggestedAssignment: the honest
+     * "Unassigned — no ownership or similar-incident signal" fallback legitimately has only
+     * the ticket to cite, and forcing a citation there would push the code toward inventing one.
+     */
+    @Test
+    void anAssignmentCitingNothingIsStillAllowed() {
+        var report = report(
+                List.of(new CandidateSystem("Order Portal", 0.8, List.of("e1"))),
+                List.of(E1),
+                new SuggestedAssignment("Unassigned — no signal", Confidence.LOW, List.of()));
 
         assertThatCode(() -> DiagnosisReportValidator.validate(report)).doesNotThrowAnyException();
     }

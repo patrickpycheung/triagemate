@@ -483,4 +483,123 @@ class DeterministicDiagnosisEngineTest {
                     java.time.OffsetDateTime since, int limit) { return List.of(); }
         };
     }
+
+    // --- J13: evidence and citation integrity ------------------------------------------
+
+    /**
+     * J13/ECI-1 + ECI-4 — several GitLab hits for one token must not collide on the id
+     * {@code e-code}, and the fan-out is capped.
+     *
+     * <p>Every hit was added as {@code "e-code"}, so a multi-hit run produced Evidence entries
+     * sharing one id and any {@code evidenceRefs: ["e-code"]} could not say which file it
+     * meant. The dangling-ref rule passed it trivially — the id existed, several times over.
+     */
+    @Test
+    void multipleCodeHitsGetDistinctIdsAndAreCapped() {
+        var manyHits = new MockGitLabGateway() {
+            @Override
+            public List<com.company.triage.model.CodeSearchResult> searchCode(String project, String term) {
+                List<com.company.triage.model.CodeSearchResult> out = new java.util.ArrayList<>();
+                for (int i = 1; i <= 7; i++) {
+                    out.add(new com.company.triage.model.CodeSearchResult(
+                            "order-payments/payment-service", "src/file" + i + ".py", i, "raise " + term));
+                }
+                return out;
+            }
+        };
+        var engineWithManyHits = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), manyHits, TriagePropertiesFixture.deterministic());
+
+        var report = engineWithManyHits.diagnose("INC0010005").report();
+
+        List<String> codeIds = report.evidence().stream()
+                .map(com.company.triage.model.Evidence::id)
+                .filter(id -> id.startsWith("e-code"))
+                .toList();
+        assertThat(codeIds).as("capped at MAX_CODE_EVIDENCE").hasSize(3);
+        assertThat(codeIds).as("ids must be unique — an id that does not identify is not an id")
+                .doesNotHaveDuplicates();
+        // And the whole report still validates, which is the point: uniqueness by construction.
+        assertThat(report.evidence()).extracting(com.company.triage.model.Evidence::id)
+                .doesNotHaveDuplicates();
+    }
+
+    /**
+     * J13/ECI-2 — a candidate must never cite a DIFFERENT system's log line.
+     *
+     * <p>Every logger seen in the window became a candidate citing {@code e-log}, but that
+     * Evidence describes only the first ERROR line's emitter. A report could therefore name
+     * one system as a suspect and offer another system's log line as the reason — a citation
+     * that does not support its claim, which is worse than no citation because it looks
+     * rigorous.
+     */
+    @Test
+    void candidatesNeverCiteAnotherSystemsLogLine() {
+        var mixedLoggers = new MockSumoGateway() {
+            @Override
+            public List<com.company.triage.model.LogEvidence> search(
+                    com.company.triage.model.LogSearchRequest request) {
+                return List.of(
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:00Z", "ERROR",
+                                "payment_service", "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471"),
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:01Z", "INFO",
+                                "order_portal", "checkout submitted"));
+            }
+        };
+        var engineWithMixedLoggers = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                mixedLoggers, new MockGitLabGateway(), TriagePropertiesFixture.deterministic());
+
+        var report = engineWithMixedLoggers.diagnose("INC0010005").report();
+
+        // Order Portal only ever emitted an INFO line, so it must not cite the PAYMENT
+        // SERVICE error line. It may still be a candidate — the CMDB names it as the owning
+        // application, which is its OWN evidence (e-cmdb) — and that is the distinction this
+        // rule is about: cite what supports you, not whatever happens to exist.
+        assertThat(report.candidateSystems())
+                .filteredOn(c -> "Order Portal".equals(c.name()))
+                .allSatisfy(c -> assertThat(c.evidenceRefs())
+                        .as("must not cite another system's log line")
+                        .doesNotContain("e-log"));
+        // ...and the omission is disclosed rather than silent.
+        assertThat(report.missingInformation())
+                .anySatisfy(m -> assertThat(m).contains("appeared in the searched log window"));
+        // Every surviving candidate cites something that exists.
+        List<String> ids = report.evidence().stream()
+                .map(com.company.triage.model.Evidence::id).toList();
+        assertThat(report.candidateSystems()).allSatisfy(c -> {
+            assertThat(c.evidenceRefs()).isNotEmpty();
+            assertThat(ids).containsAll(c.evidenceRefs());
+        });
+    }
+
+    /**
+     * J13/ECI-3 — the 0.86 tier means "this system's log line is tied to the code that emits
+     * it". It was granted whenever ANY code hit existed, without checking the hit belonged to
+     * the candidate's system, so a match in an unrelated allowlisted project could float an
+     * unrelated candidate to the top of the shortlist.
+     */
+    @Test
+    void theCodeCitationConfidenceRequiresTheHitToBelongToThatSystem() {
+        var unrelatedProjectHit = new MockGitLabGateway() {
+            @Override
+            public List<com.company.triage.model.CodeSearchResult> searchCode(String project, String term) {
+                // A hit in a DIFFERENT system than the one that logged the error.
+                return List.of(new com.company.triage.model.CodeSearchResult(
+                        "logistics/delivery-hazards", "src/unrelated.py", 9, "raise " + term));
+            }
+        };
+        var engineWithUnrelatedHit = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                new MockSumoGateway(), unrelatedProjectHit, TriagePropertiesFixture.deterministic());
+
+        var report = engineWithUnrelatedHit.diagnose("INC0010005").report();
+
+        assertThat(report.candidateSystems())
+                .filteredOn(c -> "Payment Service".equals(c.name()))
+                .allSatisfy(c -> assertThat(c.confidence())
+                        .as("0.86 requires the code hit to be THIS system's")
+                        .isLessThan(0.86));
+    }
 }

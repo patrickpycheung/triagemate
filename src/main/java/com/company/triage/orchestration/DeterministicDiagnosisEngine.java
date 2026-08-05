@@ -43,6 +43,20 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
     private static final Pattern ERROR_TOKEN = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b");
 
+    /**
+     * J13/ECI-4: most code citations one reader can use for a single error token.
+     *
+     * <p>Bounds two things at once, because {@code codeHits} is also what
+     * {@link #gatherContacts} loops over to call {@code recentCommitters}: the number of
+     * {@code e-code} Evidence rows in the report, AND the number of GitLab API calls the run
+     * makes. A common token could previously yield ~20 of the former and ~40 of the latter.
+     *
+     * <p>Three, not ten: the citation exists to let a human open the file that emits the log
+     * line. Past a handful, extra rows cost attention on stage and add nothing — and the
+     * trace discloses the truncation rather than quietly showing 3 of 12.
+     */
+    private static final int MAX_CODE_EVIDENCE = 3;
+
     private final ServiceNowGateway serviceNow;
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
@@ -259,11 +273,31 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 codeHits = gitLab.searchCode(project, errorToken);
                 if (!codeHits.isEmpty()) break;
             }
-            for (CodeSearchResult h : codeHits) {
-                evidence.add(new Evidence("e-code", "gitlab",
+            // J13/ECI-4: cap the fan-out. GitLab's blob search can return many hits for a
+            // common token; each became an Evidence entry AND a recentCommitters API call, so
+            // an unlucky token meant ~20 evidence rows and ~40 calls in one run. The report is
+            // read by a human on stage — past a handful of citations for one fact, each extra
+            // row costs attention and buys nothing.
+            List<CodeSearchResult> citedHits = codeHits.size() > MAX_CODE_EVIDENCE
+                    ? codeHits.subList(0, MAX_CODE_EVIDENCE) : codeHits;
+            // J13/ECI-1: unique ids by CONSTRUCTION. Every hit used to be added as "e-code",
+            // so a multi-hit run produced several Evidence entries sharing one id and any
+            // evidenceRef naming it was ambiguous — the reader could not tell which file the
+            // citation meant. Suffix from the second onward, so the common single-hit case
+            // keeps the stable "e-code" id that existing refs and tests use.
+            for (int i = 0; i < citedHits.size(); i++) {
+                CodeSearchResult h = citedHits.get(i);
+                evidence.add(new Evidence(i == 0 ? "e-code" : "e-code-" + (i + 1), "gitlab",
                         "log line '%s' is emitted at %s:%d".formatted(errorToken, h.filePath(), h.line()),
                         "%s/%s#L%d".formatted(h.project(), h.filePath(), h.line())));
             }
+            if (codeHits.size() > citedHits.size()) {
+                // Never truncate silently — a report that shows 3 of 12 matches without saying
+                // so reads as "there are 3", which is a different claim.
+                trace.add("gitlab.searchCode → %d hit(s), citing the first %d (cap: %d)"
+                        .formatted(codeHits.size(), citedHits.size(), MAX_CODE_EVIDENCE));
+            }
+            codeHits = citedHits;
             String traceGitLabSearch = "gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
                     .formatted(errorToken, projectsToTry, codeHits.size());
             trace.add(traceGitLabSearch);
@@ -324,10 +358,32 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // above one known only from the CMDB path.
         Map<String, CandidateSystem> byName = new LinkedHashMap<>();
         String codeBackedSystem = codeHits.isEmpty() ? null : prettifySystem(codeHits.get(0).project());
+        // The ONE system the e-log Evidence actually describes: the emitter of the first ERROR
+        // line. Everything below turns on the difference between "a system we have evidence
+        // for" and "a system we merely saw a log line from".
+        String loggedErrorSystem = errorLine == null ? null : prettifySystem(errorLine.logger());
+        int unsupportedSystems = 0;
         for (LogEvidence l : logs) {
             String name = prettifySystem(l.logger());
-            boolean hasCode = codeBackedSystem != null
-                    && (errorLine != null && l.logger().equals(errorLine.logger()));
+            // J13/ECI-2: only the error line's own system may cite e-log. Previously EVERY
+            // logger-derived candidate cited it, so a report could name "Order Portal" as a
+            // suspect and point at a Payment Service log line as the reason — a citation that
+            // does not support the claim it is attached to, which is worse than no citation
+            // because it looks rigorous.
+            boolean isTheLoggedErrorSystem = name.equals(loggedErrorSystem);
+            if (!isTheLoggedErrorSystem) {
+                // Seen in the window, but nothing in this report evidences it. Dropping is the
+                // precision-over-recall trade FND-67 already made for contact extraction: an
+                // advisory report's value is that every row is backed, so an unbacked suspect
+                // costs more than it adds. Disclosed below rather than silently discarded.
+                unsupportedSystems++;
+                continue;
+            }
+            // J13/ECI-3: the 0.86 tier means "the log line is tied to the code that emits it".
+            // It was granted whenever ANY code hit existed, without checking the hit belonged
+            // to THIS system — so a match in an unrelated allowlisted project inflated an
+            // unrelated candidate to the top of the shortlist. Require agreement.
+            boolean hasCode = codeBackedSystem != null && codeBackedSystem.equals(name);
             double confidence = hasCode ? 0.86 : ("ERROR".equals(l.level()) ? 0.70 : 0.45);
             List<String> refs = refsThatExist(gathered, hasCode ? List.of("e-log", "e-code") : List.of("e-log"));
             byName.merge(name, new CandidateSystem(name, confidence, refs),
@@ -421,6 +477,15 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             missing.add(("The ticket does not state a usable environment, so '%s' was assumed; "
                     + "a log search bounded by it may be looking at the wrong environment")
                     .formatted(environment));
+        }
+        // J13/ECI-2: never truncate the candidate list silently. Systems seen in the searched
+        // window but with nothing in this report evidencing them are dropped rather than listed
+        // as unbacked suspects — but the reader is told, because "3 systems were active and 1
+        // is evidenced" is a different picture from "1 system was active".
+        if (unsupportedSystems > 0) {
+            missing.add(("%d other system(s) appeared in the searched log window but no evidence "
+                    + "in this report supports them as candidates — they are omitted rather than "
+                    + "listed uncited").formatted(unsupportedSystems));
         }
         if (docs.isEmpty()) missing.add("No runbook or known-error page matched the symptom terms");
         if (inc.environment() == null || inc.environment().isBlank()) missing.add("Environment not set on the ticket");
