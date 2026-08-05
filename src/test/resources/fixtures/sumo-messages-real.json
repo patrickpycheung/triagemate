@@ -1,0 +1,47 @@
+{
+  "messages": [
+    {
+      "map": {
+        "_messagetime": "1785904006173",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "2026-08-05 14:26:46.173 ERROR 1 --- [http-nio-8080-exec-546] a.c.a.h.c.e.CustomRestExceptionHandler   : 9bc066ca org.springframework.dao.DataIntegrityViolationException: could not execute statement"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006171",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "2026-08-05 14:26:46.171 ERROR 1 --- [http-nio-8080-exec-546] o.h.engine.jdbc.spi.SqlExceptionHelper   : ERROR: null value in column"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006171",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "2026-08-05 14:26:46.171  WARN 1 --- [http-nio-8080-exec-546] o.h.engine.jdbc.spi.SqlExceptionHelper   : SQL Error: 0, SQLState: 23"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006170",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "2026-08-05 14:26:46.170  INFO 1 --- [http-nio-8080-exec-546] a.c.a.h.service.HazardService            : persisting hazard 4630355"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006169",
+        "loglevel": "ERROR",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "2026-08-05 14:26:46.169  INFO 1 --- [http-nio-8080-exec-546] a.c.a.h.service.HazardService            : an estate that DOES configure loglevel"
+      }
+    },
+    {
+      "map": {
+        "_messagetime": "1785904006168",
+        "_sourcecategory": "IDT/ITServices/Tomcat/delivery-hazards/prod/AppEvt_delivery-hazards",
+        "_raw": "<134>Aug  5 14:26:46 gateway-nginx: 10.4.2.11 - - \"GET /health HTTP/1.1\" 200"
+      }
+    }
+  ]
+}

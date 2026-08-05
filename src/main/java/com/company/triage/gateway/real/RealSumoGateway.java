@@ -92,7 +92,8 @@ public class RealSumoGateway implements SumoGateway {
                 String raw = f.path("_raw").asText("");
                 out.add(new LogEvidence(
                         f.path("_messagetime").asText(),
-                        level(f, raw),
+                        // J29/LLF-1: this estate never sets loglevel — fall back to _raw.
+                        parseLevel(f.path("loglevel").asText(""), f.path("_raw").asText("")),
                         f.path("_sourcecategory").asText(""),
                         raw));
             });
@@ -107,40 +108,35 @@ public class RealSumoGateway implements SumoGateway {
     }
 
     /**
-     * The log level of one row — {@code "ERROR"}, {@code "WARN"}, … or {@code ""}.
-     *
-     * <p><b>FND-85.</b> This read {@code map.loglevel}. The field Sumo actually returns is
-     * {@code map._loglevel}, <b>with a leading underscore</b> (verified against the live AU
-     * instance 2026-08-05: a real row carries {@code _loglevel = ERROR}). The misspelled key
-     * silently yielded {@code ""} on every row ever returned, and nothing downstream could
-     * tell that apart from "this log line genuinely has no level".
-     *
-     * <p>That single character disabled a whole limb of the deterministic engine.
-     * {@code DeterministicDiagnosisEngine:262} selects the error line with
-     * {@code "ERROR".equals(l.level())}, which could never be true, so {@code errorLine} was
-     * always null → {@code errorToken} always null → the {@code if (errorToken != null)} guard
-     * at {@code :298} never opened → <b>the GitLab code search never ran against real data</b>,
-     * and no log↔code citation was ever produced. The trace reported this as the innocuous
-     * {@code errorToken=null} while the Sumo search itself was working perfectly and returning
-     * rows, which is why it read as "no errors today" rather than as a defect.
-     *
-     * <p>Falls back to parsing the level out of {@code _raw} when the field is absent: the
-     * field comes from a Sumo field-extraction rule, so a source without that rule configured
-     * would otherwise reopen exactly this hole. The raw line is Spring Boot's default layout,
-     * {@code 2026-08-05 14:26:46.173 ERROR 1 --- [thread] logger : message} — the level is the
-     * first standalone level word in it.
+     * Spring Boot's default console layout, up to the level. {@code %5p} RIGHT-ALIGNS the level
+     * to five characters, so four-character levels (WARN, INFO) carry TWO spaces before them —
+     * hence {@code \s+}, not the single literal space the field report proposed, which hits
+     * ERROR and silently misses everything shorter (J29, correction to the field report).
      */
-    static String level(JsonNode fields, String raw) {
-        String declared = fields.path("_loglevel").asText("");
-        if (!declared.isBlank()) return declared.trim().toUpperCase(java.util.Locale.ROOT);
-        if (raw == null || raw.isBlank()) return "";
+    private static final java.util.regex.Pattern RAW_LEVEL = java.util.regex.Pattern.compile(
+            "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+(ERROR|WARN|INFO|DEBUG|TRACE)\\b");
+
+    /**
+     * J29/LLF-1: resolve a log level, preferring the structured Sumo field and falling back to
+     * scanning {@code _raw}.
+     *
+     * <p>Verified live 2026-08-05: this estate's responses carry no {@code loglevel} key at all,
+     * so every row used to arrive at {@code ""}, the engine's {@code "ERROR".equals(level)} filter
+     * matched nothing, and both GitLab steps skipped on real data.
+     *
+     * <p>The structured field keeps priority: an estate that DOES configure a field-extraction
+     * rule is better served by its own parsed value than by our regex, and must not be regressed
+     * to a guess. {@code ""} means "unreadable" (LLF-2) — never null, never an assumed severity.
+     *
+     * <p>Package-private static so {@link RealSumoGatewayLevelParseTest} can pin it against
+     * captured real rows with no HTTP — the response-side contract test J22 never built.
+     */
+    static String parseLevel(String structured, String raw) {
+        if (structured != null && !structured.isBlank()) return structured;
+        if (raw == null) return "";
         java.util.regex.Matcher m = RAW_LEVEL.matcher(raw);
         return m.find() ? m.group(1) : "";
     }
-
-    /** Standalone level word, as emitted by Spring Boot / Logback default layouts. */
-    private static final java.util.regex.Pattern RAW_LEVEL =
-            java.util.regex.Pattern.compile("\\b(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\b");
 
     /**
      * The timestamp format Sumo's Search Job API accepts: UTC, second precision, no offset
