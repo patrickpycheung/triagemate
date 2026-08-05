@@ -124,6 +124,18 @@ triage:
     #   comments   — "Additional comments", customer-facing
     write-field: work_notes
 
+    # Operator-curated duplicate links, keyed by the incident being triaged.
+    # Search can only find what the instance's text index supports; when a human already
+    # KNOWS two tickets are the same problem, stating it here beats any heuristic. Pins are
+    # additive and rank above search hits, so the triager sees the known duplicate first.
+    #
+    #   similar-incidents:
+    #     INC0010010:
+    #       - INC0010012
+    #
+    # Unset means "no pins" — the same-application search below still runs.
+    similar-incidents: {}
+
   # FND-20: max-results and max-window-minutes are actually read and enforced in
   # TriageMateTools.searchLogs (server-side) — previously max-results was declared here
   # but the code hardcoded 20, and the time window came straight from the model with no

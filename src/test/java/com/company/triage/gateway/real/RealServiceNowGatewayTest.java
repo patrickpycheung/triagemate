@@ -59,7 +59,7 @@ class RealServiceNowGatewayTest {
     void rejectsAnUnrecognisedWriteField() {
         var props = TriagePropertiesFixture.withEngine(TriageProperties.Engine.DETERMINISTIC);
         var badProps = new TriageProperties(props.engine(), props.writeback(), props.orchestrator(),
-                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority"),
+                props.agent(), props.trigger(), new TriageProperties.ServiceNow("priority", java.util.Map.of()),
                 props.sumo(), props.gitlab());
         try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
             var violations = factory.getValidator().validate(badProps);

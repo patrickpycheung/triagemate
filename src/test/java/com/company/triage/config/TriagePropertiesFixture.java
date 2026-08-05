@@ -37,7 +37,7 @@ public final class TriagePropertiesFixture {
                 new TriageProperties.Orchestrator(90000),
                 new TriageProperties.Agent(10),
                 new TriageProperties.Trigger(new TriageProperties.Trigger.Poll(false, 30000, 10, 500, false)),
-                new TriageProperties.ServiceNow("work_notes"),
+                new TriageProperties.ServiceNow("work_notes", java.util.Map.of()),
                 sumo(),
                 new TriageProperties.GitLab(List.of("order-payments/payment-service")));
     }

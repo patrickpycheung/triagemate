@@ -78,7 +78,32 @@ public record TriageProperties(
      * {@code @Pattern} here validates it unconditionally at boot, regardless of which
      * connector mode is active.
      */
-    public record ServiceNow(@Pattern(regexp = "work_notes|comments") String writeField) {}
+    public record ServiceNow(
+            @Pattern(regexp = "work_notes|comments") String writeField,
+            java.util.Map<String, List<String>> similarIncidents
+    ) {
+        /**
+         * Operator-curated "these two tickets are the same problem" links, keyed by the
+         * incident being triaged: {@code triage.servicenow.similar-incidents.INC0010010[0]=INC0010012}.
+         *
+         * <p>Automated similarity is a genuinely hard ranking problem and the search-based
+         * path can only ever find what the instance's own text search supports. When a human
+         * already KNOWS two tickets are duplicates, saying so in config beats any heuristic —
+         * and it is the difference between the triager seeing "we resolved this last week,
+         * close it" and seeing nothing at all. Pins are additive and rank above search hits.
+         *
+         * <p>Null-safe: unset means "no pins", not a null map.
+         */
+        public ServiceNow {
+            similarIncidents = similarIncidents == null ? java.util.Map.of() : similarIncidents;
+        }
+
+        /** Pinned similar-incident numbers for {@code number}, never null. */
+        public List<String> pinsFor(String number) {
+            if (number == null) return List.of();
+            return similarIncidents.getOrDefault(number, List.of());
+        }
+    }
 
     /** {@code triage.sumo.*} — the Sumo Logic bound (FND-20/38, J6/J8). */
     public record Sumo(
