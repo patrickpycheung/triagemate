@@ -67,11 +67,41 @@ class IncidentSignalsTest {
         assertThat(IncidentSignals.from(incident("", "", "")).logQuery()).isEqualTo("error");
     }
 
+    /**
+     * J25/KQR-1 — the knowledge query is the symptom AS WRITTEN plus the affected system,
+     * not a lowercased keyword bag.
+     *
+     * <p>This test previously asserted {@code contains("invoice")} — lowercase — because the
+     * query was assembled from extracted keywords. Measured against the real instance, the
+     * subject line retrieves materially better results than the keyword bag: it found a PRIOR
+     * INCIDENT of the same fault and a use case for the exact scenario, where the keyword bag
+     * returned only generic application documentation. Keyword extraction discards precisely
+     * the connective structure ("not appearing in", "being recorded on") that a
+     * relevance-ranked search uses. The intent of this test is unchanged — symptom plus
+     * system — only the form.
+     */
     @Test
-    void confluenceQueryCombinesSymptomTermsWithTheAffectedSystem() {
+    void confluenceQueryCombinesTheSymptomAsWrittenWithTheAffectedSystem() {
         var q = IncidentSignals.from(incident("Invoice export failing", "ledger batch aborts",
                 "Ledger Export Service")).confluenceQuery();
-        assertThat(q).contains("invoice").contains("Ledger Export Service");
+        assertThat(q).contains("Invoice export failing").contains("Ledger Export Service");
+    }
+
+    /**
+     * J25/KQR-1 + J24/SFF-2 — when the app was INFERRED from the subject line, it is not
+     * appended: doing so would just repeat words already in the query and dilute the ranking.
+     */
+    @Test
+    void anInferredAppIsNotAppendedToTheConfluenceQuery() {
+        var signals = IncidentSignals.from(incident(
+                "Hazards being recorded on handheld are not appearing", "details attached", null));
+
+        assertThat(signals.appWasInferred()).isTrue();
+        var q = signals.confluenceQuery();
+        assertThat(q).isEqualTo("Hazards being recorded on handheld are not appearing");
+        // "Hazards being recorded on" (the inferred app) must not be tacked on a second time.
+        assertThat(q.split("Hazards being recorded on", -1).length - 1)
+                .as("the inferred app duplicates the subject line's own words").isEqualTo(1);
     }
 
     @Test

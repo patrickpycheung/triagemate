@@ -1,6 +1,11 @@
 # J25 — Knowledge Query Relevance (a search the app issues must be a search a human would recognise)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: MEDIUM
+**State**: 🟡 Mostly built (2026-08-05) — **KQR-1** (siteSearch + symptom-as-written) and
+**KQR-3** (pages only) landed and are verified against the REAL AusPost instance with live
+credentials. The root cause turned out to be the CQL OPERATOR, not the query text: `text ~`
+has no relevance ranking, `siteSearch ~` is what backs Confluence's own UI search — which is
+why the reporter's words worked in the UI and not in the app. **Still open**: KQR-2
+(relevance floor before citing) and KQR-4 (failed vs empty) · **Complexity**: Moderate · **Priority**: MEDIUM
 **Depends on**: J6 (knowledge tools), J3 (gateway contracts), J24 (supplies the affected-system term)
 **Amends**: J6 (the Confluence query contract), J2 (`IncidentSignals.confluenceQuery`)
 **Source**: teammate field report — `docs/Siyad_Findings.md` §4 (and §1's log), by **sajids4**

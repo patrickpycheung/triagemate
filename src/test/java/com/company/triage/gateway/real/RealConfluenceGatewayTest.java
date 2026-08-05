@@ -149,4 +149,50 @@ class RealConfluenceGatewayTest {
                 .as("today: indistinguishable from a successful empty search — J25/KQR-4 fixes this")
                 .isEmpty();
     }
+
+    // --- J25/KQR-1,3: the CQL form, pinned offline ---------------------------------------
+
+    /**
+     * THE regression for Siyad's §4. The operator must be {@code siteSearch}, not {@code text}.
+     *
+     * <p>Measured against the real AusPost instance (2026-08-05, INC0010010), scoring the top
+     * 8 titles for Delivery Hazards relevance: every {@code text ~} form scored 0-1/8, every
+     * {@code siteSearch ~} form scored 8/8 — including the SAME noisy query string under both
+     * operators. The words were never the problem. {@code text ~} is a raw content match with
+     * no relevance ranking; {@code siteSearch ~} is what backs Confluence's own UI search,
+     * which is why the reporter could paste the same words into the UI and get useful pages.
+     */
+    @Test
+    void searchUsesSiteSearchNotRawTextMatch() {
+        var f = build();
+        f.server().expect(org.springframework.test.web.client.match.MockRestRequestMatchers
+                        .requestTo(org.hamcrest.Matchers.containsString("siteSearch")))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers
+                        .requestTo(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("text%20~"))))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers
+                        .requestTo(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("text+~"))))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withSuccess("{\"results\":[]}", org.springframework.http.MediaType.APPLICATION_JSON));
+
+        f.gateway().search("hazards not appearing Delivery Hazards");
+
+        f.server().verify();
+    }
+
+    /**
+     * J25/KQR-3 — attachments and database objects are excluded. Three of the five results in
+     * the field report were attachments whose "snippet" is a filename, cited as evidence.
+     */
+    @Test
+    void searchRequestsPagesOnly() {
+        var f = build();
+        f.server().expect(org.springframework.test.web.client.match.MockRestRequestMatchers
+                        .requestTo(org.hamcrest.Matchers.containsString("type")))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withSuccess("{\"results\":[]}", org.springframework.http.MediaType.APPLICATION_JSON));
+
+        f.gateway().search("anything");
+
+        f.server().verify();
+    }
 }

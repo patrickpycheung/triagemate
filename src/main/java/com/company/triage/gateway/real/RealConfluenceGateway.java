@@ -71,7 +71,31 @@ public class RealConfluenceGateway implements ConfluenceGateway {
     public List<KnowledgeDoc> search(String query) {
         log.info("[Confluence] searching pages for: {}", query);
         try {
-            String cql = "text ~ \"" + query.replace("\"", " ") + "\"";
+            // J25/KQR-1 — `siteSearch`, NOT `text`. This is the whole fix for Siyad's §4,
+            // and it is an OPERATOR problem, not a keyword problem.
+            //
+            // Measured against the real AusPost instance on 2026-08-05, incident INC0010010,
+            // scoring the top 8 titles for Delivery Hazards relevance:
+            //
+            //   text ~ "<the app's own query>"         8 results, 0 relevant
+            //   text ~ "Delivery Hazards"              8 results, 0 relevant
+            //   text ~ "Delivery Hazards" type=page    8 results, 0 relevant
+            //   siteSearch ~ "<the SAME app query>"    8 results, 8 relevant
+            //   siteSearch ~ "Delivery Hazards"        8 results, 8 relevant
+            //   siteSearch ~ "<the subject line>"      8 results, 8 relevant
+            //
+            // Note row 4: the identical noisy query that returned nothing useful under `text`
+            // returns entirely relevant results under `siteSearch`. The field report's
+            // conclusion that the query was "not returning relevant results" was right; the
+            // natural inference — that the words were wrong — was not. `text ~` is a raw
+            // content match with no relevance ranking, while `siteSearch ~` is the operator
+            // backing Confluence's own UI search. That is precisely why the reporter could
+            // paste the same words into the UI and get useful pages while the app got a
+            // Teradata data-model appendix.
+            //
+            // `type = page` (KQR-3) drops attachments and database objects: three of the five
+            // results in the field report were attachments whose "snippet" is a filename.
+            String cql = "siteSearch ~ \"" + query.replace("\"", " ") + "\" AND type = page";
             JsonNode resp = http.get()
                     .uri(uri -> uri.path("/wiki/rest/api/content/search")
                             .queryParam("cql", cql)

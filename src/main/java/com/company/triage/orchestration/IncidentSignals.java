@@ -45,6 +45,10 @@ import java.util.regex.Pattern;
 record IncidentSignals(
         String app,
         AppSource appSource,
+        /** The ticket's subject line as written — J25/KQR-1 uses it verbatim for the
+         *  knowledge search, because a relevance-ranked search needs the connective
+         *  structure that keyword extraction throws away. */
+        String symptomText,
         List<String> keywords,
         String primaryIdentifier,
         List<String> identifiers
@@ -138,7 +142,7 @@ record IncidentSignals(
             appSource = notBlank(app) ? AppSource.FROM_SUBJECT_LINE : AppSource.UNKNOWN;
         }
 
-        return new IncidentSignals(app, appSource, extractKeywords(rawText),
+        return new IncidentSignals(app, appSource, symptom, extractKeywords(rawText),
                 ids.isEmpty() ? null : ids.get(0), ids);
     }
 
@@ -172,10 +176,41 @@ record IncidentSignals(
         return List.copyOf(out);
     }
 
-    /** Knowledge search: distinctive symptom terms plus the affected system. */
+    /**
+     * Knowledge search: the symptom AS WRITTEN plus the affected system.
+     *
+     * <p>J25/KQR-1. This used to be the extracted keyword bag plus the app. Measured against
+     * the real instance (2026-08-05, INC0010010), with {@code siteSearch} now doing the
+     * retrieval, the two forms differ in what they surface:
+     *
+     * <ul>
+     *   <li>keyword bag + app → six pages, all generic application documentation;</li>
+     *   <li>subject line + app → the same documentation <b>plus</b>
+     *       {@code "INC2616763 - Hazards captured on handhelds not being saved"} — a PRIOR
+     *       INCIDENT of the same fault — and {@code "UC17.30 Hazards created by handheld for
+     *       facility not setup"}, a use case describing the exact scenario.</li>
+     * </ul>
+     *
+     * <p>A prior incident for the same symptom is the single most useful thing a triage can
+     * put in front of a human, and only the second form finds it. Keyword extraction discards
+     * exactly the connective structure ("not appearing in", "being recorded on") that a
+     * relevance-ranked search uses to tell one hazard page from another.
+     *
+     * <p>The app name is still appended when it came from the CMDB — the subject line does
+     * not always name the affected system — but is skipped when {@code app} was itself
+     * inferred FROM that subject line (J24/SFF-2), where appending it would just duplicate
+     * words already present and dilute the ranking.
+     */
     String confluenceQuery() {
-        String kw = String.join(" ", keywords);
-        return notBlank(app) ? (kw + " " + app).trim() : kw;
+        String symptom = String.join(" ", keywords);
+        if (notBlank(symptomText)) {
+            symptom = symptomText.trim();
+        }
+        if (appSource == AppSource.FROM_CMDB_CI && notBlank(app)
+                && !symptom.toLowerCase(Locale.ROOT).contains(app.toLowerCase(Locale.ROOT))) {
+            return (symptom + " " + app).trim();
+        }
+        return symptom;
     }
 
     /**
