@@ -1,6 +1,11 @@
 # J14 — Fallback Robustness on Real Input
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: HIGH ·
+**State**: 🟡 Partly built (2026-08-05) — **FRI-1** (opened_at parsed tolerantly across the
+display formats ServiceNow actually emits, with a WARN when none match) and **FRI-2** (a
+missing window anchor skips the log search and says so, instead of NPE-ing inside the
+fallback engine) landed in `0dd4005`. J24/SFF-3 also delivered FRI-2's sibling case for an
+unmatched scope. **Still open**: FRI-3 (logger means emitter), FRI-4 (hyphens inside words),
+FRI-5 (per-call connector degradation), FRI-6 (real-shaped fixture corpus) · **Complexity**: Moderate · **Priority**: HIGH ·
 **Depends on**: J2, J3, J5 · **Amends**: J2 (the deterministic engine's FND-63 guarantee),
 J5 (`getIncident`'s field contract), J3 (what a gateway may put in `LogEvidence.logger`)
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 4 confirmed
