@@ -81,27 +81,41 @@ class IncidentSignalsTest {
      * system — only the form.
      */
     @Test
-    void confluenceQueryCombinesTheSymptomAsWrittenWithTheAffectedSystem() {
+    void confluenceQueryIsTheAffectedSystemNameAndNothingElse() {
         var q = IncidentSignals.from(incident("Invoice export failing", "ledger batch aborts",
                 "Ledger Export Service")).confluenceQuery();
-        assertThat(q).contains("Invoice export failing").contains("Ledger Export Service");
+        assertThat(q).isEqualTo("Ledger Export Service");
+        // J27: the symptom is deliberately absent. The query must depend only on WHICH
+        // SYSTEM the ticket names, so the same system always searches the same way.
+        assertThat(q).doesNotContain("Invoice").doesNotContain("ledger batch");
+    }
+
+    /**
+     * J27: the fallback exists so the step is never a guaranteed no-op. A ticket with no CI
+     * and no subject line would otherwise send an empty query.
+     */
+    @Test
+    void fallsBackToTheSymptomWhenNoSystemNameCanBeDerived() {
+        var q = IncidentSignals.from(incident("", "", null)).confluenceQuery();
+        assertThat(q).isNotNull();
     }
 
     /**
      * J25/KQR-1 + J24/SFF-2 — when the app was INFERRED from the subject line, it is not
      * appended: doing so would just repeat words already in the query and dilute the ranking.
      */
+    /**
+     * J27: with no CI, {@code app} is the leading name-like fragment of the subject line
+     * (FND-67), and that fragment IS the query — the rest of the sentence is not appended.
+     */
     @Test
-    void anInferredAppIsNotAppendedToTheConfluenceQuery() {
+    void anInferredAppIsUsedAloneAsTheConfluenceQuery() {
         var signals = IncidentSignals.from(incident(
                 "Hazards being recorded on handheld are not appearing", "details attached", null));
 
         assertThat(signals.appWasInferred()).isTrue();
-        var q = signals.confluenceQuery();
-        assertThat(q).isEqualTo("Hazards being recorded on handheld are not appearing");
-        // "Hazards being recorded on" (the inferred app) must not be tacked on a second time.
-        assertThat(q.split("Hazards being recorded on", -1).length - 1)
-                .as("the inferred app duplicates the subject line's own words").isEqualTo(1);
+        assertThat(signals.confluenceQuery()).isEqualTo(signals.app());
+        assertThat(signals.confluenceQuery()).doesNotContain("not appearing");
     }
 
     @Test

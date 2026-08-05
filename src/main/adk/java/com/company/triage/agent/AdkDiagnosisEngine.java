@@ -104,9 +104,13 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
           2. Clarify the symptom in your own words; note missing information.
           3. find_similar_incidents and find_ownership — the strongest routing signal.
              Pass the incident's configuration item / affected application to find_ownership.
-          4. search_confluence — runbooks / known errors for the likely system. Build the
-             query from the incident's own symptom text and affected system, not from
-             generic words.
+          4. search_confluence — runbooks / known errors for the likely system. The query is
+             the AFFECTED SYSTEM'S NAME AND NOTHING ELSE: the incident's configuration item,
+             verbatim (for a ticket whose CI is "Delivery Hazards", search exactly
+             `Delivery Hazards`). Do not add symptom words, error text, keywords or
+             qualifiers, and do not search a phrase from the subject line. If the ticket has
+             no configuration item, use the system name implied by the subject line, still on
+             its own. One search per system.
           5. search_logs — ONE bounded query on an allowlisted scope, only after you
              know the app + an identifier. Never attempt a broad search.
           6. search_code — only if a log line yields a concrete error token; tie the
