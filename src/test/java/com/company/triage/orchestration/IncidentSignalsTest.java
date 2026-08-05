@@ -140,4 +140,32 @@ class IncidentSignalsTest {
         assertThat(IncidentSignals.rankAllowlist("Ledger Export Service", scopes))
                 .containsExactlyInAnyOrderElementsOf(scopes);
     }
+
+    /**
+     * The production allowlist is {@code [prod]} only, as of 2026-08-05: measured over a
+     * seven-day window, {@code pdev/ptest/stest/vtest} carry zero rows for delivery-hazards
+     * while prod carries 20 (14 at ERROR). A ticket naming one of the empty environments must
+     * therefore NOT be honoured — searching it returns a confident "no logs found" that is
+     * indistinguishable from a real one.
+     *
+     * <p>Uses the production-shaped list deliberately, not {@code TriagePropertiesFixture}'s
+     * broader one: that fixture keeps all five so the allowlist MECHANISM is exercised with
+     * several entries, whereas this pins the operator's data-availability DECISION.
+     */
+    @Test
+    void aTicketNamingAnEnvironmentWithNoDataFallsBackToProdAndSaysSo() {
+        List<String> prodOnly = List.of("prod");
+
+        var stest = IncidentSignals.resolveEnvironment("STest", prodOnly, "prod");
+        assertThat(stest.code()).isEqualTo("prod");
+        assertThat(stest.source())
+                .as("the ticket and the config disagreed — that must be recorded, not hidden")
+                .isEqualTo(IncidentSignals.EnvironmentSource.TICKET_VALUE_NOT_CONFIGURED);
+        assertThat(stest.wasDefaulted()).isTrue();
+
+        // A ticket that genuinely says prod is still read FROM THE TICKET, not defaulted.
+        var prod = IncidentSignals.resolveEnvironment("Production", prodOnly, "prod");
+        assertThat(prod.code()).isEqualTo("prod");
+        assertThat(prod.source()).isEqualTo(IncidentSignals.EnvironmentSource.FROM_TICKET);
+    }
 }

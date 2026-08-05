@@ -1817,3 +1817,52 @@ to `model/SymptomTokens` so `IncidentSignals` and the ranker share one stopword 
   instance is unknown, and "returns an empty list" is the failure mode that hides best.
 
 ---
+
+## FND-85 — `_loglevel` read as `loglevel`: every Sumo row came back with no level · **HIGH** · *field-reported*
+
+**Where**: `src/main/java/com/company/triage/gateway/real/RealSumoGateway.java` (row mapping)
+and `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java:262`.
+
+**Reported by**: the operator — "check why sumo.search() says errorToken=null; is it some kind
+of error?", 2026-08-05.
+
+**What**: the gateway mapped each result row with `f.path("loglevel")`. The field Sumo actually
+returns is **`_loglevel`, with a leading underscore** — verified against the live AU instance,
+where a real row carries `_loglevel = ERROR`. The misspelled key yielded `""` on every row ever
+returned, which is indistinguishable from "this line genuinely has no level".
+
+**Why it matters**: `DeterministicDiagnosisEngine:262` selects the error line with
+`"ERROR".equals(l.level())`. That could never be true, so `errorLine` was always null →
+`errorToken` always null → the `if (errorToken != null)` guard at `:298` never opened → **the
+GitLab code search never ran against real data**, and the log↔code citation (RC3, the
+"this log line is emitted at file:line" evidence) was never produced on a real run.
+
+The failure was invisible because the Sumo search itself worked perfectly. The trace printed
+`→ 20 line(s); errorToken=null`, which reads as "we searched, found logs, and there were no
+errors today" — a plausible, healthy-looking sentence. Nothing distinguished it from the real
+state: "we found 14 ERROR rows and threw the level away".
+
+Measured on `delivery-hazards/prod`, 24h window, 2026-08-05:
+
+| | before | after |
+|---|---|---|
+| rows returned | 20 | 20 |
+| rows at level ERROR | **0** | **14** |
+| derived `errorToken` | `null` | **`GNAF_FRONTAGE`** |
+
+**Fix**: read `_loglevel`, and fall back to parsing the level out of `_raw` (Spring Boot's
+default layout) when the field is absent — the field comes from a Sumo field-extraction rule,
+so a source without that rule configured would otherwise reopen the identical hole.
+
+- **Resolution**: fixed (2026-08-05) — `RealSumoGateway.level(...)` extracted and unit-tested
+  against a verbatim live row (`RealSumoGatewayLevelTest`), plus a live assertion
+  (`RealSumoGatewayLiveTest.errorRowsComeBackWithTheirLevelParsed`).
+- **Escape**: integration-fidelity — no test ever asserted the SHAPE of a real Sumo response.
+  `RealSumoGatewayLiveTest` called the live API and asserted only that rows came back and that
+  `logger` matched the requested scope; it never looked at `level`, the one field the engine
+  actually branches on. A connector test that asserts "we got rows" while ignoring the field
+  the caller depends on will pass through any field-name drift. Same family as FND-84's
+  mock-only blind spot, one layer up: there the request was never asserted, here the response
+  was never asserted.
+
+---
