@@ -1,6 +1,8 @@
 package com.company.triage.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -78,7 +80,40 @@ public record TriageProperties(
      * {@code @Pattern} here validates it unconditionally at boot, regardless of which
      * connector mode is active.
      */
-    public record ServiceNow(@Pattern(regexp = "work_notes|comments") String writeField) {}
+    public record ServiceNow(
+            @Pattern(regexp = "work_notes|comments") String writeField,
+            /**
+             * J26: incident {@code state} values that count as "resolved" for the
+             * similar-incident search, as an encoded-query {@code IN} list. Out-of-the-box
+             * ServiceNow is {@code 6} (Resolved) and {@code 7} (Closed), which is the default
+             * — but these are configurable per instance, and this was previously the literal
+             * {@code stateIN6,7} baked into the query. On an instance with customised states
+             * that hardcoding returns zero rows for every incident, with nothing in the trace
+             * to say why.
+             */
+            String resolvedStates,
+            /**
+             * J26: minimum similarity ({@code 0..1}) a candidate must score to be reported.
+             * The default admits a same-CI match on its own — see
+             * {@link com.company.triage.gateway.SimilarIncidentRanker} for the weights.
+             */
+            @DecimalMin("0.0") @DecimalMax("1.0") double similarityFloor,
+            /** J26: how many ranked similar incidents to report at most. */
+            @Min(1) int maxSimilar
+    ) {
+        /**
+         * Defaults applied here rather than only in {@code application.yml} so a partial
+         * override (or a test fixture constructing this directly) cannot silently produce
+         * {@code resolvedStates=null} → a malformed encoded query, or {@code maxSimilar=0} →
+         * a search that always reports nothing. Both of those are the FND-57 shape: a config
+         * fault that presents as an empty result rather than as an error.
+         */
+        public ServiceNow {
+            if (resolvedStates == null || resolvedStates.isBlank()) resolvedStates = "6,7";
+            if (similarityFloor <= 0.0) similarityFloor = 0.25;
+            if (maxSimilar <= 0) maxSimilar = 5;
+        }
+    }
 
     /** {@code triage.sumo.*} — the Sumo Logic bound (FND-20/38, J6/J8). */
     public record Sumo(
