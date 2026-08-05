@@ -24,7 +24,7 @@ class DiagnosisReportValidatorTest {
         return new DiagnosisReport("INC0010005", OffsetDateTime.now(), "symptom", "function",
                 "Production", new Identifiers("id", null, "id"), candidates,
                 assignment, evidence, List.of(), List.of(), List.of(),
-                "next action", Confidence.MEDIUM, true);
+                "next action", Confidence.MEDIUM, true, null, null);
     }
 
     @Test

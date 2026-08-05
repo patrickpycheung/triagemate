@@ -1,5 +1,26 @@
 # Concepts Extracted — ServiceNow Technical Triage Assistant
 
+> ## ⏸️ SUPERSEDED 2026-07-23 — Rovo-native direction abandoned
+>
+> This handoff describes the **Rovo/Forge** architecture, which was replaced by the Spring
+> Boot + Google ADK app. See [`PIVOT.md`](../../../../PIVOT.md) and
+> [`docs/design-java/STATUS.md`](../../../design-java/STATUS.md); the successor discovery is
+> [`servicenow-triage-java`](../../servicenow-triage-java/). The Rovo prototype is archived
+> under [`docs/archive/`](../../../archive/README-forge-rovo.md).
+>
+> **Three decisions below are superseded and must not be actioned:**
+>
+> - **RC4 "chat-invoked demo (LOCKED)"** → the trigger is now the K1 poller (J10), with the
+>   manual UI/API call as the K3 fallback. There is no Rovo chat invocation.
+> - **RC5 "post-worknote with human confirm"** → the confirm gate was **removed** on
+>   2026-07-23; the app now writes **two advisory comments automatically** (J5).
+> - **RC2 "Sumo mocked, Confluence native, no connector"** → J6 ships a real Confluence CQL
+>   connector and a real bounded Sumo connector, both switchable mock/real per connector.
+>
+> Retained for the reasoning that led here — the problem framing and evidence model carried
+> over to the Java design largely intact. `/doc-test dds` flagged that only `STATUS.md`
+> recorded this supersession while the handoff itself read as current.
+
 **Handoff to CDS.** WHAT to design, not HOW. Prototype scope: hackathon demo wow + ease of build.
 **Direction (post Round-2 redirect): Rovo-native, AI-first.** The AI agent lives in Atlassian Rovo and is the star; its own LLM does the reasoning. The standalone app is now the documented alternative.
 

@@ -54,6 +54,7 @@ public final class DiagnosisReportValidator {
 
         duplicateEvidenceIds(report, problems);
         uncitedCandidates(report, problems);
+        causeAndResolutionIntegrity(report, knownIds, problems);
 
         if (!problems.isEmpty()) {
             throw new DiagnosisReportInvalidException(report.incidentNumber(), problems);
@@ -111,6 +112,90 @@ public final class DiagnosisReportValidator {
                         + "conclusion must tie to at least one evidenceRef (J4 Rules)");
             }
         }
+    }
+
+    /**
+     * J28 — CR-6, CR-7, CR-8.
+     *
+     * <p><b>Every rule here fires only on a POSITIVE claim.</b> A report with
+     * {@code likelyCause == null} and {@code likelyResolution == null} passes all three
+     * untouched. That is deliberate and load-bearing: abstention is the expected output much
+     * of the time, so a rule that punished it would force the very fabrication J28 exists to
+     * prevent — and, on the ADK path where validation currently runs outside the retry, every
+     * new hard rule is otherwise a new way to degrade mid-demo.
+     */
+    private static void causeAndResolutionIntegrity(
+            DiagnosisReport report, Set<String> knownIds, List<String> problems) {
+
+        LikelyCause cause = report.likelyCause();
+        if (cause != null) {
+            danglingRefs(List.of(refEntry("likelyCause", cause.evidenceRefs())), knownIds, problems);
+
+            // CR-6 — basis↔source agreement. evidenceRefs prove TRACEABILITY, not SUPPORT:
+            // a cause claiming PRIOR_RESOLUTION while citing only a log line satisfies every
+            // pre-J28 check. This is the rule that catches a citation of the wrong KIND.
+            if (cause.basis() != null && cause.evidenceRefs() != null && !cause.evidenceRefs().isEmpty()) {
+                String required = cause.basis().requiredEvidenceSource();
+                boolean anyMatches = (report.evidence() == null ? List.<Evidence>of() : report.evidence())
+                        .stream()
+                        .filter(e -> e != null && cause.evidenceRefs().contains(e.id()))
+                        .anyMatch(e -> required.equals(e.source()));
+                if (!anyMatches) {
+                    problems.add("likelyCause declares basis " + cause.basis() + " but cites no '"
+                            + required + "' evidence — a citation of the wrong kind is not support");
+                }
+            }
+
+            // CR-8 — quote fidelity. quotedFinding must actually appear in some cited
+            // evidence, so invention is MECHANICALLY detectable rather than discouraged.
+            if (cause.quotedFinding() != null && !cause.quotedFinding().isBlank()) {
+                String quote = normalise(cause.quotedFinding());
+                boolean grounded = (report.evidence() == null ? List.<Evidence>of() : report.evidence())
+                        .stream()
+                        .filter(e -> e != null && cause.evidenceRefs() != null
+                                && cause.evidenceRefs().contains(e.id()))
+                        .anyMatch(e -> e.summary() != null && normalise(e.summary()).contains(quote));
+                if (!grounded) {
+                    problems.add("likelyCause.quotedFinding does not appear in any evidence it cites "
+                            + "— a quotation must be quotable (J28 CR-8)");
+                }
+            }
+
+            // CR-7 — MEDIUM ceiling. LikelyCause carries no confidence of its own; the
+            // constraint is on the REPORT's confidence. Analogical transfer from a past
+            // ticket is never HIGH, however good the match looked.
+            if (report.confidenceOverall() == Confidence.HIGH) {
+                problems.add("confidenceOverall is HIGH on a report whose cause is analogical "
+                        + "(likelyCause present) — cap is MEDIUM (J28 CR-7)");
+            }
+
+            if (cause.consideredCount() < cause.supportingCount()) {
+                problems.add("likelyCause.supportingCount (" + cause.supportingCount()
+                        + ") exceeds consideredCount (" + cause.consideredCount() + ")");
+            }
+        }
+
+        LikelyResolution res = report.likelyResolution();
+        if (res != null) {
+            checkStep(res.mitigation(), "mitigation", knownIds, problems);
+            checkStep(res.permanentFix(), "permanentFix", knownIds, problems);
+        }
+    }
+
+    private static void checkStep(ResolutionStep step, String label,
+                                  Set<String> knownIds, List<String> problems) {
+        if (step == null) return;
+        danglingRefs(List.of(refEntry("likelyResolution." + label, step.evidenceRefs())),
+                knownIds, problems);
+        if (step.verb() == null) {
+            problems.add("likelyResolution." + label + " has no verb — the closed vocabulary "
+                    + "is the safety boundary (J28 PGC-3)");
+        }
+    }
+
+    /** Whitespace-insensitive containment, so a re-wrapped quote still matches its source. */
+    private static String normalise(String s) {
+        return s.replaceAll("\\s+", " ").trim();
     }
 
     private record RefEntry(String owner, List<String> refs) {}

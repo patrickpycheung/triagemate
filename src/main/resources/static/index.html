@@ -1351,6 +1351,39 @@ function render(data) {
   // from the report, regardless of whether writeback actually ran — with
   // triage.writeback.enabled=false the audience was told comments were posted when
   // none were. data.writebackPosted is set by DiagnosisOrchestrator AFTER the write
+  // J28/PGC-6 — this block is a hand-written mirror of DiagnosisReport#toDiagnosisNote(),
+  // under a heading that says "Posted to ServiceNow". It reconstructs the note client-side
+  // rather than rendering the posted text, so anything added to the note and not added HERE
+  // makes the UI assert a note body that differs from what was actually written to the
+  // ticket — a J23-class honesty defect that no server-side test would catch.
+  // DiagnosisReportNoteTest asserts the labels below stay in step with the Java.
+  const causeLine = (r) => {
+    if (!r.likelyCause) {
+      const considered = (r.evidence || []).filter(e => (e.id || '').startsWith('e-sim-')).length;
+      const tail = considered
+        ? `0 of ${considered} similar resolved incidents recorded what was wrong.`
+        : 'no similar resolved incidents were found.';
+      return `<p style="margin:0 0 5px"><b>Why this may be happening:</b> <i>not established
+        — ${tail}</i></p>`;
+    }
+    const c = r.likelyCause;
+    return `<p style="margin:0 0 5px"><b>Why this may be happening:</b>
+      ${esc((c.citedArtifacts || []).join(', '))} was closed with this note —
+      &ldquo;${esc(c.quotedFinding)}&rdquo;
+      <span style="color:var(--muted)">Based on ${c.supportingCount} of ${c.consideredCount}
+      similar resolved incidents.</span></p>`;
+  };
+  // Closed-vocabulary values only (close_code + our verb enum) — no gathered free text
+  // reaches this section, which is the point of PGC-1a.
+  const resolutionLines = (r) => {
+    const lr = r.likelyResolution;
+    if (!lr || (!lr.mitigation && !lr.permanentFix)) return '';
+    const step = (label, s) => s
+      ? `<li>${label} — ${esc(s.citedArtifact)}, closed as: ${esc(s.resolutionCode)}</li>` : '';
+    return `<p style="margin:0 0 5px"><b>How similar incidents were resolved:</b></p>
+      <ul style="margin:0 0 5px;padding-left:18px">${step('Mitigation', lr.mitigation)}${step('Permanent fix', lr.permanentFix)}</ul>`;
+  };
+
   // decision, the only place that actually knows.
   const writebackCard = data.writebackPosted ? `
     <div class="card"><h2>Posted to ServiceNow — automatically</h2>
@@ -1360,6 +1393,7 @@ function render(data) {
         <p style="margin:0 0 5px"><b>What happened:</b> ${esc(r.reportedSymptom)}</p>
         <p style="margin:0 0 5px"><b>Likely system:</b> ${esc((r.candidateSystems[0]||{}).name||'—')} &nbsp; <b>Likely team:</b> ${esc(r.suggestedAssignment.group)} (${esc(r.suggestedAssignment.confidence)})</p>
         <p style="margin:0 0 5px"><b>Next check:</b> ${esc(r.recommendedNextAction)}</p>
+        ${causeLine(r)}${resolutionLines(r)}
         <p class="advisory" style="margin:0">Advisory only — no reassignment or changes made. The assigned engineer decides.</p></div>
     </div>` : `
     <div class="card"><h2>ServiceNow write-back — NOT posted</h2>

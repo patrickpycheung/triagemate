@@ -139,7 +139,7 @@ class PromptInjectionGuardrailTest {
                 List.of(payload),                            // and in contradictingEvidence
                 List.of(),
                 payload,                                      // and in recommendedNextAction
-                Confidence.MEDIUM, true);
+                Confidence.MEDIUM, true, null, null);
     }
 
     /** Records the work notes posted, in order — mirrors DiagnosisOrchestratorTest's fixture. */

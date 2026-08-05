@@ -30,7 +30,7 @@ class DiagnosisReportNoteTest {
                                 "last committed payment_service.py",
                                 "https://gitlab.example.com/y", "recent")),
                 List.of(), List.of("user id"),
-                "Check payment_service.reconcile()", Confidence.MEDIUM, true);
+                "Check payment_service.reconcile()", Confidence.MEDIUM, true, null, null);
     }
 
     /**
