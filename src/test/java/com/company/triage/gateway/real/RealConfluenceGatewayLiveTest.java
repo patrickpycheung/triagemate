@@ -135,4 +135,25 @@ class RealConfluenceGatewayLiveTest {
                 .as("an empty list here means the blanket catch swallowed a 404 (see J25/KQR-4)")
                 .isNotEmpty();
     }
+
+    /**
+     * J27, end to end: the query the engine now actually sends for INC0010010 is the CI name
+     * alone, and that alone must retrieve real Delivery Hazards pages from the live instance.
+     *
+     * <p>This is the assertion the operator asked for directly — not "a well-formed request
+     * went out" but "the system name on its own comes back with content". Measured
+     * 2026-08-05: five pages, all Delivery Hazards reference documentation.
+     */
+    @Test
+    @EnabledIf("credentialsPresent")
+    void theSystemNameAloneRetrievesThatSystemsPages() {
+        List<KnowledgeDoc> docs = gateway().search("Delivery Hazards");
+
+        assertThat(docs).as("the name-only query must return content, not an empty list")
+                .isNotEmpty();
+        assertThat(docs).allSatisfy(d -> assertThat(d.title().toLowerCase())
+                .as("every result should concern the named system — got: %s",
+                        docs.stream().map(KnowledgeDoc::title).toList())
+                .contains("hazard"));
+    }
 }

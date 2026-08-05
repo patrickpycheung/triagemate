@@ -162,40 +162,53 @@ record IncidentSignals(
     }
 
     /**
-     * Knowledge search: the symptom AS WRITTEN plus the affected system.
+     * Knowledge search: <b>the affected system's name, and nothing else</b> (J27).
      *
-     * <p>J25/KQR-1. This used to be the extracted keyword bag plus the app. Measured against
-     * the real instance (2026-08-05, INC0010010), with {@code siteSearch} now doing the
-     * retrieval, the two forms differ in what they surface:
+     * <p>The query for INC0010010 is exactly {@code "Delivery Hazards"} — the CI the ticket
+     * points at — not the subject line, not the keyword bag, not a combination.
+     *
+     * <p><b>What this replaced, and what it costs.</b> J25/KQR-1 sent the subject line plus
+     * the app. Both forms retrieve five relevant Delivery Hazards pages against the live
+     * instance, so this is not a fix for an empty or irrelevant result — {@code siteSearch}
+     * (KQR-1) already solved that, and it solved it for noisy queries too. Re-measured
+     * 2026-08-05 on the real instance, the two forms differ in WHICH five:
      *
      * <ul>
-     *   <li>keyword bag + app → six pages, all generic application documentation;</li>
-     *   <li>subject line + app → the same documentation <b>plus</b>
+     *   <li>{@code "Delivery Hazards"} → Delivery Hazards; - System Health Check; - Database;
+     *       - Continuous Integration; - End-to-End PVT. Uniformly the system's <i>reference</i>
+     *       documentation.</li>
+     *   <li>subject line + app → - About the application; - Application Design; - Database;
+     *       Delivery Hazards; and
      *       {@code "INC2616763 - Hazards captured on handhelds not being saved"} — a PRIOR
-     *       INCIDENT of the same fault — and {@code "UC17.30 Hazards created by handheld for
-     *       facility not setup"}, a use case describing the exact scenario.</li>
+     *       INCIDENT of this exact fault.</li>
      * </ul>
      *
-     * <p>A prior incident for the same symptom is the single most useful thing a triage can
-     * put in front of a human, and only the second form finds it. Keyword extraction discards
-     * exactly the connective structure ("not appearing in", "being recorded on") that a
-     * relevance-ranked search uses to tell one hazard page from another.
+     * <p>The name-only form does not surface that prior-incident page: with no symptom terms
+     * in the query there is nothing for relevance ranking to prefer it by, so five slots go to
+     * the system's most central pages instead. That page is the single most useful thing a
+     * triage can put in front of a human, and J25 was written specifically to find it.
      *
-     * <p>The app name is still appended when it came from the CMDB — the subject line does
-     * not always name the affected system — but is skipped when {@code app} was itself
-     * inferred FROM that subject line (J24/SFF-2), where appending it would just duplicate
-     * words already present and dilute the ranking.
+     * <p>This is a deliberate operator decision (2026-08-05) accepting that trade for a
+     * predictable, explainable query — one whose result set depends only on which system the
+     * ticket names. Recorded here rather than silently reversing J25's rationale, so the cost
+     * stays visible and the earlier measurement is not read as having been wrong. If the prior
+     * incident matters more than the predictability, the lever is this method alone.
+     *
+     * <p>Note the redundancy this creates with the similar-incident search (J26/FND-84), which
+     * now retrieves prior incidents on the same CI directly from ServiceNow. That path covers
+     * resolved TICKETS; the Confluence page above is a written-up incident REPORT, and only
+     * the knowledge search can reach it.
      */
     String confluenceQuery() {
-        String symptom = String.join(" ", keywords);
-        if (notBlank(symptomText)) {
-            symptom = symptomText.trim();
-        }
-        if (appSource == AppSource.FROM_CMDB_CI && notBlank(app)
-                && !symptom.toLowerCase(Locale.ROOT).contains(app.toLowerCase(Locale.ROOT))) {
-            return (symptom + " " + app).trim();
-        }
-        return symptom;
+        // J27: the system name, and nothing else, whenever we actually have one.
+        if (notBlank(app)) return app.trim();
+
+        // No CI and no usable subject line to derive a name from. Sending an empty query
+        // would make the search a guaranteed no-op, so fall back to the symptom rather than
+        // skip the step — an unfocused search still beats no search, and the report's
+        // existing provenance line already says the app was inferred (J24/SFF-2).
+        if (notBlank(symptomText)) return symptomText.trim();
+        return String.join(" ", keywords);
     }
 
     /**

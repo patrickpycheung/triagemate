@@ -123,11 +123,12 @@ class DeterministicDiagnosisEngineTest {
 
         engineWithSpy.diagnose("INC0010005");
 
-        // Derived from the seeded incident's own shortDescription + configurationItem —
-        // not the old hardcoded literal, which contained none of these terms.
+        // J27: the query is the seeded incident's own configurationItem, alone. The property
+        // this test was filed for (FND-59) is unchanged — the query is DERIVED from the
+        // incident rather than being a fixed literal — only its form narrowed from
+        // "shortDescription + configurationItem" to the system name on its own.
         assertThat(captured.get())
-                .contains("checkout")          // from shortDescription
-                .contains("Order Portal")      // from configurationItem
+                .isEqualTo("Order Portal")                         // from configurationItem
                 .doesNotContain("reconcile", "discount", "500");   // the old fixed literal's terms
     }
 
