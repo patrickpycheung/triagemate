@@ -1,6 +1,24 @@
 # Found issues
 
-**Backlog: 0 open.** FND-70…FND-83 were all resolved on 2026-08-05 and moved to
+**Backlog: 0 open.** FND-84a/85a/85/86 were all resolved on 2026-08-05 and moved to
+[`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md).
+
+All four came out of the `cause-and-resolution-sections` DDS. Two (**FND-84a/85a**) turned
+out to be duplicates: `worktree-hack-111` found and **fixed** the same similarity defect
+concurrently, from the opposite direction — a live run reporting "Find Similar Incidents
+always returns zero hits", against a design exploration reading the query construction.
+Neither worktree could see the other; hack-111's merge to develop landed mid-run. The other
+two were novel and are fixed: **FND-85** (`fixed:a867de0`, a raw NUL byte that made `grep`
+silently skip the largest orchestration file) and **FND-86** (`fixed:14fa031`, FND-67's
+self-poisoning still live on the ADK path — carded as **J27**).
+
+**All four share one escape layer: `mock-fidelity`.** The mock supplies a realistic `0.91`,
+hand-tuned matching incidents, and writes notes to the log so no journal accumulates — so
+every one of these defects is unreachable from `mvn test` and from the demo, and only exists
+against a real instance. That is not four independent mistakes; it is one missing verification
+layer, and it predicts more of the same shape are still unfound. **Retro input.**
+
+**Previously resolved.** FND-70…FND-83 were all resolved on 2026-08-05 and moved to
 [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md) with a
 **Resolution** and an **Escape** line each. Thirteen came from that day's whole-application
 review (8-dimension multi-agent sweep + adversarial verification, cross-checked against

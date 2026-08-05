@@ -1,5 +1,163 @@
 # Found-issues archive
 
+---
+
+# Fixed 2026-08-05 — `worktree-hack-222`, from the `cause-and-resolution-sections` DDS
+
+Both found by a design exploration rather than by a test or a live run, which is the
+point: neither is reachable from the mock profile, and one of them was actively
+corrupting the exploration that found it.
+
+## FND-85 — a non-UTF-8 byte in `DeterministicDiagnosisEngine.java` makes plain `grep` silently skip the file · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java`
+(`file` reports `data`, not `Java source`); the byte is in the trace string near `:163`.
+
+**What**: because GNU `grep` classifies the file as binary, a repo-wide
+`grep -rn "<symbol>" src/` **omits every match in the largest orchestration file in the
+project** and exits 0 with no warning. `grep -a` finds them.
+
+**Why it matters**: this is a silent-wrong-answer hazard for exactly the audit workflows
+this repo relies on. It produced two demonstrated wrong conclusions in a single DDS
+session: a repo-wide grep for `resolutionCode`/`resolutionNotes` returned only the record
+declarations, leading both an exploration agent and the orchestrator to independently
+conclude "nothing reads these fields" — when `resolutionCode` is read at `:160`. Any
+dead-code sweep, rename, or impact analysis run against this repo is unsound until it is
+fixed. Fix is trivial (replace the byte with its ASCII equivalent); the value is in
+removing the trap. Found during DDS `cause-and-resolution-sections`.
+
+- **Resolution**: fixed:a867de0 — raw NUL replaced with the Java escape `\0`, which
+  compiles to the identical string, plus `SourceEncodingHygieneTest` (scoped to text
+  sources; binary resources contain NUL bytes by nature and grep is right to skip those).
+  Fails-before verified by reintroducing the byte: the guard named offset 47891, line 738.
+- **Escape**: tooling-trust — no check asserted that the repo's own source is searchable.
+  Every audit workflow here (dead-code sweeps, rename impact, `/found-issues-resolve`
+  itself) assumes grep is complete, and grep failed silently with exit 0. The guard now
+  makes that assumption enforced rather than hoped for.
+
+## FND-86 — FND-67 self-poisoning is only fixed on the deterministic path; the ADK path still feeds on its own notes · **HIGH**
+
+**Where**: `src/main/adk/java/com/company/triage/agent/TriageMateTools.java:76-77`
+(`getIncident()` returns the raw `IncidentContext`), vs the only two filter call sites,
+`src/main/java/com/company/triage/orchestration/IncidentSignals.java:101` and
+`MentionedPeople.java:197` — both deterministic-path helpers.
+
+**What**: FND-67 (documented in `DiagnosisReport.AI_NOTE_PREFIX`'s javadoc) is the bug
+where a second diagnosis of the same incident read the first one's work notes as ordinary
+human conversation and drifted. The fix was `isAiAuthoredNote`, applied at two
+deterministic-path call sites. The ADK path was never covered:
+
+1. `IncidentContext` carries `comments` and `workNotes` (`IncidentContext.java:17-18`).
+2. `TriageMateTools.getIncident()` hands that record to the model **unfiltered** — contrast
+   `findOwnership` (`:89-95`), which projects to a `Map` and deliberately drops fields.
+3. `AdkDiagnosisEngine.instruction()` (`:102`) *directs* the model to read "conversation
+   (comments / work notes): the caller's own follow-ups often…".
+4. `grep -arn isAiAuthoredNote src/main/` returns no hit anywhere under `src/main/adk/`.
+
+So with `triage.engine=adk` against a real instance, run 2 sees run 1's `[AI Triage · …]`
+notes as ticket conversation — the exact condition FND-67 documents, on the path the demo
+calls "the real thing working".
+
+**Why it matters**: it is a regression of an already-diagnosed bug, live on the flagship
+path, and it is invisible in the mock profile (mock notes go to the log, so no journal
+accumulates to re-read). It also compounds badly with any future cause/resolution section:
+today the drift is in keywords and contact names, but an *assertive* cause statement would
+make run 1's hedged hypothesis into run 2's corroborating "human" evidence and run 3's
+stated cause — a circular evidence chain that `evidenceRefs` validation cannot detect,
+because every link is a genuine, correctly-cited artifact.
+
+The fix belongs at the tool boundary (filter in `TriageMateTools`, not in the prompt), so
+that it holds regardless of what the model chooses to do — the same "enforce at the
+boundary, don't ask the model nicely" thesis as J18. Found during DDS
+`cause-and-resolution-sections`; verified independently by the orchestrator.
+
+- **Resolution**: fixed:14fa031 — `IncidentContext.withoutAiAuthoredNotes()` applied in
+  `TriageMateTools.getIncident()`, i.e. at the tool boundary rather than in the prompt,
+  so the guarantee holds however the model behaves. Carded as **J27**
+  (`docs/design-java/concepts/J27-adk-journal-filter/`). Regression:
+  `TriageMateToolsJournalFilterTest` (adk profile) + `IncidentContextAiNoteFilterTest`;
+  fails-before verified by reverting the one-line call (2 failures). Both profiles green,
+  266 tests.
+- **Escape**: mock-fidelity — the mock profile writes notes to the log, so no journal ever
+  accumulates to be re-read and the bug is unreachable in `mvn test` and in the demo. The
+  original FND-67 fix was also verified only on the deterministic path, so 'fixed' was
+  recorded for a bug that was half-fixed. Same escape layer as FND-84/84a/85a.
+
+
+---
+
+# Duplicates of `develop`'s FND-84 — filed independently by `worktree-hack-222`, 2026-08-05
+
+Both entries below were filed from the `cause-and-resolution-sections` DDS in
+`worktree-hack-222`, at the same time as `worktree-hack-111` was independently finding and
+**fixing** the same underlying defect from the opposite direction: hack-111 from a live run
+("Find Similar Incidents always returns zero hits"), hack-222 from reading the query
+construction during a design exploration. Neither worktree could see the other — the
+session-start `wt-looker` digest showed hack-111 with zero commits ahead and no in-flight
+status, and its merge to develop landed mid-run.
+
+They are recorded rather than discarded because the *convergence* is the finding: the same
+defect was reachable from a live symptom and from a static read within hours of each other,
+and the two descriptions cover different faces of it (hack-111 identified the unused
+`cmdb_ci` and the hardcoded `stateIN6,7`; hack-222 identified that the mock profile
+structurally conceals the whole class).
+
+- **Resolution**: duplicate:FND-84 (fixed on develop — `SimilarIncidentRanker`,
+  `SymptomTokens`, config-driven `resolved-states`/`similarity-floor`/`max-similar`).
+  Verified fixed post-merge: the hardcoded `0.5` is gone and `SimilarIncidentRanker.rank()`
+  computes a real score.
+- **Escape**: mock-fidelity — no test exercises the real gateway's *data quality*. The mock
+  supplies a realistic `0.91` and hand-tuned matching incidents, so every defect in this
+  class is invisible to `mvn test` and to the demo. Identical escape layer to FND-85/FND-86
+  in the same batch; three of four found-issues from this DDS share it.
+
+## FND-84a (dup) — every similar-incident line reports a fabricated "% similar" against real data · **HIGH**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java:158-161`
+renders `r.similarity() * 100`; `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:140`
+supplies that value as the literal `0.5` for every row.
+
+**What**: the real gateway hardcodes `similarity = 0.5` on every `ResolvedIncident` it
+returns — there is no similarity computation in production at all. The deterministic
+engine formats it as a percentage into an `Evidence` summary, so against a live instance
+**every** similar-incident line reads:
+
+```
+INC0011455 (50% similar) resolved by Payments Platform Support: Resolved - Known Error
+```
+
+That evidence line is posted to the real ticket in the "Sources consulted" work note.
+
+**Why it matters**: it is a fabricated statistic presented as a computed match score, on
+a customer-retained incident record, by a system whose entire pitch is that every claim
+is auditable and one click from its evidence. A reader has no way to tell that the number
+is a constant — and "50%" reads as a real, if weak, computed match. `MockServiceNowGateway.java:101`
+supplies a genuine-looking `0.91`, so the demo path never shows the problem: the defect is
+invisible from the stage and only appears against live data. Minimum fix: suppress the
+percentage when the value is the sentinel. Real fix: compute a similarity, or stop
+claiming one. Found during DDS `cause-and-resolution-sections`.
+
+## FND-85a (dup) — `findSimilarIncidents` matches on the first word of the description only · **HIGH**
+
+**Where**: `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:129-142`
+and `:314-316`.
+
+**What**: `firstKeyword(s)` returns `s.split("\\s+")[0]` — the first whitespace-delimited
+token — and the query is `stateIN6,7^short_descriptionLIKE<that token>`. For the
+project's own canonical example, *"User receives HTTP 403 when submitting an order"*, the
+production query is `short_descriptionLIKE User`. Incident short descriptions
+overwhelmingly begin with "User", "Unable", "Cannot", "Users", "Error", so on a real queue
+the filter is close to a no-op. The method's own comment concedes `// Naive keyword match`.
+
+**Why it matters**: "similar past incidents" is load-bearing evidence — it drives the
+`e-sim-*` evidence rows and the assignment-group suggestion, and it is the natural source
+for any future cause/resolution section. Returning near-arbitrary resolved tickets while
+labelling them "similar" (see FND-84) lends borrowed credibility to noise. Compounding:
+the mock returns hand-tuned genuinely-similar incidents, so this is another defect the
+demo structurally cannot reveal. Found during DDS `cause-and-resolution-sections`.
+
+
+
 Append-only record of resolved `FND-*` entries from `/FOUND-ISSUES.md`, newest first.
 
 Each entry keeps its original text plus two lines added at resolution time:

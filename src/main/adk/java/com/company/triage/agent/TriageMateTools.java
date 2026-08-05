@@ -74,7 +74,12 @@ public final class TriageMateTools {
             description = "Fetch the full context of the incident under investigation. Takes no arguments "
                     + "— it always returns the one incident this run is diagnosing.")
     public static IncidentContext getIncident() {
-        return serviceNow.getIncident(CURRENT_INCIDENT.get());
+        // J27/FND-86: strip this app's own advisory notes before the model ever sees them.
+        // The instruction below tells the agent to read the ticket conversation, so without
+        // this a re-diagnosis consumes its OWN prior notes as human conversation — FND-67,
+        // which was only ever closed on the deterministic path. Filtered here at the tool
+        // boundary rather than in the prompt so it holds however the model behaves.
+        return serviceNow.getIncident(CURRENT_INCIDENT.get()).withoutAiAuthoredNotes();
     }
 
     @Schema(name = "find_similar_incidents",

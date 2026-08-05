@@ -735,7 +735,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     }
 
     private static String firstDocId(List<KnowledgeDoc> docs) {
-        return docs.isEmpty() ? " none" : docs.get(0).id();
+        return docs.isEmpty() ? "\0none" : docs.get(0).id();
     }
 
     private static String joinNonBlank(String sep, String... parts) {
