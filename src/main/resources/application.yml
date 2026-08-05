@@ -45,7 +45,7 @@ triage:
     # Friendly hostname the startup banner offers alongside localhost. Display only —
     # the app never binds to it. It resolves to 127.0.0.1 via the machine's hosts file,
     # which bin/setup-custom-domain.sh sets up. Blank hides the line.
-    public-hostname: triagemate.auspost.local
+    public-hostname: triagemate.auspost.com.au
 
   # Per-connector data source: mock (offline demo data) or real (live system).
   # Mix freely — e.g. servicenow=real writes the two advisory comments to a REAL dev
