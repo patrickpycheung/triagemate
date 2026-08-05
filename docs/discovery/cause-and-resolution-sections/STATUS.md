@@ -31,11 +31,26 @@ guideline, and two `exploration.md` run 3074/3254 against 3000. The overage is c
 and verbatim example strings — the load-bearing content of the prior-art and user-centric
 explorations. Trimming would remove evidence, not padding.
 
-## Defects surfaced (filed to `/FOUND-ISSUES.md`, backlog 0 → 4)
+## Defects surfaced — all four now resolved (backlog 0 → 4 → 0)
 
-FND-84 (fake "50% similar" on real tickets) · FND-85 (first-word matching) · FND-86
-(non-UTF-8 byte breaks `grep`) · FND-87 (FND-67 self-poisoning unfixed on the ADK path).
-Three of four are invisible to the mock profile — that clustering is itself the finding.
+| Filed as | Outcome |
+|---|---|
+| fake "(50% similar)" on real tickets | duplicate of hack-111's FND-84 — **fixed on develop** |
+| first-word matching | duplicate of hack-111's FND-84 — **fixed on develop** |
+| non-UTF-8 byte breaks `grep` | **fixed** `a867de0` (archived FND-85) |
+| FND-67 self-poisoning live on the ADK path | **fixed** `14fa031`, carded **J27** (archived FND-86) |
+
+All four share the escape layer **`mock-fidelity`** — the mock supplies realistic
+similarity, hand-tuned matching incidents, and logs notes instead of writing a journal, so
+none of these defects is reachable from `mvn test` or from the demo. One missing
+verification layer, not four mistakes. **Retro input.**
+
+## Concept renumbering (post-merge)
+
+`J26` was already claimed in code by the peer's ranking work, so this DDS's proposed
+concepts moved: the feature is now **J28**, the ADK journal filter took **J27**, and the
+similar-incident prerequisite needs no card — it shipped as develop's **J26**.
+**Both of J28's blockers are resolved; its path is clear.**
 
 ## Scope decision (ADM-2, agent-decided 2026-08-05)
 

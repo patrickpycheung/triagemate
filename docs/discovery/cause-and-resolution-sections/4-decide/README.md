@@ -4,18 +4,21 @@
 similar-incident relevance defects first, because the whole feature is a rendering of that
 one signal.
 
-## Concepts for CDS
+## Concepts for CDS — *updated post-merge 2026-08-05*
 
 | ID | Concept | State | Note |
 |----|---------|-------|------|
-| **J26** | Precedent-grounded cause & resolution | 🔵 Proposed | The feature. ~6–8h full, ~3h flat MVP |
-| **J27** | Similar-incident relevance & honesty | 🔵 Proposed | **Blocks J26.** Fixes FND-84/85 |
+| **J28** | Precedent-grounded cause & resolution | 🔵 Proposed | The feature. ~6–8h full, ~3h flat MVP |
+| ~~J27~~ | ~~Similar-incident relevance~~ | ✅ **Shipped** | Landed independently as develop's **J26** (`SimilarIncidentRanker`) |
+| — | ADK self-poisoning (was FND-87) | ✅ **Fixed** | Carded as **J27**, `fixed:14fa031` |
 
-Plus one hard prerequisite that is a bug, not a concept: **FND-87** (ADK path still
-self-poisons). With J26 in place its consequence upgrades from keyword drift to
-**confidence laundering** — run 1's hypothesis becoming run 3's stated cause through a
-circular chain that `evidenceRefs` validation cannot detect, because every link is a
-genuine, correctly-cited artifact.
+**Both blockers are gone.** The feature was renumbered J26 → **J28** because `J26` was
+already claimed in code by the peer's ranking work; the similar-incident prerequisite was
+found and fixed concurrently by `worktree-hack-111` from a live run while this DDS reached
+it by reading the query construction; and the ADK self-poisoning prerequisite is fixed and
+carded here.
+
+**J28's path is clear.** Nothing blocks it.
 
 → Full detail: [concepts-extracted.md](concepts-extracted.md)
 

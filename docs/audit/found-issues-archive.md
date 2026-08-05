@@ -2,6 +2,90 @@
 
 ---
 
+# Fixed 2026-08-05 — `worktree-hack-222`, from the `cause-and-resolution-sections` DDS
+
+Both found by a design exploration rather than by a test or a live run, which is the
+point: neither is reachable from the mock profile, and one of them was actively
+corrupting the exploration that found it.
+
+## FND-85 — a non-UTF-8 byte in `DeterministicDiagnosisEngine.java` makes plain `grep` silently skip the file · **MEDIUM**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java`
+(`file` reports `data`, not `Java source`); the byte is in the trace string near `:163`.
+
+**What**: because GNU `grep` classifies the file as binary, a repo-wide
+`grep -rn "<symbol>" src/` **omits every match in the largest orchestration file in the
+project** and exits 0 with no warning. `grep -a` finds them.
+
+**Why it matters**: this is a silent-wrong-answer hazard for exactly the audit workflows
+this repo relies on. It produced two demonstrated wrong conclusions in a single DDS
+session: a repo-wide grep for `resolutionCode`/`resolutionNotes` returned only the record
+declarations, leading both an exploration agent and the orchestrator to independently
+conclude "nothing reads these fields" — when `resolutionCode` is read at `:160`. Any
+dead-code sweep, rename, or impact analysis run against this repo is unsound until it is
+fixed. Fix is trivial (replace the byte with its ASCII equivalent); the value is in
+removing the trap. Found during DDS `cause-and-resolution-sections`.
+
+- **Resolution**: fixed:a867de0 — raw NUL replaced with the Java escape `\0`, which
+  compiles to the identical string, plus `SourceEncodingHygieneTest` (scoped to text
+  sources; binary resources contain NUL bytes by nature and grep is right to skip those).
+  Fails-before verified by reintroducing the byte: the guard named offset 47891, line 738.
+- **Escape**: tooling-trust — no check asserted that the repo's own source is searchable.
+  Every audit workflow here (dead-code sweeps, rename impact, `/found-issues-resolve`
+  itself) assumes grep is complete, and grep failed silently with exit 0. The guard now
+  makes that assumption enforced rather than hoped for.
+
+## FND-86 — FND-67 self-poisoning is only fixed on the deterministic path; the ADK path still feeds on its own notes · **HIGH**
+
+**Where**: `src/main/adk/java/com/company/triage/agent/TriageMateTools.java:76-77`
+(`getIncident()` returns the raw `IncidentContext`), vs the only two filter call sites,
+`src/main/java/com/company/triage/orchestration/IncidentSignals.java:101` and
+`MentionedPeople.java:197` — both deterministic-path helpers.
+
+**What**: FND-67 (documented in `DiagnosisReport.AI_NOTE_PREFIX`'s javadoc) is the bug
+where a second diagnosis of the same incident read the first one's work notes as ordinary
+human conversation and drifted. The fix was `isAiAuthoredNote`, applied at two
+deterministic-path call sites. The ADK path was never covered:
+
+1. `IncidentContext` carries `comments` and `workNotes` (`IncidentContext.java:17-18`).
+2. `TriageMateTools.getIncident()` hands that record to the model **unfiltered** — contrast
+   `findOwnership` (`:89-95`), which projects to a `Map` and deliberately drops fields.
+3. `AdkDiagnosisEngine.instruction()` (`:102`) *directs* the model to read "conversation
+   (comments / work notes): the caller's own follow-ups often…".
+4. `grep -arn isAiAuthoredNote src/main/` returns no hit anywhere under `src/main/adk/`.
+
+So with `triage.engine=adk` against a real instance, run 2 sees run 1's `[AI Triage · …]`
+notes as ticket conversation — the exact condition FND-67 documents, on the path the demo
+calls "the real thing working".
+
+**Why it matters**: it is a regression of an already-diagnosed bug, live on the flagship
+path, and it is invisible in the mock profile (mock notes go to the log, so no journal
+accumulates to re-read). It also compounds badly with any future cause/resolution section:
+today the drift is in keywords and contact names, but an *assertive* cause statement would
+make run 1's hedged hypothesis into run 2's corroborating "human" evidence and run 3's
+stated cause — a circular evidence chain that `evidenceRefs` validation cannot detect,
+because every link is a genuine, correctly-cited artifact.
+
+The fix belongs at the tool boundary (filter in `TriageMateTools`, not in the prompt), so
+that it holds regardless of what the model chooses to do — the same "enforce at the
+boundary, don't ask the model nicely" thesis as J18. Found during DDS
+`cause-and-resolution-sections`; verified independently by the orchestrator.
+
+- **Resolution**: fixed:14fa031 — `IncidentContext.withoutAiAuthoredNotes()` applied in
+  `TriageMateTools.getIncident()`, i.e. at the tool boundary rather than in the prompt,
+  so the guarantee holds however the model behaves. Carded as **J27**
+  (`docs/design-java/concepts/J27-adk-journal-filter/`). Regression:
+  `TriageMateToolsJournalFilterTest` (adk profile) + `IncidentContextAiNoteFilterTest`;
+  fails-before verified by reverting the one-line call (2 failures). Both profiles green,
+  266 tests.
+- **Escape**: mock-fidelity — the mock profile writes notes to the log, so no journal ever
+  accumulates to be re-read and the bug is unreachable in `mvn test` and in the demo. The
+  original FND-67 fix was also verified only on the deterministic path, so 'fixed' was
+  recorded for a bug that was half-fixed. Same escape layer as FND-84/84a/85a.
+
+
+---
+
 # Duplicates of `develop`'s FND-84 — filed independently by `worktree-hack-222`, 2026-08-05
 
 Both entries below were filed from the `cause-and-resolution-sections` DDS in

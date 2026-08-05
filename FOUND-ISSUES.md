@@ -1,19 +1,22 @@
 # Found issues
 
-**Backlog: 2 open** — FND-85, FND-86, found 2026-08-05 during the
-`cause-and-resolution-sections` DDS.
+**Backlog: 0 open.** FND-84a/85a/85/86 were all resolved on 2026-08-05 and moved to
+[`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md).
 
-Four were originally filed. Two of them — a hardcoded `0.5` rendered onto real tickets as
-"(50% similar)" and similar-incident matching on the description's first word only — were
-**independently found and fixed on `develop` by a peer worktree while this DDS was
-running**, and are archived as duplicates of that worktree's FND-84. The two that remain
-are novel.
+All four came out of the `cause-and-resolution-sections` DDS. Two (**FND-84a/85a**) turned
+out to be duplicates: `worktree-hack-111` found and **fixed** the same similarity defect
+concurrently, from the opposite direction — a live run reporting "Find Similar Incidents
+always returns zero hits", against a design exploration reading the query construction.
+Neither worktree could see the other; hack-111's merge to develop landed mid-run. The other
+two were novel and are fixed: **FND-85** (`fixed:a867de0`, a raw NUL byte that made `grep`
+silently skip the largest orchestration file) and **FND-86** (`fixed:14fa031`, FND-67's
+self-poisoning still live on the ADK path — carded as **J27**).
 
-Two independent worktrees finding the same defect within hours, from opposite directions
-(a live run reporting "always zero hits" vs. a design exploration reading the query
-construction), is a signal about the defect's reachability, not a coincidence. Both landed
-on the same escape layer: **mock-only verification cannot see real-data quality defects.**
-That is the retro input — see FND-85/86 below, which share it.
+**All four share one escape layer: `mock-fidelity`.** The mock supplies a realistic `0.91`,
+hand-tuned matching incidents, and writes notes to the log so no journal accumulates — so
+every one of these defects is unreachable from `mvn test` and from the demo, and only exists
+against a real instance. That is not four independent mistakes; it is one missing verification
+layer, and it predicts more of the same shape are still unfound. **Retro input.**
 
 **Previously resolved.** FND-70…FND-83 were all resolved on 2026-08-05 and moved to
 [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md) with a
@@ -80,58 +83,3 @@ The two most consequential, both real bugs rather than doc drift:
 Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
 
 ---
-
-## FND-85 — a non-UTF-8 byte in `DeterministicDiagnosisEngine.java` makes plain `grep` silently skip the file · **MEDIUM**
-
-**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java`
-(`file` reports `data`, not `Java source`); the byte is in the trace string near `:163`.
-
-**What**: because GNU `grep` classifies the file as binary, a repo-wide
-`grep -rn "<symbol>" src/` **omits every match in the largest orchestration file in the
-project** and exits 0 with no warning. `grep -a` finds them.
-
-**Why it matters**: this is a silent-wrong-answer hazard for exactly the audit workflows
-this repo relies on. It produced two demonstrated wrong conclusions in a single DDS
-session: a repo-wide grep for `resolutionCode`/`resolutionNotes` returned only the record
-declarations, leading both an exploration agent and the orchestrator to independently
-conclude "nothing reads these fields" — when `resolutionCode` is read at `:160`. Any
-dead-code sweep, rename, or impact analysis run against this repo is unsound until it is
-fixed. Fix is trivial (replace the byte with its ASCII equivalent); the value is in
-removing the trap. Found during DDS `cause-and-resolution-sections`.
-
-
-## FND-86 — FND-67 self-poisoning is only fixed on the deterministic path; the ADK path still feeds on its own notes · **HIGH**
-
-**Where**: `src/main/adk/java/com/company/triage/agent/TriageMateTools.java:76-77`
-(`getIncident()` returns the raw `IncidentContext`), vs the only two filter call sites,
-`src/main/java/com/company/triage/orchestration/IncidentSignals.java:101` and
-`MentionedPeople.java:197` — both deterministic-path helpers.
-
-**What**: FND-67 (documented in `DiagnosisReport.AI_NOTE_PREFIX`'s javadoc) is the bug
-where a second diagnosis of the same incident read the first one's work notes as ordinary
-human conversation and drifted. The fix was `isAiAuthoredNote`, applied at two
-deterministic-path call sites. The ADK path was never covered:
-
-1. `IncidentContext` carries `comments` and `workNotes` (`IncidentContext.java:17-18`).
-2. `TriageMateTools.getIncident()` hands that record to the model **unfiltered** — contrast
-   `findOwnership` (`:89-95`), which projects to a `Map` and deliberately drops fields.
-3. `AdkDiagnosisEngine.instruction()` (`:102`) *directs* the model to read "conversation
-   (comments / work notes): the caller's own follow-ups often…".
-4. `grep -arn isAiAuthoredNote src/main/` returns no hit anywhere under `src/main/adk/`.
-
-So with `triage.engine=adk` against a real instance, run 2 sees run 1's `[AI Triage · …]`
-notes as ticket conversation — the exact condition FND-67 documents, on the path the demo
-calls "the real thing working".
-
-**Why it matters**: it is a regression of an already-diagnosed bug, live on the flagship
-path, and it is invisible in the mock profile (mock notes go to the log, so no journal
-accumulates to re-read). It also compounds badly with any future cause/resolution section:
-today the drift is in keywords and contact names, but an *assertive* cause statement would
-make run 1's hedged hypothesis into run 2's corroborating "human" evidence and run 3's
-stated cause — a circular evidence chain that `evidenceRefs` validation cannot detect,
-because every link is a genuine, correctly-cited artifact.
-
-The fix belongs at the tool boundary (filter in `TriageMateTools`, not in the prompt), so
-that it holds regardless of what the model chooses to do — the same "enforce at the
-boundary, don't ask the model nicely" thesis as J18. Found during DDS
-`cause-and-resolution-sections`; verified independently by the orchestrator.

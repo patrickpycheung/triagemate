@@ -4,16 +4,39 @@
 **Into**: `docs/design-java/` as new concept cards
 **Rigor**: Hackathon/RAPID
 
+> ## ⚠️ Updated 2026-08-05, post-merge — both prerequisites are now DONE
+>
+> This document originally proposed **J26** (the feature) and **J27** (fix similar-incident
+> relevance, blocking), plus FND-87 as a hard prerequisite. All three numbers moved, and
+> both prerequisites have since been resolved:
+>
+> | Originally | Now |
+> |---|---|
+> | J26 — the feature | **J28** — `J26` was already claimed in code by the peer ranking work |
+> | J27 — fix similar-incident relevance (*blocking*) | ✅ **Already shipped** as develop's **J26** (`SimilarIncidentRanker`, `SymptomTokens`, config-driven `resolved-states`). Filed here as FND-84/85, archived as duplicates of hack-111's FND-84. |
+> | FND-87 — ADK self-poisoning (*prerequisite*) | ✅ **Fixed** — carded as **J27**, `fixed:14fa031` |
+>
+> `worktree-hack-111` found and fixed the similarity defect concurrently and independently,
+> from a live run ("Find Similar Incidents always returns zero hits") while this DDS reached
+> it by reading the query construction. **The path to J28 is therefore clear** — the
+> blocking work it identified is done, by someone else, before the card was written.
+>
+> One consequence for the honest-expectation section at the foot of this document: the
+> pessimism there was partly premised on first-word matching and a fabricated similarity.
+> Both are gone. Real `close_notes` sparsity (📚 prior-art) still stands, so abstention
+> remains common — but less so than estimated, and open-question Q1 is now the only thing
+> gating a real number.
+
 ---
 
 ## Recommendation in one line
 
-Build it as **precedent citation, not causal assertion** — and fix the similar-incident
-relevance defects first, because the whole feature is a rendering of that one signal.
+Build it as **precedent citation, not causal assertion**. The prerequisite — a
+similar-incident signal worth citing — is now in place.
 
 ---
 
-## J26 — Precedent-grounded cause & resolution
+## J28 — Precedent-grounded cause & resolution
 
 **State**: 🔵 Proposed · **Complexity**: Moderate · **Depends on**: J4, J5, J7, **J27**
 
@@ -102,36 +125,44 @@ guard working), 11 positional `new DiagnosisReport(...)` call sites.
 
 ---
 
-## J27 — Similar-incident relevance & honesty **(prerequisite)**
+## ~~Similar-incident relevance & honesty~~ ✅ SHIPPED as develop's J26
 
-**State**: 🔵 Proposed · **Complexity**: Simple · **Blocks**: J26
+**Superseded — no card needed.** This was proposed here as a blocking prerequisite, on the
+reasoning that J28 is a *rendering of* `findSimilarIncidents`, and that signal was broken
+against real data in two ways (first-word `LIKE` matching; a hardcoded `0.5` rendered as
+"(50% similar)" onto real tickets). Shipping the feature on top would have produced the
+worst available outcome: **correct-looking attribution pointing at an unrelated ticket**,
+converting attribution — J28's primary safety mechanism — into borrowed credibility for
+noise.
 
-J26 is a rendering of `findSimilarIncidents`. That signal is currently broken against real
-data in two ways, both filed:
+`worktree-hack-111` fixed exactly this, concurrently and independently, reaching it from a
+live run rather than from a design read. Landed on develop as **J26**: retrieve wide on the
+keys that carry signal (`cmdb_ci` + distinctive symptom terms), then rank locally via
+`SimilarIncidentRanker` (text Jaccard 0.6 + CI 0.3 + category 0.1), with `resolved-states`,
+`similarity-floor` and `max-similar` as `triage.servicenow.*` properties rather than
+literals.
 
-- **FND-85** — matching is `short_descriptionLIKE <first word of description>`. For the
-  project's own example the live query is `LIKE User`.
-- **FND-84** — `similarity` is hardcoded `0.5` and rendered as *"(50% similar)"* onto real
-  tickets today.
-
-Shipping J26 on top of this produces the worst available outcome: **correct-looking
-attribution pointing at an unrelated ticket**, which converts attribution — J26's primary
-safety mechanism — into borrowed credibility for noise.
-
-Minimum: multi-token matching with stopword removal; compute a real similarity or render
-none. Not optional, and independently worth doing.
+Verified post-merge: the hardcoded `0.5` is gone and `SimilarIncidentRanker.rank()` computes
+a real score. **This prerequisite is satisfied.**
 
 ---
 
-## Hard prerequisite (bug, not concept)
+## ~~Hard prerequisite (bug, not concept)~~ ✅ FIXED as J27
 
-**FND-87 — ADK path still self-poisons.** `isAiAuthoredNote` has two call sites, both
-deterministic-only; `TriageMateTools.getIncident()` hands raw `comments`/`workNotes` to
-the model, and the instruction directs it to read them. Today this drifts keywords and
-contact names. With J26 it becomes **confidence laundering**: run 1's hedged hypothesis
-becomes run 2's corroborating "human" evidence becomes run 3's stated cause — a circular
-chain that `evidenceRefs` validation cannot detect, because every link is a genuine,
-correctly-cited artifact. Fix at the tool boundary, not in the prompt.
+**FND-86 (filed here as FND-87) — ADK path still self-poisons.** `isAiAuthoredNote` had two
+call sites, both deterministic-only; `TriageMateTools.getIncident()` handed raw
+`comments`/`workNotes` to the model while the instruction directs it to read them.
+
+The reason this blocked J28 specifically: today it drifts keywords and contact names, but
+with a cause section it becomes **confidence laundering** — run 1's hedged hypothesis
+becomes run 2's corroborating "human" evidence becomes run 3's stated cause, a circular
+chain `evidenceRefs` validation cannot detect because every link is a genuine, correctly
+cited artifact.
+
+Fixed at the tool boundary (not in the prompt, so it holds however the model behaves) and
+carded as **J27** — `docs/design-java/concepts/J27-adk-journal-filter/`, `fixed:14fa031`,
+regression `TriageMateToolsJournalFilterTest` + `IncidentContextAiNoteFilterTest`, both
+profiles green at 266 tests. **This prerequisite is satisfied.**
 
 ---
 
