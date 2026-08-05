@@ -1,17 +1,19 @@
 # Found issues
 
-**Backlog: 4 open** — FND-84…FND-87, all found 2026-08-05 during the
-`cause-and-resolution-sections` DDS. Three are live defects on the **real-data path that
-the mock profile structurally cannot reveal**: a hardcoded `0.5` rendered onto real
-tickets as "(50% similar)", similar-incident matching on the description's first word
-only, and FND-67's self-poisoning still unfixed on the ADK path (the filter has two call
-sites, both deterministic-only). The fourth is a non-UTF-8 byte that makes plain `grep`
-silently skip the largest orchestration file, which already caused two wrong conclusions
-in one session.
+**Backlog: 2 open** — FND-85, FND-86, found 2026-08-05 during the
+`cause-and-resolution-sections` DDS.
 
-That clustering is itself the signal: **mock-only verification cannot see any of the
-first three.** Worth a retro input — the escape layer is "no test exercises the real
-gateway's data quality", not four unrelated mistakes.
+Four were originally filed. Two of them — a hardcoded `0.5` rendered onto real tickets as
+"(50% similar)" and similar-incident matching on the description's first word only — were
+**independently found and fixed on `develop` by a peer worktree while this DDS was
+running**, and are archived as duplicates of that worktree's FND-84. The two that remain
+are novel.
+
+Two independent worktrees finding the same defect within hours, from opposite directions
+(a live run reporting "always zero hits" vs. a design exploration reading the query
+construction), is a signal about the defect's reachability, not a coincidence. Both landed
+on the same escape layer: **mock-only verification cannot see real-data quality defects.**
+That is the retro input — see FND-85/86 below, which share it.
 
 **Previously resolved.** FND-70…FND-83 were all resolved on 2026-08-05 and moved to
 [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md) with a
@@ -79,52 +81,7 @@ Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
 
 ---
 
-## FND-84 — every similar-incident line reports a fabricated "% similar" against real data · **HIGH**
-
-**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java:158-161`
-renders `r.similarity() * 100`; `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:140`
-supplies that value as the literal `0.5` for every row.
-
-**What**: the real gateway hardcodes `similarity = 0.5` on every `ResolvedIncident` it
-returns — there is no similarity computation in production at all. The deterministic
-engine formats it as a percentage into an `Evidence` summary, so against a live instance
-**every** similar-incident line reads:
-
-```
-INC0011455 (50% similar) resolved by Payments Platform Support: Resolved - Known Error
-```
-
-That evidence line is posted to the real ticket in the "Sources consulted" work note.
-
-**Why it matters**: it is a fabricated statistic presented as a computed match score, on
-a customer-retained incident record, by a system whose entire pitch is that every claim
-is auditable and one click from its evidence. A reader has no way to tell that the number
-is a constant — and "50%" reads as a real, if weak, computed match. `MockServiceNowGateway.java:101`
-supplies a genuine-looking `0.91`, so the demo path never shows the problem: the defect is
-invisible from the stage and only appears against live data. Minimum fix: suppress the
-percentage when the value is the sentinel. Real fix: compute a similarity, or stop
-claiming one. Found during DDS `cause-and-resolution-sections`.
-
-## FND-85 — `findSimilarIncidents` matches on the first word of the description only · **HIGH**
-
-**Where**: `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:129-142`
-and `:314-316`.
-
-**What**: `firstKeyword(s)` returns `s.split("\\s+")[0]` — the first whitespace-delimited
-token — and the query is `stateIN6,7^short_descriptionLIKE<that token>`. For the
-project's own canonical example, *"User receives HTTP 403 when submitting an order"*, the
-production query is `short_descriptionLIKE User`. Incident short descriptions
-overwhelmingly begin with "User", "Unable", "Cannot", "Users", "Error", so on a real queue
-the filter is close to a no-op. The method's own comment concedes `// Naive keyword match`.
-
-**Why it matters**: "similar past incidents" is load-bearing evidence — it drives the
-`e-sim-*` evidence rows and the assignment-group suggestion, and it is the natural source
-for any future cause/resolution section. Returning near-arbitrary resolved tickets while
-labelling them "similar" (see FND-84) lends borrowed credibility to noise. Compounding:
-the mock returns hand-tuned genuinely-similar incidents, so this is another defect the
-demo structurally cannot reveal. Found during DDS `cause-and-resolution-sections`.
-
-## FND-86 — a non-UTF-8 byte in `DeterministicDiagnosisEngine.java` makes plain `grep` silently skip the file · **MEDIUM**
+## FND-85 — a non-UTF-8 byte in `DeterministicDiagnosisEngine.java` makes plain `grep` silently skip the file · **MEDIUM**
 
 **Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java`
 (`file` reports `data`, not `Java source`); the byte is in the trace string near `:163`.
@@ -142,11 +99,12 @@ dead-code sweep, rename, or impact analysis run against this repo is unsound unt
 fixed. Fix is trivial (replace the byte with its ASCII equivalent); the value is in
 removing the trap. Found during DDS `cause-and-resolution-sections`.
 
-## FND-87 — FND-67 self-poisoning is only fixed on the deterministic path; the ADK path still feeds on its own notes · **HIGH**
+
+## FND-86 — FND-67 self-poisoning is only fixed on the deterministic path; the ADK path still feeds on its own notes · **HIGH**
 
 **Where**: `src/main/adk/java/com/company/triage/agent/TriageMateTools.java:76-77`
 (`getIncident()` returns the raw `IncidentContext`), vs the only two filter call sites,
-`src/main/java/com/company/triage/orchestration/IncidentSignals.java:115` and
+`src/main/java/com/company/triage/orchestration/IncidentSignals.java:101` and
 `MentionedPeople.java:197` — both deterministic-path helpers.
 
 **What**: FND-67 (documented in `DiagnosisReport.AI_NOTE_PREFIX`'s javadoc) is the bug

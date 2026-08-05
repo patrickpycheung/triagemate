@@ -1,5 +1,79 @@
 # Found-issues archive
 
+---
+
+# Duplicates of `develop`'s FND-84 — filed independently by `worktree-hack-222`, 2026-08-05
+
+Both entries below were filed from the `cause-and-resolution-sections` DDS in
+`worktree-hack-222`, at the same time as `worktree-hack-111` was independently finding and
+**fixing** the same underlying defect from the opposite direction: hack-111 from a live run
+("Find Similar Incidents always returns zero hits"), hack-222 from reading the query
+construction during a design exploration. Neither worktree could see the other — the
+session-start `wt-looker` digest showed hack-111 with zero commits ahead and no in-flight
+status, and its merge to develop landed mid-run.
+
+They are recorded rather than discarded because the *convergence* is the finding: the same
+defect was reachable from a live symptom and from a static read within hours of each other,
+and the two descriptions cover different faces of it (hack-111 identified the unused
+`cmdb_ci` and the hardcoded `stateIN6,7`; hack-222 identified that the mock profile
+structurally conceals the whole class).
+
+- **Resolution**: duplicate:FND-84 (fixed on develop — `SimilarIncidentRanker`,
+  `SymptomTokens`, config-driven `resolved-states`/`similarity-floor`/`max-similar`).
+  Verified fixed post-merge: the hardcoded `0.5` is gone and `SimilarIncidentRanker.rank()`
+  computes a real score.
+- **Escape**: mock-fidelity — no test exercises the real gateway's *data quality*. The mock
+  supplies a realistic `0.91` and hand-tuned matching incidents, so every defect in this
+  class is invisible to `mvn test` and to the demo. Identical escape layer to FND-85/FND-86
+  in the same batch; three of four found-issues from this DDS share it.
+
+## FND-84a (dup) — every similar-incident line reports a fabricated "% similar" against real data · **HIGH**
+
+**Where**: `src/main/java/com/company/triage/orchestration/DeterministicDiagnosisEngine.java:158-161`
+renders `r.similarity() * 100`; `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:140`
+supplies that value as the literal `0.5` for every row.
+
+**What**: the real gateway hardcodes `similarity = 0.5` on every `ResolvedIncident` it
+returns — there is no similarity computation in production at all. The deterministic
+engine formats it as a percentage into an `Evidence` summary, so against a live instance
+**every** similar-incident line reads:
+
+```
+INC0011455 (50% similar) resolved by Payments Platform Support: Resolved - Known Error
+```
+
+That evidence line is posted to the real ticket in the "Sources consulted" work note.
+
+**Why it matters**: it is a fabricated statistic presented as a computed match score, on
+a customer-retained incident record, by a system whose entire pitch is that every claim
+is auditable and one click from its evidence. A reader has no way to tell that the number
+is a constant — and "50%" reads as a real, if weak, computed match. `MockServiceNowGateway.java:101`
+supplies a genuine-looking `0.91`, so the demo path never shows the problem: the defect is
+invisible from the stage and only appears against live data. Minimum fix: suppress the
+percentage when the value is the sentinel. Real fix: compute a similarity, or stop
+claiming one. Found during DDS `cause-and-resolution-sections`.
+
+## FND-85a (dup) — `findSimilarIncidents` matches on the first word of the description only · **HIGH**
+
+**Where**: `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:129-142`
+and `:314-316`.
+
+**What**: `firstKeyword(s)` returns `s.split("\\s+")[0]` — the first whitespace-delimited
+token — and the query is `stateIN6,7^short_descriptionLIKE<that token>`. For the
+project's own canonical example, *"User receives HTTP 403 when submitting an order"*, the
+production query is `short_descriptionLIKE User`. Incident short descriptions
+overwhelmingly begin with "User", "Unable", "Cannot", "Users", "Error", so on a real queue
+the filter is close to a no-op. The method's own comment concedes `// Naive keyword match`.
+
+**Why it matters**: "similar past incidents" is load-bearing evidence — it drives the
+`e-sim-*` evidence rows and the assignment-group suggestion, and it is the natural source
+for any future cause/resolution section. Returning near-arbitrary resolved tickets while
+labelling them "similar" (see FND-84) lends borrowed credibility to noise. Compounding:
+the mock returns hand-tuned genuinely-similar incidents, so this is another defect the
+demo structurally cannot reveal. Found during DDS `cause-and-resolution-sections`.
+
+
+
 Append-only record of resolved `FND-*` entries from `/FOUND-ISSUES.md`, newest first.
 
 Each entry keeps its original text plus two lines added at resolution time:
