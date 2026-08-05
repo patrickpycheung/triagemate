@@ -79,7 +79,11 @@ public final class TriageMateTools {
 
     @Schema(name = "find_similar_incidents",
             description = "Find previously resolved incidents similar to the incident under investigation, "
-                    + "and their resolution groups. Takes no arguments.")
+                    + "and their resolution groups. Takes no arguments. Each result carries a "
+                    + "'similarity' score from 0 to 1: results are already ranked and filtered, so "
+                    + "prefer the highest-scoring ones and treat a low score as weak evidence. An "
+                    + "empty list means no resolved incident resembled this one — say so; do not "
+                    + "infer a routing target from an empty result.")
     public static List<ResolvedIncident> findSimilarIncidents() {
         return serviceNow.findSimilarIncidents(serviceNow.getIncident(CURRENT_INCIDENT.get()));
     }

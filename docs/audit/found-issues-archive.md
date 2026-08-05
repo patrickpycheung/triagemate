@@ -1608,3 +1608,54 @@ write suppress the cursor bump explicitly.
 - **Escape**: design-review — the DDS specified an 'updated-since' cursor and no round asked 'what does our own write do to this query?'. A self-triggering trigger is a predictable class, not a surprise.
 
 ---
+
+## FND-84 — `findSimilarIncidents` returned zero hits for every incident, always · **HIGH** · *field-reported*
+
+**Where**: `src/main/java/com/company/triage/gateway/real/RealServiceNowGateway.java:130`
+(`findSimilarIncidents`) and `:314` (`firstKeyword`).
+
+**Reported by**: the operator, from live runs — "ServiceNow's Find Similar Incidents always
+returns zero hits", 2026-08-05.
+
+**What**: the entire retrieval was one encoded query,
+`stateIN6,7^short_descriptionLIKE<first word of the subject line>`, with a hardcoded `0.5`
+similarity written onto every row it returned. Three faults, only the first of which showed
+up as the zero-hit symptom:
+
+1. **The retrieval key was chosen by position, not by information.** The first word of a real
+   subject line is a sentence opener — "Unable", "Users", "Cannot". For INC0010010
+   (`docs/Siyad_Findings.md` §2) the whole query reduced to `short_descriptionLIKEHazards`.
+2. **`cmdb_ci` — the field naming the affected system, and the strongest available match key —
+   was never used.** Doubly dead before J24/SFF-1, whose reference-field parse bug returned
+   `""` for it anyway.
+3. **The score was fabricated.** `DeterministicDiagnosisEngine:159` renders it as
+   `"%s (%.0f%% similar)"`, so every hit would have advertised "50% similar" in an advisory
+   note posted onto a real ticket.
+
+`stateIN6,7` additionally hardcodes out-of-the-box state values; an instance with customised
+states returns nothing regardless of the keyword.
+
+**Why it matters**: J5 calls similar incidents "often the strongest routing signal", and both
+engines depend on it — the deterministic one at `DeterministicDiagnosisEngine:156`, the ADK
+agent through the `find_similar_incidents` tool, whose prompt (`AdkDiagnosisEngine:105`) tells
+the model it is "the strongest routing signal". Both were reasoning from a permanently empty
+list. Because empty is a legitimate result, this never surfaced as an error — the trace said
+`→ 0 hits` and the report simply routed on weaker evidence.
+
+**Fix**: retrieve wide on the keys that carry signal, then rank locally — two overlapping
+passes (same CI, most-recently-resolved first; then an OR-group over the ticket's distinctive
+symptom terms), deduped and scored by `SimilarIncidentRanker` (text Jaccard 0.6 + CI 0.3 +
+category 0.1), floored and capped from config. `resolved-states`, `similarity-floor` and
+`max-similar` are now `triage.servicenow.*` properties rather than literals. Tokenising moved
+to `model/SymptomTokens` so `IncidentSignals` and the ranker share one stopword list.
+
+- **Resolution**: fixed (2026-08-05) — `SimilarIncidentRanker` + `SymptomTokens` added;
+  `RealServiceNowGatewayTest` now asserts the query shape at the HTTP boundary.
+- **Escape**: test-coverage — every test that exercised similar-incidents ran against
+  `MockServiceNowGateway`'s two hardcoded rows, so the real query's shape was never asserted
+  anywhere. This is the fourth instance of the identical mock-only blind spot (FND-47
+  `u_environment`, FND-61 journals, J24/SFF-1 reference fields): a connector method with no
+  test against real request/response shapes is a method whose behaviour against the live
+  instance is unknown, and "returns an empty list" is the failure mode that hides best.
+
+---

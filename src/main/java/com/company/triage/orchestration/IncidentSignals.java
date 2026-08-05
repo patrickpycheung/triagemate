@@ -1,6 +1,7 @@
 package com.company.triage.orchestration;
 
 import com.company.triage.model.IncidentContext;
+import com.company.triage.model.SymptomTokens;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -88,21 +89,6 @@ record IncidentSignals(
     /** Trace/correlation ids: a long bare hex run. Least specific, so ranked last. */
     private static final Pattern HEX_TRACE = Pattern.compile("\\b[0-9a-f]{16,32}\\b");
 
-    /**
-     * Function words only. Deliberately NOT domain words — "error", "order", "payment",
-     * "checkout" are exactly the terms a runbook search needs, so stripping them to look
-     * clever would defeat the purpose.
-     */
-    private static final Set<String> STOPWORDS = Set.of(
-            "a", "an", "the", "and", "but", "for", "with", "that", "this", "these", "those",
-            "when", "they", "them", "from", "some", "just", "only", "been", "have", "has",
-            "had", "was", "were", "are", "its", "it", "into", "then", "than", "there",
-            "their", "what", "which", "would", "could", "should", "about", "after", "before",
-            "not", "get", "got", "gets", "does", "did", "doing", "say", "says", "said",
-            "reported", "reports", "report", "please", "also", "very", "much", "many",
-            "sometimes", "happens", "happening", "example", "gave", "give", "given",
-            "try", "tries", "trying", "one", "two", "few", "all", "any", "out", "off");
-
     static IncidentSignals from(IncidentContext inc) {
         String symptom = text(inc.shortDescription());
         String detail = text(inc.description());
@@ -163,17 +149,16 @@ record IncidentSignals(
         return List.copyOf(found);
     }
 
-    /** Distinctive terms, in first-appearance order. Capped so a long ticket can't dominate. */
+    /**
+     * Distinctive terms, in first-appearance order. Capped so a long ticket can't dominate.
+     *
+     * <p>J26: the tokenising and the stopword list moved to {@link SymptomTokens} when the
+     * similar-incident ranker needed the same answer. Two copies of a stopword list is the
+     * two-sources-of-truth split FND-40 and FND-62 were each filed for; this stays a named
+     * method because the CAP is a property of query building, not of tokenising.
+     */
     private static List<String> extractKeywords(String rawText) {
-        Set<String> out = new LinkedHashSet<>();
-        for (String token : rawText.split("[^A-Za-z0-9]+")) {
-            String t = token.toLowerCase(Locale.ROOT);
-            if (t.length() >= 4 && !STOPWORDS.contains(t) && !t.chars().allMatch(Character::isDigit)) {
-                out.add(t);
-            }
-            if (out.size() >= 8) break;
-        }
-        return List.copyOf(out);
+        return SymptomTokens.extract(rawText, 8);
     }
 
     /**
