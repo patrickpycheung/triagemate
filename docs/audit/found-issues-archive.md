@@ -72,7 +72,7 @@ deliberately not here; it is a design change owned by
 [J25](docs/design-java/concepts/J25-knowledge-query-relevance/README.md) (KQR-4), and this
 entry should be fixed without waiting for it.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, during the application-review session)
+- **Resolution**: fixed:0dd4005 (2026-08-05, during the application-review session)
 - **Escape**: integration-contract-undocumented — the gateway supplies the `/wiki` context
   path itself, making the base-URL a contract with the config; nothing stated it, no test
   covered this gateway at all, and the blanket `catch -> List.of()` turned the resulting 404
@@ -93,7 +93,7 @@ where". Anyone auditing the guardrail inventory — teammate, judge, or the next
 `/doc-test` pass — is told the app enforces a scope allowlist it does not have. The real
 bound is different, not weaker, but the doc names the wrong mechanism entirely.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: convention-propagation — a config-key removal (92574ce) changed the enforced guardrail but no step required the four docs that name it to be re-derived from the code.
 
 ## FND-71 — README "Verify it works" claims 3/5 passing tests against an actual 152/201 · **LOW**
@@ -110,7 +110,7 @@ sees 152 where 3 was promised and concludes the docs are unmaintained, which is 
 opposite of what a "Verify it works" section is for. Apply FND-30's policy: name
 approximate counts with an "as of" date, or defer to `mvn` output.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: doc-freshness — FND-30 established the drifting-counts policy and fixed J10 + STATUS.md, but the fix was applied to the files that had drifted, not to every file carrying a count.
 
 ## FND-72 — J1/J11 response-contract docs omit the sixth `DiagnosisResult` component `connectors` · **LOW**
@@ -127,7 +127,7 @@ LT7 provenance chips. Additive and wire-compatible, but unrecorded.
 contract, and it under-reports the shape at the one place it explicitly enumerates it —
 the same "cards lag implementation" class FND-9…32 clustered on. One sentence each.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: card-lag — a response field shipped (TASK-016) without the contract card that enumerates the response shape being part of the change's definition of done.
 
 ## FND-73 — `secrets.properties.example` instructs a `snow-live` profile that no longer exists · **MEDIUM**
@@ -147,7 +147,7 @@ presenter believes they landed on a real ticket. Silent, and exactly backwards f
 failure mode you want. Fix the two references, or re-add a `snow-live` profile document
 (servicenow=real, rest mock — the combination the review doc recommends).
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: setup-path-untested — the example file is the new-machine entry point and nothing exercises it; a profile rename left it pointing at a profile that Spring accepts silently.
 
 ## FND-74 — Connector mode compared case-insensitively for bean selection but strictly for the provenance chip · **MEDIUM**
@@ -165,7 +165,7 @@ honesty-contract class — the UI claiming something that did not happen — in 
 consequential direction. Normalize (trim + lowercase) at the one comparison point, and
 validate against `{mock,real}` so a typo fails fast instead of silently meaning mock.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: mock-only-testing — the reported mode and the wired bean were never asserted against each other, so a case-sensitivity mismatch between them was invisible offline.
 
 ## FND-75 — `generatedAt` is model-fabricated and parse-fragile · **MEDIUM**
@@ -183,7 +183,7 @@ common LLM timestamp shape (`2026-08-05 14:32:10` — no `T`, no offset) throws
 a Copilot call — on a field that carries no model judgment at all. Remove it from the
 prompt schema and stamp after parse.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: contract-boundary — a field the server owns was placed in the model's schema, so nothing tested the case where the model answers it badly.
 
 ## FND-76 — An `Error` escaping `runOnce` leaves the coalescing future forever incomplete · **LOW**
@@ -203,7 +203,7 @@ so one hung waiter permanently kills polling for the process lifetime — no WAR
 recovery. Complete the future unconditionally (`finally { if (!mine.isDone())
 mine.completeExceptionally(...) }`), and optionally bound `awaitExisting`.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: exception-taxonomy — the coalescing design reasoned about RuntimeException and never about Throwable, and no test raised an Error on the owner thread.
 
 ## FND-77 — `collector.markDone()` is skipped on every failure path · **LOW**
@@ -220,7 +220,7 @@ rejection; a coalesced waiter's POST also fails and stops its poll). So this is 
 accuracy, not a live bug — worth two lines of `try/finally` because the invariant is
 load-bearing for J16's registry work and for any non-browser poller.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: invariant-untested — TASK-011 stated done agrees with the POST outcome but the assertion only ever ran on the success path.
 
 ## FND-78 — Trace finish line over-counts denied attempts as observed tool calls · **LOW**
@@ -236,7 +236,7 @@ stated budget of 10 sees the J8 leash apparently violated when it actually held.
 per-attempt DENIED rows are emitted correctly, so the trace stays reconcilable; only the
 summary is wrong. Report executed and denied separately.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: observability-semantics — the counter's meaning (attempts) and the label's claim (executed calls) diverged, and no test read the finish line against the budget.
 
 ## FND-79 — `unfence()` misses prose-before-fence and same-line fences · **LOW** · *unverified*
@@ -255,7 +255,7 @@ the repair retry — while stacking the run one failure away from
 FND-66 fixed. Add a last-resort `{`…`}` substring extraction *after* the strict strip, so
 well-behaved responses stay untouched.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: adversarial-input-gap — FND-66 fixed the one observed fence shape and the test set froze there; the neighbouring shapes were never enumerated.
 
 ## FND-80 — Enter key does not trigger Diagnose; `run()`'s catch path bypasses `esc()` · **LOW** · *unverified*
@@ -273,7 +273,7 @@ covers double-submit, so a `<form onsubmit>` is safe. The `${e}` is not exploita
 an otherwise uniform escaping discipline, and it becomes load-bearing the moment anything
 server-derived is thrown inside that `try`.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: ui-affordance-untested — no test or rehearsal step covers keyboard submission, and the escaping discipline was enforced per-path rather than per-value.
 
 ## FND-81 — `bin/setup-copilot-api.sh` is tracked without the executable bit · **LOW** · *unverified*
@@ -290,7 +290,7 @@ what the error message told them and gets `Permission denied`. It works on this 
 machine only because the working-tree copy was chmod'd locally; the tracked mode is what
 the demo laptop gets. `git update-index --chmod=+x`.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: file-mode-untested — the working tree copy was chmod'd locally, so the tracked mode diverged from what a fresh clone gets and nothing checks tracked modes.
 
 ## FND-82 — Dead `.gitignore` negation for the Maven wrapper jar · **LOW** · *unverified*
@@ -310,7 +310,7 @@ presenter does not have. The moment someone adds the wrapper to de-risk exactly 
 this was already intended once. Either fix the pattern set or delete the dead line so
 nobody trusts it.
 
-- **Resolution**: fixed:pending-commit (2026-08-05, `/found-issues-resolve`)
+- **Resolution**: fixed:0dd4005 (2026-08-05, `/found-issues-resolve`)
 - **Escape**: silent-noop-rule — a gitignore negation that cannot fire produces no error, and nothing verified the rule's effect with git check-ignore.
 
 
