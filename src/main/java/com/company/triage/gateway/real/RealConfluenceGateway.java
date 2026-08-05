@@ -27,11 +27,16 @@ public class RealConfluenceGateway implements ConfluenceGateway {
 
     private final RestClient http;
 
-    public RealConfluenceGateway(IntegrationProperties props) {
+    /**
+     * J22: takes the injected {@link RestClient.Builder} so a test can bind a
+     * {@code MockRestServiceServer} to it. Without that seam this gateway had <b>zero</b>
+     * tests, which is how FND-83's base-URL 404 reached a live run.
+     */
+    public RealConfluenceGateway(RestClient.Builder builder, IntegrationProperties props) {
         var cf = props.confluence();
         String basic = Base64.getEncoder()
                 .encodeToString((cf.user() + ":" + cf.secret()).getBytes());
-        this.http = RestClient.builder()
+        this.http = builder
                 .baseUrl(siteRoot(cf.baseUrl()))
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", "application/json")

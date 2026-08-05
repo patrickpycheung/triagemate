@@ -9,8 +9,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,9 +32,15 @@ public class RealGitLabGateway implements GitLabGateway {
 
     private final RestClient http;
 
-    public RealGitLabGateway(IntegrationProperties props) {
+    /**
+     * J22: takes the injected {@link RestClient.Builder} (Spring Boot autoconfigures a fresh
+     * prototype per injection point) rather than calling {@code RestClient.builder()} directly,
+     * so a test can bind a {@code MockRestServiceServer} to it. Without that seam this gateway
+     * had <b>zero</b> tests — which is how the double-encoded project id below survived.
+     */
+    public RealGitLabGateway(RestClient.Builder builder, IntegrationProperties props) {
         var gl = props.gitlab();
-        this.http = RestClient.builder()
+        this.http = builder
                 .baseUrl(gl.baseUrl())
                 .defaultHeader("PRIVATE-TOKEN", gl.token())
                 .defaultHeader("Accept", "application/json")
@@ -46,12 +50,21 @@ public class RealGitLabGateway implements GitLabGateway {
     @Override
     public List<CodeSearchResult> searchCode(String project, String searchTerm) {
         log.info("[GitLab] searching {} for code matching \"{}\"", project, searchTerm);
-        String projectId = URLEncoder.encode(project, StandardCharsets.UTF_8);   // group/name → group%2Fname
+        // J22: pass the RAW project id as a URI VARIABLE and let the UriBuilder encode it
+        // exactly once. This used to pre-encode with URLEncoder (group/name -> group%2Fname)
+        // and THEN hand the result to build(), whose TEMPLATE_AND_VALUES encoding escaped the
+        // percent again -> group%252Fname. GitLab resolves that to a project that does not
+        // exist, so EVERY real-mode code search 404'd. Nothing caught it because this class
+        // had no tests at all.
+        //
+        // The rule this establishes, and the reason it is a rule rather than a fix: caller-
+        // derived text is ALWAYS a URI variable, NEVER spliced into the template and never
+        // pre-encoded. One encoder, one pass, at the boundary that owns the URI.
         JsonNode hits = http.get()
                 .uri(uri -> uri.path("/api/v4/projects/{id}/search")
                         .queryParam("scope", "blobs")
                         .queryParam("search", searchTerm)
-                        .build(projectId))
+                        .build(project))
                 .retrieve().body(JsonNode.class);
         List<CodeSearchResult> out = new ArrayList<>();
         if (hits != null) hits.forEach(h -> out.add(new CodeSearchResult(
@@ -71,12 +84,11 @@ public class RealGitLabGateway implements GitLabGateway {
     @Override
     public List<Contact> recentCommitters(String project, String filePath) {
         log.info("[GitLab] looking up recent committers for {}:{}", project, filePath);
-        String projectId = URLEncoder.encode(project, StandardCharsets.UTF_8);
         try {
             // 1. newest tag → its committed date (the "last release" boundary)
             JsonNode tags = http.get()
                     .uri(uri -> uri.path("/api/v4/projects/{id}/repository/tags")
-                            .queryParam("per_page", 1).build(projectId))
+                            .queryParam("per_page", 1).build(project))
                     .retrieve().body(JsonNode.class);
             String tagName = tags != null && tags.size() > 0 ? tags.get(0).path("name").asText("") : "";
             String since = tags != null && tags.size() > 0
@@ -89,7 +101,7 @@ public class RealGitLabGateway implements GitLabGateway {
                                 .queryParam("path", filePath)
                                 .queryParam("per_page", 20);
                         if (!since.isBlank()) b.queryParam("since", since);
-                        return b.build(projectId);
+                        return b.build(project);
                     })
                     .retrieve().body(JsonNode.class);
 

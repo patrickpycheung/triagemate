@@ -1,6 +1,10 @@
 # J22 — Real Gateway Request Contracts (proved offline, not on stage)
 
-**State**: 🔴 Designed, not built · **Complexity**: Simple ·
+**State**: 🟢 Built (2026-08-05) — both gateways now take an injected `RestClient.Builder`,
+the GitLab `%252F` double-encoding is fixed and pinned (proved fails-before/passes-after),
+and Confluence/GitLab have 15 offline request-shape tests between them. `mvn test` 175 /
+`mvn -Padk test` 231 green. KQR-4's failed-vs-empty change is deliberately NOT here — the
+current swallow is pinned by a test named for J25 so the change is visible when it lands · **Complexity**: Simple ·
 **Priority**: MEDIUM ·
 **Depends on**: J3, J6 · **Amends**: J3 (Verification — "not per-gateway" is the
 gap this closes), J6 (the real Confluence/GitLab request shapes it describes are

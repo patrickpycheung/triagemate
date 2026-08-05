@@ -1,0 +1,132 @@
+package com.company.triage.gateway.real;
+
+import com.company.triage.config.IntegrationProperties;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+/**
+ * J22 — the real GitLab connector's REQUEST SHAPE, proved offline.
+ *
+ * <p>This class had <b>zero</b> tests, and that is not incidental: the gateway built its own
+ * {@code RestClient} internally, so there was no seam to bind a mock server to. The cost was a
+ * live defect — the project id was pre-encoded with {@code URLEncoder} (<code>group/name</code>
+ * → <code>group%2Fname</code>) and then passed to {@code build()}, whose TEMPLATE_AND_VALUES
+ * encoding escaped the percent a second time (<code>group%252Fname</code>). GitLab resolves
+ * that to a project that does not exist, so <b>every real-mode code search would have 404'd on
+ * stage</b>, with the blanket {@code catch} in {@code recentCommitters} turning it into a
+ * silent empty list.
+ *
+ * <p>The rule these tests pin: caller-derived text is always a URI <i>variable</i>, never
+ * spliced into the template and never pre-encoded. One encoder, one pass.
+ */
+class RealGitLabGatewayTest {
+
+    private static final IntegrationProperties.Endpoint ENDPOINT =
+            new IntegrationProperties.Endpoint("https://gitlab.example.com", null, null, "glpat-xxx");
+    private static final IntegrationProperties PROPS =
+            new IntegrationProperties(null, null, null, ENDPOINT);
+
+    private record Fixture(RealGitLabGateway gateway, MockRestServiceServer server) {}
+
+    private Fixture build() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        return new Fixture(new RealGitLabGateway(builder, PROPS), server);
+    }
+
+    /**
+     * The regression. {@code %2F} is the correct single encoding of the slash in a GitLab
+     * project path; {@code %252F} is the double-encoded form that 404s.
+     */
+    @Test
+    void projectIdIsEncodedExactlyOnce() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/v4/projects/order-payments%2Fpayment-service/search")))
+                .andExpect(requestTo(not(containsString("%252F"))))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("PRIVATE-TOKEN", "glpat-xxx"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        f.gateway().searchCode("order-payments/payment-service", "PAYMENT_RECONCILE_MISMATCH");
+
+        f.server().verify();
+    }
+
+    @Test
+    void searchCodeParsesFilePathAndLineFromTheBlobHit() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/search")))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        [{"path":"src/payment_service.py","startline":44,
+                          "data":"raise PaymentError(PAYMENT_RECONCILE_MISMATCH)"}]""",
+                        MediaType.APPLICATION_JSON));
+
+        var hits = f.gateway().searchCode("order-payments/payment-service", "PAYMENT_RECONCILE_MISMATCH");
+
+        assertThat(hits).hasSize(1);
+        assertThat(hits.get(0).filePath()).isEqualTo("src/payment_service.py");
+        assertThat(hits.get(0).line()).isEqualTo(44);
+        assertThat(hits.get(0).project()).isEqualTo("order-payments/payment-service");
+    }
+
+    /** An empty result set is a valid answer, not an error. */
+    @Test
+    void anEmptySearchResultYieldsNoHits() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/search")))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertThat(f.gateway().searchCode("order-payments/payment-service", "NOPE")).isEmpty();
+    }
+
+    /** The committer lookup encodes the project id the same single way. */
+    @Test
+    void recentCommittersEncodesTheProjectIdOnceToo() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/api/v4/projects/order-payments%2Fpayment-service/repository/tags")))
+                .andExpect(requestTo(not(containsString("%252F"))))
+                .andRespond(withSuccess("""
+                        [{"name":"v1.4.0","commit":{"committed_date":"2026-07-01T00:00:00Z"}}]""",
+                        MediaType.APPLICATION_JSON));
+        f.server().expect(requestTo(containsString("/repository/commits")))
+                .andExpect(requestTo(not(containsString("%252F"))))
+                .andRespond(withSuccess("""
+                        [{"author_name":"Priya Nair","author_email":"priya.nair@example.com",
+                          "committed_date":"2026-07-20T10:00:00Z"}]""",
+                        MediaType.APPLICATION_JSON));
+
+        var contacts = f.gateway().recentCommitters("order-payments/payment-service", "src/payment_service.py");
+
+        assertThat(contacts).hasSize(1);
+        assertThat(contacts.get(0).name()).isEqualTo("Priya Nair");
+        assertThat(contacts.get(0).signal()).contains("since v1.4.0");
+        f.server().verify();
+    }
+
+    /**
+     * A search term with regex/URL metacharacters must not corrupt the query string —
+     * the term is incident-derived (an error token lifted from a log line), so it is
+     * untrusted text reaching a URL.
+     */
+    @Test
+    void aSearchTermWithMetacharactersIsEncodedNotSplicedIn() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/search")))
+                .andExpect(requestTo(not(containsString("&scope=admin"))))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        f.gateway().searchCode("order-payments/payment-service", "TOKEN&scope=admin");
+
+        f.server().verify();
+    }
+}
