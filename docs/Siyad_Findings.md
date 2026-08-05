@@ -1,9 +1,10 @@
-## ISSUE with confluence query
+## ISSUES
+1. Issue with confluence query
 
+### Description
 When using the confluence query, I encountered an issue where the query "hazards being recorded handheld appearing delivery application attached Hazards being recorded on" did not return the expected results. however the search text when used in the confluence ui gives search results.
 
-
-### logs
+### Logs
 2026-08-04T16:53:35.369+10:00  INFO 6187 --- [triage-copilot] [     virtual-47] c.c.t.g.real.RealConfluenceGateway       : [Confluence] searching pages for: hazards being recorded handheld appearing delivery application attached Hazards being recorded on
 2026-08-04T16:53:35.600+10:00 ERROR 6187 --- [triage-copilot] [     virtual-47] c.c.t.g.real.RealConfluenceGateway       : [Confluence] error searching pages for: hazards being recorded handheld appearing delivery application attached Hazards being recorded on
 
@@ -28,3 +29,30 @@ at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317) ~[na:na]
 at java.base/java.lang.VirtualThread.run(VirtualThread.java:329) ~[na:na]
 
 2026-08-04T16:53:35.609+10:00  INFO 6187 --- [triage-copilot] [     virtual-47] c.c.t.o.DeterministicDiagnosisEngine     :   step 5 · CONFLUENCE · confluence.search(query="hazards being recorded handheld appearing delivery application attached Hazards being recorded on") → 0 page(s)
+
+
+### Fix 
+remove "/wiki" from the secrets.properties  
+```
+triage.integrations.confluence.base-url=https://auspost.atlassian.net
+```
+
+2. service-now query does not return Configuration Item as "Delivery Hazard".
+
+### Details
+The issue with this is that when the sumo query is constructed, "Delivery Hazard" is not added as the first item of the query, because it is not in the list of Configuration Items. 
+This means that the query will not return any results for "Delivery Hazard", and the diagnosis engine will not be able to find any relevant information.
+
+
+3. sumo query is constructed incorrectly, and does not return any results for "Delivery Hazard".
+
+### Details
+se the query it is wrong 
+```
+sumo.search(_sourceCategory=IDT/ITServices/Tomcat/hazards-being-recorded-on/prod/AppEvt_hazards-being-recorded-on and _index=Global_Standard_Infrequent hazards being recorded)
+```
+
+it is supposed to be created something simlar to this 
+```
+sumo.search(_sourceCategory=IDT/ITServices/Tomcat/delivery-hazards/ptest/AppEvt_delivery-hazards and _index=Global_Standard_Infrequent and "hazards being recorded")
+```
