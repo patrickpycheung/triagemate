@@ -38,7 +38,24 @@ similar-incident signal worth citing — is now in place.
 
 ## J28 — Precedent-grounded cause & resolution
 
-**State**: 🔵 Proposed · **Complexity**: Moderate · **Depends on**: J4, J5, J7, **J27**
+**State**: 🔵 Proposed · **Complexity**: Moderate · **Depends on**: J4, J5, J7, **J26**, **J27**
+
+> **Evidence-basis prerequisites** (`/doc-test dds`, 2026-08-05 — Codex flagged all three
+> HIGH, Claude corroborated the J13 one). Each `InferenceBasis` rests on a concept that is
+> **🔴 designed, not built**, so enabling it early would produce faithfully-quoted nonsense:
+>
+> | Basis | Rests on | Risk if enabled now |
+> |---|---|---|
+> | `PRIOR_RESOLUTION` | J26 ✅ built | — safe |
+> | `KNOWN_ERROR_DOC` | **J25** 🔴 | Confluence search currently returns unrelated pages; quote fidelity would prove only that an irrelevant page was quoted accurately |
+> | `CODE_PATH` | **J13** 🔴 | code-evidence ids collide and citations can name the wrong system |
+>
+> J26's ranker also weights `cmdb_ci` at 0.3, and **J24** 🔴 shows reference fields currently
+> parse to `""` — so ~30% of the ranking input is dead until J24 lands.
+>
+> **Ruling**: ship J28 restricted to `PRIOR_RESOLUTION` only. The other two bases stay in the
+> enum (the schema is right) but are not emitted until their concept is built. This is a
+> config/emit restriction, not a schema change, so nothing is thrown away.
 
 ### Essence
 
@@ -56,7 +73,7 @@ LikelyResolution likelyResolution     // nullable
 
 public record LikelyCause(
         String quotedFinding,         // verbatim from the cited artifact, never paraphrased
-        String citedArtifact,         // "INC0011902" — what the reader can open
+        List<String> citedArtifacts,  // ["INC0011902","INC0011455"] — what the reader can open
         InferenceBasis basis,         // how we got here
         List<String> evidenceRefs,
         int supportingCount,          // the denominator: "2 of 2"
@@ -71,11 +88,13 @@ public record LikelyResolution(
 public record ResolutionStep(
         ResolutionVerb verb,          // CLOSED enum — the safety boundary
         String quotedFinding,
-        String citedArtifact,
+        String citedArtifact,         // singular ON PURPOSE — one step quotes one incident's
+                                      // fix. Only LikelyCause aggregates ("2 of 2"), which is
+                                      // why that one is a list. Do not "fix" this to match.
         List<String> evidenceRefs
 ) {}
 
-enum InferenceBasis { PRIOR_RESOLUTION, KNOWN_ERROR_DOC, CODE_PATH, NONE }
+enum InferenceBasis { PRIOR_RESOLUTION, KNOWN_ERROR_DOC, CODE_PATH }
 enum ResolutionVerb { CHECK, COMPARE, REPRODUCE_NON_PROD, CONTACT,
                       CONSULT_RUNBOOK, GATHER }   // no OTHER, no escape hatch
 ```
@@ -105,7 +124,12 @@ enum ResolutionVerb { CHECK, COMPARE, REPRODUCE_NON_PROD, CONTACT,
   closed vocabulary, so this is a 4-way switch. This is the rule that catches the failure
   `evidenceRefs` cannot: a citation of the *wrong kind*. Existing `danglingRefs` covers
   fabricated refs; the new owners just join it.
-- **CR-7 — MEDIUM ceiling** on any cause-derived confidence.
+- **CR-7 — MEDIUM ceiling.** `LikelyCause` carries **no confidence field of its own** — the
+  denominator is the entire uncertainty signal (rule 3). CR-7 therefore constrains the
+  *report-level* `confidenceOverall`: a report whose only new signal is a `LikelyCause` may
+  not raise `confidenceOverall` above `MEDIUM`. Analogical transfer is never HIGH.
+  *(`/doc-test dds`: Codex caught that the original wording capped a field that did not
+  exist, which would have left the rule silently modifying the report's global confidence.)*
 - **CR-8 — quote fidelity**: `quotedFinding` must be a substring of a cited artifact's
   text, so invention is mechanically detectable rather than merely discouraged.
 
@@ -113,7 +137,8 @@ enum ResolutionVerb { CHECK, COMPARE, REPRODUCE_NON_PROD, CONTACT,
 
 `DiagnosisReport.java` (+3 records, +2 enums, `toDiagnosisNote()`),
 `DiagnosisReportValidator.java` (+3 rules), `DeterministicDiagnosisEngine.java` (insert at
-the existing `findSimilarIncidents` step ~`:156`), `AdkDiagnosisEngine.java` (prompt delta
+the existing `findSimilarIncidents` step — locate it by symbol, not by line; J26's ranker
+rework moved this region), `AdkDiagnosisEngine.java` (prompt delta
 + `stampGeneratedAt` arity), `TriageMateTools.java`, **`index.html` (twice — the report
 render AND the hand-mirrored note preview at `:1235-1238`)**,
 `DiagnosisControllerPostResponseShapeRegressionTest` (will fail strictly — that is the
