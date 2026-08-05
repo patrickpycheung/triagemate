@@ -247,6 +247,54 @@
     .advisory { color:var(--warn); font-size:12px; }
     .link { color:var(--acc); text-decoration:underline; }
 
+    /* ---- Source badge: the same vendor identity as a trace row, in the report.
+       Evidence and Who-to-talk-to used to name their origin as a bare lowercase
+       string ("servicenow-cmdb", "confluence"), while the trace directly above
+       showed the same four systems as a real logo in the vendor's own colour. Two
+       vocabularies for one fact — the reader had to translate. This reuses the
+       trace's exact tokens: PLATFORM_LOGO_SVG for the mark, the same
+       --sn/--cf/--sl/--gl colours, the same 7% color-mix tint.
+
+       Deliberately SMALLER and lighter than .trace-badge (a chip, not a 32px
+       tile): in the trace, identity is the row's subject, but here it prefixes a
+       sentence that is the subject. Same vocabulary, subordinate weight. */
+    .src-badge {
+      display:inline-flex; align-items:center; gap:5px; vertical-align:baseline;
+      padding:2px 8px 2px 6px; border-radius:999px; font-size:11.5px; font-weight:600;
+      line-height:1.45; white-space:nowrap;
+      /* Neutral surface + --ink label. An earlier version tinted the chip with 12%
+         of the SAME hue as its text and coloured the label in the vendor colour;
+         MEASURED across all 8 themes that scored 2.43–4.21:1, i.e. every badge in
+         the app failed WCAG's 4.5:1 for small text, worst on Warm. Colouring text
+         with a brand hue and then backing it with that same hue compresses exactly
+         the channel the reader needs.
+         The brand colour therefore lives on the MARK only (below), where it is
+         identity rather than reading matter and the 3:1 non-text bar applies. The
+         logo still says "Confluence" at a glance; the word stays legible. */
+      background:var(--chip); color:var(--ink); border:1px solid var(--border);
+    }
+    /* The mark inherits its own per-platform `color` via currentColor — the same
+       mechanism the trace badges use, which is why the SVGs are inlined rather
+       than <img src>. This is the one element that carries the vendor hue. */
+    .src-badge svg { width:13px; height:13px; display:block; flex:0 0 auto; }
+    .src-badge[data-platform="servicenow"] svg { color:var(--sn); }
+    .src-badge[data-platform="confluence"] svg { color:var(--cf); }
+    .src-badge[data-platform="sumologic"]  svg { color:var(--sl); }
+    .src-badge[data-platform="gitlab"]     svg { color:var(--gl); }
+    /* A whisper of the brand hue on the chip edge — enough to group a run of the
+       same source, far too little to eat the label's contrast. */
+    .src-badge[data-platform="servicenow"] { border-color:color-mix(in srgb, var(--sn) 35%, transparent); }
+    .src-badge[data-platform="confluence"] { border-color:color-mix(in srgb, var(--cf) 35%, transparent); }
+    .src-badge[data-platform="sumologic"]  { border-color:color-mix(in srgb, var(--sl) 35%, transparent); }
+    .src-badge[data-platform="gitlab"]     { border-color:color-mix(in srgb, var(--gl) 35%, transparent); }
+    /* The qualifier ("CMDB", "Incident") — which part of the system, kept because
+       "ServiceNow · CMDB" and "ServiceNow · Incident" are genuinely different
+       provenance and the old bare string carried that distinction. */
+    .src-badge-detail { font-weight:500; color:var(--muted); }
+    /* A source we have no mark for still gets the chip shape, so an unknown system
+       reads as "a source we can't identify", not as a broken badge. */
+    .src-badge--plain { color:var(--muted); background:var(--chip); }
+
     /* ---- Overflow containment: nothing may escape the 900px page column.
        A long unbroken token (a Confluence/ServiceNow URL, a stack frame, an
        incident id) has no break opportunity, so the browser lets it stick out
@@ -803,6 +851,63 @@ function stepPlatformToLower(platform) {
   return STEP_PLATFORM_TO_LOWER[platform] || 'triagemate';
 }
 
+/* ---- Report source strings -> the trace's platform vocabulary ---------------
+   Evidence.source and Contact.source are free-ish strings the engines write
+   ("servicenow-incident", "servicenow-cmdb", "confluence", "sumo", "gitlab"),
+   NOT the Platform enum the trace uses. They're matched by substring rather than
+   by table lookup for two reasons: the qualifier suffixes are open-ended (a new
+   "servicenow-problem" should still read as ServiceNow rather than falling back
+   to an unlabelled chip), and Contact.source merges as "confluence+gitlab" when
+   the same person shows up in both — which is a real value the model emits, and
+   is why this returns a LIST rather than one token.
+
+   Note "sumo" -> 'sumologic': the same asymmetry STEP_PLATFORM_TO_LOWER has, for
+   the same reason — the CSS token is the product name, the enum/source is not. */
+const SOURCE_PLATFORM_MATCHERS = [
+  ['servicenow', 'servicenow', 'ServiceNow'],
+  ['confluence', 'confluence', 'Confluence'],
+  ['sumo',       'sumologic',  'Sumo Logic'],
+  ['gitlab',     'gitlab',     'GitLab'],
+];
+
+/** Platform hits within one source string, in the order they appear in it. */
+function sourcePlatforms(source) {
+  const s = String(source || '').toLowerCase();
+  return SOURCE_PLATFORM_MATCHERS
+      .map(([needle, token, label]) => ({ at: s.indexOf(needle), needle, token, label }))
+      .filter(m => m.at >= 0)
+      .sort((a, b) => a.at - b.at);
+}
+
+/**
+ * One chip per platform named by `source`, each carrying the vendor mark.
+ *
+ * <p>The qualifier is whatever is left after the platform name with separators
+ * stripped ("servicenow-cmdb" -> "CMDB"), shown only when a SINGLE platform
+ * matched: on a merged "confluence+gitlab" the leftovers are just the other
+ * platform's name, which would render as "Confluence · Gitlab".
+ */
+function sourceBadgeHtml(source) {
+  const matches = sourcePlatforms(source);
+  if (!matches.length) {
+    const raw = String(source || '').trim();
+    return raw ? `<span class="src-badge src-badge--plain">${esc(raw)}</span>` : '';
+  }
+  const detail = matches.length === 1
+      ? String(source).toLowerCase().replace(matches[0].needle, '').replace(/[-_+.\s]+/g, ' ').trim()
+      : '';
+  return matches.map(m => {
+    const mark = PLATFORM_LOGO_SVG[m.token] || '';
+    const tail = detail ? ` <span class="src-badge-detail">· ${esc(upperFirst(detail))}</span>` : '';
+    return `<span class="src-badge" data-platform="${esc(m.token)}">${mark}<span>${esc(m.label)}</span>${tail}</span>`;
+  }).join(' ');
+}
+
+function upperFirst(s) {
+  // "cmdb" reads as an acronym, "incident" as a word — uppercase short tokens whole.
+  return s.length <= 4 ? s.toUpperCase() : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // One row. `step.state === 'PENDING'` is the pre-render skeleton state (see
 // renderLt3Replay) — real duration/result text is withheld until the row is
 // actually revealed, so the skeleton doesn't spoil the "nothing is running
@@ -1212,13 +1317,13 @@ function render(data) {
   ).join('');
   // FND-25: J7 always claimed "source badges + links" here; the link half was never
   // rendered (only the reconstructed sources-comment preview below had it).
-  const ev = r.evidence.map(e => `<div class="ev"><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</div>`).join('');
+  const ev = r.evidence.map(e => `<div class="ev">${sourceBadgeHtml(e.source)} ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
-  const sources = r.evidence.map(e => `<li><b>${esc(e.source)}</b> — ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
+  const sources = r.evidence.map(e => `<li>${sourceBadgeHtml(e.source)} ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
   const contacts = (r.suggestedContacts||[]).map(c => `
     <div class="ev" style="border-left-color:var(--ok)">
-      <div><b style="color:var(--ok)">${esc(c.source)}</b> &nbsp;<span style="font-weight:600">${esc(c.name)}</span>${c.handle?` <span class="src">&lt;${esc(c.handle)}&gt;</span>`:''}</div>
+      <div>${sourceBadgeHtml(c.source)} <span style="font-weight:600">${esc(c.name)}</span>${c.handle?` <span class="src">&lt;${esc(c.handle)}&gt;</span>`:''}</div>
       <div style="margin-top:3px">${esc(c.reason)}</div>
       ${c.signal?`<div class="src" style="margin-top:2px;font-size:12px">${esc(c.signal)}</div>`:''}
     </div>`).join('');
