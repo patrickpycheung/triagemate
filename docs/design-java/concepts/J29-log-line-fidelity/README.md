@@ -1,6 +1,8 @@
 # J29 — Log-line fidelity (a real log line must yield a level and a searchable identifier)
 
-**State**: 🔴 Designed, not built — HIGH · **Complexity**: Simple · **Priority**: HIGH
+**State**: 🟢 Shipped — verified live 2026-08-05 (`a31c961`, `9418b7b`, `5e188d3`; verification
+in [`.agent.work/tasks/STREAM-003/TASK-001/results.md`](../../../../.agent.work/tasks/STREAM-003/TASK-001/results.md))
+· **Complexity**: Simple · **Priority**: HIGH
 **Depends on**: J6 (knowledge tools / Real Sumo gateway), J3 (gateway contracts), J22 (real-gateway contract tests)
 **Amends**: J6 (`LogEvidence.level` contract), J13 (the confidence tier that reads `level`)
 **Source**: teammate field report — [`docs/Patrick_gitlab-skipped-issue.md`](../../../Patrick_gitlab-skipped-issue.md),
