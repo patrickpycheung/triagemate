@@ -610,4 +610,67 @@ class DeterministicDiagnosisEngineTest {
                         .as("0.86 requires the code hit to be THIS system's")
                         .isLessThan(0.86));
     }
+
+    /**
+     * J29/LLF-2 — "we could not read the severity" and "this line is INFO" are different
+     * facts that both land on the 0.45 tier at :420. On the real Sumo estate the structured
+     * level field is absent on every row, so before J29 every live run produced the lower
+     * number with nothing in the report saying why. The scoring is right — an unreadable
+     * level must NOT be promoted to the ERROR tier, because inventing severity to raise
+     * confidence is the dishonesty J13 exists to prevent — so the fix is disclosure.
+     */
+    @Test
+    void anUnreadableLogLevelIsDisclosedRatherThanSilentlyScoredAsNonError() {
+        var unreadableLevels = new MockSumoGateway() {
+            @Override
+            public List<com.company.triage.model.LogEvidence> search(
+                    com.company.triage.model.LogSearchRequest request) {
+                return List.of(
+                        // "" is what RealSumoGateway.parseLevel returns when neither the
+                        // structured field nor _raw yields a level (J29/LLF-1).
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:00Z", "",
+                                "payment_service", "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471"),
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:01Z", "",
+                                "payment_service", "retrying reconcile"));
+            }
+        };
+        var engineWithUnreadableLevels = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                unreadableLevels, new MockGitLabGateway(), TriagePropertiesFixture.deterministic());
+
+        var report = engineWithUnreadableLevels.diagnose("INC0010005").report();
+
+        assertThat(report.missingInformation())
+                .as("the run must say the severity was unreadable")
+                .anySatisfy(m -> assertThat(m).contains("severity could not be read").contains("2"));
+    }
+
+    /**
+     * J29/LLF-2 — the disclosure is conditional. A window where every level parsed must read
+     * exactly as it did before; a caveat that fires on healthy data trains readers to skip
+     * the whole section.
+     */
+    @Test
+    void aWindowWithReadableLevelsAddsNoUnreadableSeverityDisclosure() {
+        var readableLevels = new MockSumoGateway() {
+            @Override
+            public List<com.company.triage.model.LogEvidence> search(
+                    com.company.triage.model.LogSearchRequest request) {
+                return List.of(
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:00Z", "ERROR",
+                                "payment_service", "PAYMENT_RECONCILE_MISMATCH order=INC-ORD-4471"),
+                        new com.company.triage.model.LogEvidence("2026-07-29T12:00:01Z", "INFO",
+                                "payment_service", "retrying reconcile"));
+            }
+        };
+        var engineWithReadableLevels = new DeterministicDiagnosisEngine(
+                new MockServiceNowGateway(), new MockConfluenceGateway(),
+                readableLevels, new MockGitLabGateway(), TriagePropertiesFixture.deterministic());
+
+        var report = engineWithReadableLevels.diagnose("INC0010005").report();
+
+        assertThat(report.missingInformation())
+                .as("no caveat when every level was readable")
+                .noneSatisfy(m -> assertThat(m).contains("severity could not be read"));
+    }
 }

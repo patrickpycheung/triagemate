@@ -517,6 +517,19 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     + "in this report supports them as candidates — they are omitted rather than "
                     + "listed uncited").formatted(unsupportedSystems));
         }
+        // J29/LLF-2: an unreadable level is "unknown", not a severity. Such a row takes the
+        // same 0.45 tier at :420 as a genuine non-ERROR line — deliberately, because promoting
+        // it to the 0.70 ERROR tier would be inventing severity to raise our own confidence,
+        // the dishonesty J13 exists to prevent. But then the report states a number it cannot
+        // justify, so the fact that the number rests on an unread severity is disclosed. On the
+        // real Sumo estate the structured level field is absent on every row, so before J29
+        // this understated confidence on every live run with nothing in the trace saying why.
+        long unreadableLevels = logs.stream().filter(l -> !notBlank(l.level())).count();
+        if (unreadableLevels > 0) {
+            missing.add(("%d log row(s) in the searched window carry no readable level, so their "
+                    + "severity could not be read — they are scored as non-ERROR because the level "
+                    + "is unknown, not because the lines were informational").formatted(unreadableLevels));
+        }
         if (docs.isEmpty()) missing.add("No runbook or known-error page matched the symptom terms");
         if (inc.environment() == null || inc.environment().isBlank()) missing.add("Environment not set on the ticket");
         if (inc.comments().isEmpty()) missing.add("No caller follow-up comments to narrow scope/timing");
