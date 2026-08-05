@@ -44,7 +44,31 @@ triage.integrations.confluence.base-url=https://auspost.atlassian.net
 ### Details
 The issue with this is that when the sumo query is constructed, "Delivery Hazard" is not added as the first item of the query, because it is not in the list of Configuration Items. 
 This means that the query will not return any results for "Delivery Hazard", and the diagnosis engine will not be able to find any relevant information.
+i put some additional logging to see what the service-now query is returning, and it is returning the following:
+```
+2026-08-05T10:49:06.609+10:00  INFO 7870 --- [triage-copilot] [     virtual-46] c.c.t.g.real.RealServiceNowGateway       : Incident row = {
+  "sys_id" : "54724710c3628350061cd64d050131ae",
+  "number" : "INC0010010",
+  "short_description" : "Hazards being recorded on handheld are not appearing in Delivery Hazards application. See attached for details.",
+  "opened_at" : "2026-08-02 21:37:16",
+  "assignment_group" : "",
+  "cmdb_ci" : {
+    "display_value" : "Delivery Hazards",
+    "link" : "https://dev409441.service-now.com/api/now/table/cmdb_ci/a977367a5a9287107b7d871d9d19e62c"
+  },
+  "caller_id" : {
+    "display_value" : "Adela Cervantsz",
+    "link" : "https://dev409441.service-now.com/api/now/table/sys_user/0a826bf03710200044e0bfc8bcbe5d7a"
+  },
+  "description" : "Hazards being recorded on handheld are not appearing in Delivery Hazards application. See attached for details.\r\n\r\nJohn Doe has raised the below ticket for - ~I can't find what I'm looking for (Applications and Software)\r\nOption Selected: ~I can't find what I'm looking for\r\n\r\nContact details:\r\nPrimary contact number: 0412345678\r\nBest contact hours: 9 to 5",
+  "category" : "Inquiry / Help",
+  "subcategory" : null
+}
+2026-08-05T10:49:07.207+10:00  INFO 7870 --- [triage-copilot] [     virtual-46] c.c.t.o.DeterministicDiagnosisEngine     :   step 1 · SERVICENOW · servicenow.getIncident(INC0010010) → CI=, env=null
+```
+it is clear that the cmdb_id.display_value is not parsed correctly, and the Configuration Item is not being set to "Delivery Hazard". This is causing the sumo query to be constructed incorrectly, and it does not return any results for "Delivery Hazard".
 
+this need to be fixed.
 
 3. sumo query is constructed incorrectly, and does not return any results for "Delivery Hazard".
 
@@ -69,3 +93,26 @@ servicenow
 
 understand: id=null, keywords=[hazards, being, recorded, handheld, appearing, delivery, application, attached], app=Hazards being recorded on
 ```
+The  fix for item 2 , may fix this issue as well.
+
+3. Confluence query not returning relevant results
+
+### details
+
+from the logs for this confluence query
+```
+CONFLUENCE · confluence.search(query="hazards being recorded handheld appearing delivery application attached Hazards being recorded on") → 5 page(s)
+```
+
+none of the returned results are relevant to the query, and the diagnosis engine is not able to find any relevant information.
+see the trace emitted in evidence section for confluence.
+
+```
+confluence — AusPost Application List (1428619389): [/spaces/qet/database/1428619389]
+confluence — Service Cloud Basic Navigation v2021.pdf (att98078596): [/pages/viewpageattachments.action?pageId=98078939&preview=%2F98078939%2F98078596%2FService+Cloud+Basic+Navigation+v2021.pdf]
+confluence — Teradata Transportation and Logistics Data Model 06.01.00 Appendices.pdf (att97848644): [/pages/viewpageattachments.action?pageId=97848407&preview=%2F97848407%2F97848644%2FTeradata+Transportation+and+Logistics+Data+Model+06.01.00+Appendices.pdf]
+confluence — Teradata Transportation and Logistics Data Model 06.01.00 Appendices.pdf (att97811000): [/pages/viewpageattachments.action?pageId=97810601&preview=%2F97810601%2F97811000%2FTeradata+Transportation+and+Logistics+Data+Model+06.01.00+Appendices.pdf]
+confluence — EDM Article Event (1825407267): This specification summarises how EMR event data is mapped into EDP for logistics event use cases. It focuses on safely making this data available to consumers in EDP consumption. Scope : EMR event data delivered via EDB/Pub/Sub into EDP, primarily the EMR_EVENTS / EMR_EventsCons staging pattern and downstream logistics-event modelling. Source system : Event Management Re-Imagined (EMR). Target pl… [/spaces/DAIA/pages/1825407267/EDM+Article+Event]
+```
+
+investige the confluence query and see if it can be improved to return more relevant results.
