@@ -6,7 +6,44 @@ as a clean bill of health.**
 
 ---
 
-## CRITICAL — G1: FRI-5 and ECI-6 together can 500 the fallback engine
+## CRITICAL — G1: the fallback engine can still 500 on one failing connector
+
+> ### ⚠️ CORRECTED 2026-08-06, after implementing J14/FRI-6
+>
+> **The mechanism below is WRONG. The conclusion is right, for a simpler and worse reason.**
+> I built the FRI-6 fixture corpus specifically to test this analytically-derived chain, and
+> the test disproved my own mechanism while confirming the outcome.
+>
+> **What I predicted** (uncited candidate → `uncitedCandidates()` → `DiagnosisReportInvalidException`
+> → 500): **NOT REPRODUCED.** Probed every single-call failure point. `sumo.search`,
+> `confluence.search` and `gitlab.searchCode` all degrade cleanly — FRI-5 holds, the report is
+> assembled and passes the validator. ECI-6 and FRI-5 do **not** conflict. hack-222 owes me
+> nothing on that.
+>
+> **What is actually broken**: `serviceNow.findSimilarIncidents` (`DeterministicDiagnosisEngine:193`)
+> and `serviceNow.findOwnership` (`:210`) are called **bare** — no try/catch. FRI-5's
+> degradation exists at `:235`, `:348`, `:419`, `:795` but not around those two. So a
+> `GatewayUnavailableException` from ServiceNow escapes `diagnose()` entirely, **no report is
+> ever assembled**, the validator is never reached, and
+> `DiagnosisApiExceptionHandler` has **no `@ExceptionHandler` for `GatewayUnavailableException`**
+> (contrast `ResourceAccessException`:78 → 504, `DiagnosisReportInvalidException`:91 → 500) —
+> so it surfaces as a bare **HTTP 500 out of the FND-7 fallback engine**.
+>
+> **FRI-5 is incomplete, not conflicting.** Its own spec named all four sites verbatim:
+> *"wrap the three aborting call sites (`sumo.search:180`, `gitLab.searchCode:214`,
+> `serviceNow.findSimilarIncidents:151` / `findOwnership:139`)"*. Two of the four were never
+> wrapped, and the new exception type has no handler.
+>
+> Now proved by a reproducible red test rather than an argument:
+> `DeterministicRealShapedInputTest#aFailingServiceNowCallStillProducesAValidReport`,
+> `@Disabled` with the reason inline. Re-enable it as the fix's acceptance criterion.
+>
+> *Lesson for this report: the original G1 was a plausible chain assembled by reading code,
+> and it was wrong. It took an executable fixture to find that out — which is exactly what
+> FRI-6 exists for, and exactly the failure class (reasoning over real shapes without running
+> them) that FND-47, FND-61, J24 and J29 all belong to.*
+
+### Original (superseded) analysis — FRI-5 and ECI-6 together can 500 the fallback engine
 
 **Confidence: HIGH** (found by the Claude conflict pass, then verified against code).
 **Both halves shipped today, hours apart, by different worktrees. Neither card mentions the other.**
