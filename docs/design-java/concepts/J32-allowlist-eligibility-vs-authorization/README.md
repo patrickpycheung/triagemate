@@ -45,7 +45,9 @@ authorization must be unaffected by a flag that only means "don't rank this".
 
 ## The fork
 
-**Option A — leave it.** The phantom 404 costs one wasted call per real run, and once
+**Option A — leave it.** The phantom costs at most one wasted call, and **not on every real
+run**: the real project sorts first (stable sort, config order) and a hit short-circuits the
+sweep, so the phantom is reached only when the real project returns no hits. Once
 [J31](../J31-allowlist-sweep-outcome/README.md) lands, that call is skipped cleanly and named
 in the report. Nothing is unsafe; it is untidy. Zero blast radius.
 

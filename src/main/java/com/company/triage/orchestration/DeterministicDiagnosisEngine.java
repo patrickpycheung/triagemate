@@ -463,8 +463,12 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             // and J29/LLF-2 (an unreadable log level). Third instance of the pattern; the
             // card notes it is worth stating once as a rule if a fourth appears.
             if (codeSearchFailed) {
-                String traceFailed = "gitlab.searchCode(term='%s', projects=%s) → COULD NOT SEARCH "
-                        + "(GitLab unreachable) — this is not 'no code matched'"
+                // The parens are load-bearing: `"…%s…" + "…".formatted(a, b)` binds `formatted`
+                // to the SECOND literal only, so the placeholders in the first were printed
+                // raw and every degraded run traced `term='%s', projects=%s`. Found in J31's
+                // CDS round; pinned by `theCouldNotSearchLineIsActuallyFormatted`.
+                String traceFailed = ("gitlab.searchCode(term='%s', projects=%s) → COULD NOT SEARCH "
+                        + "(GitLab unreachable) — this is not 'no code matched'")
                         .formatted(errorToken, projectsToTry);
                 trace.add(traceFailed);
                 emitStep(sink, stepSeq, "gitlab.searchCode", traceFailed);

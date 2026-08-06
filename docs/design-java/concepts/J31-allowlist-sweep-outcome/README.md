@@ -2,10 +2,11 @@
 
 **State**: 🟡 **Stable** (2026-08-06, Round 5 — ASO-4 decided, no open items) · **Complexity**: Moderate
 **Depends on**: J30 (estate binding), J14/FRI-5 (per-call degradation), J6 (GitLab gateway contract)
-**Amends**: **J30/GEB-2** (whose per-project rule the code does not implement), **J30/GEB-3**
-(which specified the failed-vs-empty distinction for a single attempt, not for a sweep).
-**Does not amend J14/FRI-5** — ASO-4 satisfies its trace contract rather than changing it
-(see the decision there).
+**Amends**: **J30/GEB-3** only (which specified the failed-vs-empty distinction for a single
+attempt, not for a sweep).
+**Does not amend J30/GEB-2** — ASO-1 *restores* it. GEB-2's text is correct and unchanged; the
+code disagrees with it. Implementing a rule is not amending it.
+**Does not amend J14/FRI-5** — ASO-4 satisfies its trace contract rather than changing it.
 **Source**: derived while checking cheungp's
 [`Patrick_gitlab-update_allowed-projects.md`](../../../Patrick_gitlab-update_allowed-projects.md)
 against the tree, 2026-08-06. Patrick's recommendation is **already implemented** (J30/GEB-1);
@@ -92,10 +93,17 @@ it. **Four states, not two**:
 
 | Outcome | The report must say |
 |---|---|
-| Any project returned hits | the citations |
+| Hits, every attempt succeeded | the citations |
+| Hits, but some attempt failed | the citations **and** the failures — the hits are real, and they may not be all of them |
 | All projects searched, none had hits | searched, found nothing — **not** a degradation |
 | Some searched (empty), some failed | searched *partially*; names what could not be reached |
 | No project could be searched | could not search — with the failures |
+
+**Five states, not four** (Round 5 correction). The draft's "any project returned hits → the
+citations" silently dropped an earlier failure, and ASO-1 is what makes that reachable: once a
+failed project no longer ends the sweep, *failure followed by a hit* becomes an ordinary
+outcome. Reporting only the hit would let the reader believe the search was complete when one
+project was never reached — a smaller version of the same overclaim ASO-B is about.
 
 The third row is the one the first draft got wrong. It said any successful attempt makes the
 sweep "not a degradation" — **false**: if another project failed, nothing is known about that
@@ -128,11 +136,10 @@ a new `PARTIAL` state. Three facts decide it:
    a sweep is N calls. Per-attempt rows are what LT1 already describes; the aggregate line
    ("`gitLab.searchCode(...) → N hit(s)`") is a separate narrative `emitStep`, not a lifecycle
    row, and it stays.
-2. **A 7th enum member would widen an existing gap.** `StepState` already has six members
-   (`PENDING, ACTIVE, DONE, FAILED, DENIED, ABANDONED`), while LT5's documented CSS mapping
-   covers five and says "test all five" — `ABANDONED` arrived later and was never added to it.
-   Adding `PARTIAL` on top of an already-stale mapping trades a small display gain for a
-   second untested state.
+2. **A 7th enum member costs more than it looks.** `StepState` has six members
+   (`PENDING, ACTIVE, DONE, FAILED, DENIED, ABANDONED`), and adding one means the enum, the
+   renderer's `stepStateToDataState` map, its `console.assert` line, the CSS block, and LT5's
+   prose — for a distinction the per-attempt rows already show.
 3. **ASO-2 needs per-project attribution anyway.** Per-attempt rows carry it for free; an
    aggregate would need the same information threaded separately, i.e. the same facts in two
    representations.
@@ -142,9 +149,23 @@ and "partial" is a property the reader *sees* — some rows failed, some did not
 state the enum has to name. **This card therefore no longer amends J14/FRI-5's trace
 contract**; it satisfies it.
 
-> Noticed while deciding this, and **not fixed here**: LT5's `StepState`→CSS mapping is one
-> member behind the enum (`ABANDONED` unmapped, so it falls through to whatever the renderer
-> defaults to). That is J11's, not this card's — recorded so it is not lost.
+**The aggregate row cannot stay `DONE`.** `emitStep` hardcodes `StepState.DONE` for every
+narrative step it writes (`DeterministicDiagnosisEngine.java:752-761` — `sink.after(... DONE
+...)`, unconditional). So **today's "COULD NOT SEARCH" line is already emitted as `DONE`**:
+the text says the search failed while the state says the step succeeded, which is the exact
+thing FRI-5 forbids ("using `DONE` would make the trace assert a step succeeded when it did
+not"). That is a live defect independent of this card, and ASO-4 cannot leave it standing while
+claiming the trace is honest. `emitStep` takes an explicit state; the sweep's aggregate row is
+`FAILED` when no attempt succeeded, `DONE` otherwise, with the per-attempt rows carrying which
+was which.
+
+> **Corrected in Round 5, and worth keeping as a caution.** An earlier revision of this section
+> claimed LT5's `StepState`→CSS mapping was a member behind the enum and that `ABANDONED` was
+> unmapped. **False** — the renderer maps all six (`index.html:1003`, CSS at 489-491, asserted
+> at 1017). The claim came from LT5's *prose*, which still says "test all five", rather than
+> from the renderer. Only the doc is stale. This is the second time in this card's short life
+> that a confident statement about a neighbour came from reading a document instead of the
+> code, which is precisely the habit the conflict round exists to catch.
 
 ## Relationship to J30 — corrective, not competing
 

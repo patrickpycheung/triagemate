@@ -48,6 +48,29 @@ class CodeSearchFailedIsNotNoMatchTest {
         };
     }
 
+    /**
+     * The COULD NOT SEARCH line must carry the real term and projects, not the format string.
+     *
+     * <p>Found during J31's CDS round. {@code "…%s…" + "…".formatted(a, b)} applies
+     * {@code formatted} to the SECOND literal only — Java binds the method call tighter than
+     * the concatenation — so the placeholders in the first literal were never substituted and
+     * the trace read {@code term='%s', projects=%s} verbatim on every degraded run.
+     *
+     * <p>The sibling tests could not catch it: asserting {@code contains("COULD NOT SEARCH")}
+     * passes just as happily on an unformatted string. A test that checks a line is PRESENT
+     * says nothing about whether the line is READABLE.
+     */
+    @Test
+    void theCouldNotSearchLineIsActuallyFormatted() {
+        var trace = diagnoseWith(unreachable()).trace();
+
+        var line = trace.stream().filter(l -> l.contains("COULD NOT SEARCH")).findFirst().orElseThrow();
+        assertThat(line)
+                .as("the format placeholders must be substituted, not printed")
+                .doesNotContain("%s")
+                .contains("term='");
+    }
+
     @Test
     void anUnreachableGitLabSaysSoRatherThanReportingZeroHits() {
         var trace = diagnoseWith(unreachable()).trace();
