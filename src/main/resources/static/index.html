@@ -22,10 +22,33 @@
   <style>
     /* ---- Theme tokens -------------------------------------------------------
        Every colour the page paints comes from one of these. Adding a theme
-       below means overriding these 17 vars — no rule outside :root/[data-theme]
+       below means overriding these 18 vars — no rule outside :root/[data-theme]
        may hardcode a hex, or that theme silently half-applies. Theme choice is
        cosmetic only: it never changes what the page reports (see the FND-16/25
        notes in render() — those read real DiagnosisResult fields, not colours).
+
+       --acc  vs  --acc2 (added 2026-08-05, operator instruction)
+       ------------------------------------------------------------------
+       --acc  is the PRIMARY accent and stays Australia Post red in the red themes. It
+              marks exactly one thing now: a section heading (.card h2 and its opening
+              rule), plus the primary button and the active trace row.
+       --acc2 is the SECONDARY accent, for text that sits INSIDE a section: the
+              "AI TRIAGE · SOURCES CONSULTED" sub-label on the ServiceNow card, that
+              block's left rule, and links (.link/.ev-link).
+
+       The problem it fixes: heading, sub-label and links were all --acc, so the
+       ServiceNow card was a wash of red in three sizes with no hierarchy — nothing read
+       as more important than anything else. Two levels of accent restore the ranking
+       without giving up the red identity.
+
+       Every --acc2 below clears WCAG AA (4.5:1) against BOTH that theme's --card and its
+       --inset (the sub-label sits on --inset). Measured, lowest first: servicenow 5.26,
+       inkblue 5.68, ember 6.29, forest 7.06, warm 7.44, auspost 7.51, crimson 8.97,
+       gold 9.18 — all against --inset, the tighter of the two.
+
+       The family is deep blue→teal, chosen as the calm complement to Australia Post red.
+       The two themes whose --acc is ITSELF blue (inkblue, servicenow) shift to teal, or
+       the two accents would collide and the hierarchy would be lost again.
     */
     /* Every theme here is a variation on ONE identity: Australia Post. The earlier
        mixed set (midnight blue, hackathon purple, ServiceNow green, neutral paper) was
@@ -41,7 +64,7 @@
        before those themes were removed lands here instead of on an unstyled page. */
     :root, [data-theme="auspost"] {
       --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
-      --acc:#dc1928; --ok:#0a7d54; --warn:#b45309;
+      --acc:#dc1928; --acc2:#1f4e9c; --ok:#0a7d54; --warn:#b45309;
       --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
       --chip:#fdeaec; --inset:#fbf7f7; --btn-ink:#ffffff; --trace:#4a5a6a;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -75,7 +98,7 @@
        FLOW step markers. Reads as the base theme with the volume up. 5.74:1 on white. */
     [data-theme="auspost-crimson"] {
       --bg:#f4f5f7; --card:#ffffff; --ink:#1c2b36; --muted:#5c6b7a;
-      --acc:#cf000b; --ok:#0a7d54; --warn:#b45309;
+      --acc:#cf000b; --acc2:#17457f; --ok:#0a7d54; --warn:#b45309;
       --border:#dfe3e8; --input-bg:#ffffff; --input-border:#c3ccd6;
       --chip:#fde8e9; --inset:#fdf6f6; --btn-ink:#ffffff; --trace:#4a5a6a;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -90,7 +113,7 @@
        the ink the measurement demanded. */
     [data-theme="auspost-gold"] {
       --bg:#f6f5f2; --card:#ffffff; --ink:#231f14; --muted:#6a6152;
-      --acc:#f9c60e; --ok:#0a7d54; --warn:#b45309;
+      --acc:#f9c60e; --acc2:#1b3f8f; --ok:#0a7d54; --warn:#b45309;
       --border:#e5e0d4; --input-bg:#ffffff; --input-border:#cbc3ae;
       --chip:#fdf3d2; --inset:#fbf8ef; --btn-ink:#231f14; --trace:#544c3c;
       --banner-bg:#fff5e6; --banner-ink:#8a5000;
@@ -105,7 +128,7 @@
        6.50:1 on white, the strongest contrast in the set. */
     [data-theme="auspost-inkblue"] {
       --bg:#f4f5f8; --card:#ffffff; --ink:#182034; --muted:#586179;
-      --acc:#0751dd; --ok:#0a7d54; --warn:#b45309;
+      --acc:#0751dd; --acc2:#0f6d72; --ok:#0a7d54; --warn:#b45309;
       --border:#dde1ea; --input-bg:#ffffff; --input-border:#c1c8d6;
       --chip:#e5ecfd; --inset:#f5f7fc; --btn-ink:#ffffff; --trace:#48526b;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -119,7 +142,7 @@
        like an alarm. 5.18:1 on white. */
     [data-theme="auspost-forest"] {
       --bg:#f4f6f3; --card:#ffffff; --ink:#1b2a1c; --muted:#5a6b5b;
-      --acc:#3e7b18; --ok:#0a7d54; --warn:#b45309;
+      --acc:#3e7b18; --acc2:#28568f; --ok:#0a7d54; --warn:#b45309;
       --border:#dde5db; --input-bg:#ffffff; --input-border:#c2cfc0;
       --chip:#e8f3e0; --inset:#f6faf4; --btn-ink:#ffffff; --trace:#4a5a4b;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -133,7 +156,7 @@
        the base red without leaving the Australia Post family. 5.70:1 on white. */
     [data-theme="auspost-ember"] {
       --bg:#f7f5f3; --card:#ffffff; --ink:#2a1d18; --muted:#6b5b53;
-      --acc:#c22d18; --ok:#0a7d54; --warn:#b45309;
+      --acc:#c22d18; --acc2:#12656e; --ok:#0a7d54; --warn:#b45309;
       --border:#e6ded9; --input-bg:#ffffff; --input-border:#ccc0b9;
       --chip:#fbe8e3; --inset:#fbf6f4; --btn-ink:#ffffff; --trace:#584a44;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -150,7 +173,7 @@
        red regardless, via --brand. */
     [data-theme="auspost-servicenow"] {
       --bg:#f6f6f8; --card:#ffffff; --ink:#181826; --muted:#5f6480;
-      --acc:#3c59e7; --ok:#1f9254; --warn:#cc7a00;
+      --acc:#3c59e7; --acc2:#0f7360; --ok:#1f9254; --warn:#cc7a00;
       --border:#dcdcea; --input-bg:#ffffff; --input-border:#c2c3d8;
       --chip:#e7e9fb; --inset:#f4f4fa; --btn-ink:#ffffff; --trace:#4c5170;
       --banner-bg:#fff5e6; --banner-ink:#a35a00;
@@ -163,7 +186,7 @@
        screenshots pasted into a deck, where pure #fff blows out. */
     [data-theme="auspost-warm"] {
       --bg:#faf6f1; --card:#fffdfa; --ink:#2b2119; --muted:#6d6055;
-      --acc:#c41425; --ok:#0a7d54; --warn:#a75d0a;
+      --acc:#c41425; --acc2:#2a4d80; --ok:#0a7d54; --warn:#a75d0a;
       --border:#e6dcd0; --input-bg:#fffdfa; --input-border:#cfc2b3;
       --chip:#f7e3e0; --inset:#f5efe7; --btn-ink:#ffffff; --trace:#5b4f45;
       --banner-bg:#fdf0da; --banner-ink:#8a5000;
@@ -239,13 +262,52 @@
                        background:var(--acc); flex:0 0 auto; opacity:.85; }
     .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
     .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
-    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc); background:var(--inset); margin-bottom:7px; border-radius:0 6px 6px 0; }
+    /* ---- Evidence / contacts: the TRACE ROW layout ---------------------------
+       Operator instruction 2026-08-05. These used to render the platform chip
+       INLINE, as a prefix to the sentence — so a two-line summary wrapped back
+       underneath the chip and the mark stopped reading as "this whole item came
+       from that system". The tool-call trace already solved exactly this: a fixed
+       mark column on the left, top-aligned, and everything textual in a second
+       column beside it. Same problem, so the same shape, and now the trace and the
+       report teach the reader one layout instead of two.
+
+       Structure mirrors .trace-row / .trace-badge / .trace-body deliberately —
+       compare them side by side before changing either. */
+    .ev { font-size:13px; padding:8px 10px; border-left:3px solid var(--acc2); background:var(--inset);
+          margin-bottom:7px; border-radius:0 6px 6px 0;
+          display:flex; gap:10px; align-items:flex-start; }
     .ev b { color:var(--acc); text-transform:uppercase; font-size:11px; }
+    /* Top-aligned, never shrinking: the mark stays level with the first line of
+       text however many lines follow it (align-items:flex-start above, not the
+       trace's `center` — a trace row is one line, an evidence item is a paragraph). */
+    .ev-mark {
+      flex:0 0 auto; width:28px; height:28px; border-radius:8px;
+      display:grid; place-items:center; background:var(--chip); border:1px solid var(--border);
+    }
+    .ev-mark svg { width:15px; height:15px; }
+    .ev-mark[data-platform="servicenow"] svg { color:var(--sn); }
+    .ev-mark[data-platform="confluence"] svg { color:var(--cf); }
+    .ev-mark[data-platform="sumologic"]  svg { color:var(--sl); }
+    .ev-mark[data-platform="gitlab"]     svg { color:var(--gl); }
+    .ev-mark[data-platform="servicenow"] { border-color:color-mix(in srgb, var(--sn) 35%, transparent); }
+    .ev-mark[data-platform="confluence"] { border-color:color-mix(in srgb, var(--cf) 35%, transparent); }
+    .ev-mark[data-platform="sumologic"]  { border-color:color-mix(in srgb, var(--sl) 35%, transparent); }
+    .ev-mark[data-platform="gitlab"]     { border-color:color-mix(in srgb, var(--gl) 35%, transparent); }
+    /* min-width:0 is load-bearing: without it a long unbroken URL in the body
+       forces the flex item wider than the card instead of wrapping. */
+    .ev-body { flex:1; min-width:0; }
+    /* The platform name moves here from the chip. It is still stated in words —
+       the mark alone is identity for a sighted reader who knows the logos, not for
+       everyone — just demoted to a meta line, exactly like .trace-meta. */
+    .ev-meta { font-size:11px; color:var(--muted); margin-bottom:2px;
+               text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
     .src { color:var(--muted); }
     ul { margin:6px 0 0; padding-left:18px; }
     .trace { font:12px/1.5 ui-monospace,monospace; color:var(--trace); white-space:pre-wrap; }
     .advisory { color:var(--warn); font-size:12px; }
-    .link { color:var(--acc); text-decoration:underline; }
+    /* Links take --acc2 too: an underline already marks them as links, so the red bought
+       nothing and only added to the wash of red the operator flagged. */
+    .link { color:var(--acc2); text-decoration:underline; }
 
     /* ---- Source badge: the same vendor identity as a trace row, in the report.
        Evidence and Who-to-talk-to used to name their origin as a bare lowercase
@@ -310,7 +372,7 @@
     .cand > *, .ev > * { min-width:0; }
     /* URLs get the stronger rule — they are one token with no spaces, and
        break-word alone still leaves a >900px path segment hanging out. */
-    .ev-link { color:var(--acc); text-decoration:underline; overflow-wrap:anywhere; }
+    .ev-link { color:var(--acc2); text-decoration:underline; overflow-wrap:anywhere; }
     /* Preformatted trace output cannot wrap mid-token without lying about the
        payload, so it scrolls INSIDE its own box rather than widening the page. */
     .trace { max-width:100%; overflow-x:auto; }
@@ -908,6 +970,44 @@ function upperFirst(s) {
   return s.length <= 4 ? s.toUpperCase() : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * The MARK half of a source, as the left column of an .ev row — the trace's
+ * badge tile rather than the inline chip.
+ *
+ * <p>A source can name more than one platform ("confluence+gitlab" for a merged
+ * contact). The tile takes the FIRST, because a fixed-width column cannot grow to
+ * fit two logos without breaking the alignment that is the whole point; every
+ * platform is still named in words by {@link sourceMetaText} beside it.
+ *
+ * <p>An unrecognised source gets an empty tile rather than no tile: dropping the
+ * column would make that one row's text start 38px left of every other row's, and
+ * a ragged column reads as a rendering bug rather than as missing data.
+ */
+function sourceMarkHtml(source) {
+  const matches = sourcePlatforms(source);
+  if (!matches.length) return `<div class="ev-mark"></div>`;
+  const m = matches[0];
+  return `<div class="ev-mark" data-platform="${esc(m.token)}">${PLATFORM_LOGO_SVG[m.token] || ''}</div>`;
+}
+
+/**
+ * The WORDS half: every platform the source names, plus the qualifier
+ * ("ServiceNow · Incident"), for the meta line above the body text.
+ *
+ * <p>Same qualifier rule as the inline chip — shown only when a single platform
+ * matched, since on a merged source the leftovers are just the other platform's
+ * own name.
+ */
+function sourceMetaText(source) {
+  const matches = sourcePlatforms(source);
+  if (!matches.length) return String(source || '').trim();
+  const labels = matches.map(m => m.label).join(' + ');
+  if (matches.length !== 1) return labels;
+  const detail = String(source).toLowerCase()
+      .replace(matches[0].needle, '').replace(/[-_+.\s]+/g, ' ').trim();
+  return detail ? `${labels} · ${upperFirst(detail)}` : labels;
+}
+
 // One row. `step.state === 'PENDING'` is the pre-render skeleton state (see
 // renderLt3Replay) — real duration/result text is withheld until the row is
 // actually revealed, so the skeleton doesn't spoil the "nothing is running
@@ -1317,18 +1417,39 @@ function render(data) {
   ).join('');
   // FND-25: J7 always claimed "source badges + links" here; the link half was never
   // rendered (only the reconstructed sources-comment preview below had it).
-  const ev = r.evidence.map(e => `<div class="ev">${sourceBadgeHtml(e.source)} ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</div>`).join('');
+  // Two columns — mark left, everything textual right — matching the tool-call trace
+  // (operator instruction 2026-08-05). See the .ev block in <style> for why.
+  const ev = r.evidence.map(e => `
+    <div class="ev">${sourceMarkHtml(e.source)}
+      <div class="ev-body">
+        <div class="ev-meta">${esc(sourceMetaText(e.source))}</div>
+        <div>${esc(e.summary)}</div>
+        ${e.link?`<div style="margin-top:2px"><span class="ev-link">[${esc(e.link)}]</span></div>`:''}
+      </div>
+    </div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const sources = r.evidence.map(e => `<li>${sourceBadgeHtml(e.source)} ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
+  // Same two-column shape as evidence. The green left rule stays: it distinguishes
+  // "a person to talk to" from "a fact we found" at a glance, which is a different
+  // axis from which system the row came from.
   const contacts = (r.suggestedContacts||[]).map(c => `
-    <div class="ev" style="border-left-color:var(--ok)">
-      <div>${sourceBadgeHtml(c.source)} <span style="font-weight:600">${esc(c.name)}</span>${c.handle?` <span class="src">&lt;${esc(c.handle)}&gt;</span>`:''}</div>
-      <div style="margin-top:3px">${esc(c.reason)}</div>
-      ${c.signal?`<div class="src" style="margin-top:2px;font-size:12px">${esc(c.signal)}</div>`:''}
+    <div class="ev" style="border-left-color:var(--ok)">${sourceMarkHtml(c.source)}
+      <div class="ev-body">
+        <div class="ev-meta">${esc(sourceMetaText(c.source))}</div>
+        <div><span style="font-weight:600">${esc(c.name)}</span>${c.handle?` <span class="src">&lt;${esc(c.handle)}&gt;</span>`:''}</div>
+        <div style="margin-top:3px">${esc(c.reason)}</div>
+        ${c.signal?`<div class="src" style="margin-top:2px;font-size:12px">${esc(c.signal)}</div>`:''}
+      </div>
     </div>`).join('');
-  const cmt = 'border-left:3px solid var(--acc);background:var(--inset);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
-  const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc);display:block;margin-bottom:8px';
+  // --acc2, not --acc (2026-08-05): the card's own H2 is the red section heading, and
+  // painting this label the same red made the heading, the sub-label and every link read as
+  // one undifferentiated block of red — nothing looked more important than anything else.
+  // Red now means exactly one thing on this page: "this is a section heading". The left rule
+  // moves with the label so the quoted comment reads as a single unit rather than a red box
+  // with a blue caption.
+  const cmt = 'border-left:3px solid var(--acc2);background:var(--inset);border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px';
+  const badge = 'font:600 11px ui-monospace,monospace;letter-spacing:.05em;color:var(--acc2);display:block;margin-bottom:8px';
   // Which engine actually produced this report? The orchestrator degrades from the live
   // ADK agent to the deterministic engine on failure (FND-7) and discloses it via
   // data.engine — a real field on DiagnosisResult, not prose. Read that field directly
