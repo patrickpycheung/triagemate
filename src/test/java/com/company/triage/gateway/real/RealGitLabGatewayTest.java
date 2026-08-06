@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
@@ -124,6 +125,60 @@ class RealGitLabGatewayTest {
         assertThat(contacts.get(0).name()).isEqualTo("Priya Nair");
         assertThat(contacts.get(0).signal()).contains("since v1.4.0");
         f.server().verify();
+    }
+
+    /**
+     * The fallback, measured on the real estate: {@code delivery-hazards} was tagged more
+     * recently than any implicated file last changed, so the since-filtered query returned
+     * nothing for all three files and the report named no engineers at all. A file nobody has
+     * touched since the last release still has someone who knows it.
+     */
+    @Test
+    void fallsBackToTheMostRecentCommittersWhenNothingLandedSinceTheTag() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/repository/tags")))
+                .andRespond(withSuccess("""
+                        [{"name":"v1.4.0","commit":{"committed_date":"2026-07-01T00:00:00Z"}}]""",
+                        MediaType.APPLICATION_JSON));
+        // bounded query — empty, which is what the real run got
+        f.server().expect(requestTo(containsString("since=2026-07-01")))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        // the fallback: same path, no time bound
+        f.server().expect(requestTo(allOf(containsString("/repository/commits"),
+                        not(containsString("since=")))))
+                .andRespond(withSuccess("""
+                        [{"author_name":"Priya Nair","author_email":"priya.nair@example.com",
+                          "committed_date":"2026-01-14T10:00:00Z"}]""",
+                        MediaType.APPLICATION_JSON));
+
+        var contacts = f.gateway().recentCommitters("order-payments/payment-service",
+                "src/payment_service.py");
+
+        assertThat(contacts).hasSize(1);
+        assertThat(contacts.get(0).name()).isEqualTo("Priya Nair");
+        // The two cases must stay tellable apart — a six-month-old name must not read as
+        // someone who touched this yesterday.
+        assertThat(contacts.get(0).signal())
+                .contains("last touched 2026-01-14")
+                .contains("nothing since v1.4.0");
+        assertThat(contacts.get(0).reason()).startsWith("last changed");
+        f.server().verify();
+    }
+
+    /** No second call when the first query was already unbounded — there is nothing to widen. */
+    @Test
+    void anUntaggedRepoDoesNotIssueARedundantSecondQuery() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/repository/tags")))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        f.server().expect(org.springframework.test.web.client.ExpectedCount.once(),
+                        requestTo(containsString("/repository/commits")))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertThat(f.gateway().recentCommitters("order-payments/payment-service", "src/x.py"))
+                .isEmpty();
+
+        f.server().verify();   // fails if a third request was made
     }
 
     /**
