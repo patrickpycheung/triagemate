@@ -22,7 +22,11 @@ module.exports = defineConfig({
     // --server.port=8080 explicitly: application.yml now defaults to 80, which is
     // privileged on macOS/Linux. The test suite must never need root, so it pins an
     // unprivileged port rather than inheriting the demo-facing default.
-    command: 'mvn -q -o spring-boot:run -Dspring-boot.run.arguments=--server.port=8080',
+    // post-to-live-servicenow=false: mocked runs otherwise comment on the REAL ticket, and a
+    // test suite must not mutate a live instance — this suite drives a dozen diagnoses, some
+    // against invented numbers. The flag is the demo's, not the tests'.
+    command: 'mvn -q -o spring-boot:run -Dspring-boot.run.arguments='
+           + '"--server.port=8080 --triage.writeback.post-to-live-servicenow=false"',
     cwd: '..',
     url: 'http://localhost:8080',
     timeout: 90_000,
