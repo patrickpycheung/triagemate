@@ -35,7 +35,7 @@ class DiagnosisApiExceptionHandlerTest {
         when(orchestrator.run(anyString()))
                 .thenThrow(new IncidentNotFoundException("INC9999999"));
 
-        mvc.perform(post("/api/diagnose/INC9999999"))
+        mvc.perform(post("/api/diagnose/INC9999999").header("X-Triage-Local", "1"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("incident not found")));
     }
@@ -55,7 +55,7 @@ class DiagnosisApiExceptionHandlerTest {
         // as a propagating exception rather than a status. That IS the desired behaviour —
         // the point is that a credential error must never be dressed up as 404 not-found.
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> mvc.perform(post("/api/diagnose/INC0010005")))
+                        () -> mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1")))
                 .hasRootCauseInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("LLM_API_KEY");
     }
@@ -70,7 +70,7 @@ class DiagnosisApiExceptionHandlerTest {
     void nullExceptionMessageDoesNotBreakTheHandler() throws Exception {
         when(orchestrator.run(anyString())).thenThrow(new NullMessageTimeout());
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("NullMessageTimeout")));
     }
@@ -80,7 +80,7 @@ class DiagnosisApiExceptionHandlerTest {
         when(orchestrator.run(anyString()))
                 .thenThrow(new DiagnosisTimeoutException("INC0010005", 90000));
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("did not complete within")));
     }
@@ -90,7 +90,7 @@ class DiagnosisApiExceptionHandlerTest {
         when(orchestrator.run(anyString()))
                 .thenThrow(new DiagnosisReportInvalidException("INC0010005", List.of("empty candidateSystems")));
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("empty candidateSystems")));
     }
@@ -111,7 +111,7 @@ class DiagnosisApiExceptionHandlerTest {
                 .thenThrow(new org.springframework.web.client.ResourceAccessException(
                         "I/O error on POST request: Read timed out"));
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isGatewayTimeout())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Read timed out")));
     }
@@ -134,7 +134,7 @@ class DiagnosisApiExceptionHandlerTest {
      */
     @Test
     void malformedIncidentNumberMapsTo400() throws Exception {
-        mvc.perform(post("/api/diagnose/banana"))
+        mvc.perform(post("/api/diagnose/banana").header("X-Triage-Local", "1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("invalid incident number")));
 
@@ -147,7 +147,7 @@ class DiagnosisApiExceptionHandlerTest {
         when(orchestrator.run(anyString())).thenThrow(new IncidentNotFoundException("INC0000001"));
 
         // 404 (from the orchestrator), NOT 400 — proves the pattern accepts a real number.
-        mvc.perform(post("/api/diagnose/INC0000001"))
+        mvc.perform(post("/api/diagnose/INC0000001").header("X-Triage-Local", "1"))
                 .andExpect(status().isNotFound());
     }
 }

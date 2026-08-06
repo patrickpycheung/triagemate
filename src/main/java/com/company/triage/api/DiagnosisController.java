@@ -54,7 +54,18 @@ public class DiagnosisController {
     @PostMapping("/{incidentNumber}")
     public DiagnosisResult diagnose(
             @PathVariable @Pattern(regexp = "INC\\d{6,10}") String incidentNumber,
-            @RequestHeader(value = "X-Triage-Run-Id", required = false) String runId) {
+            @RequestHeader(value = "X-Triage-Run-Id", required = false) String runId,
+            // J21/NEP-2: a REQUIRED, non-safelisted header on the one mutating endpoint.
+            // Because it is non-safelisted, a cross-origin fetch must first send an OPTIONS
+            // preflight; this app has no CORS configuration, so no Access-Control-Allow-Headers
+            // comes back and the browser never sends the POST. Same-origin calls from
+            // index.html are unaffected — preflight does not apply to them.
+            //
+            // This is defence in depth behind NEP-1's loopback bind, not a replacement for it:
+            // the header stops a BROWSER on the machine being used as a confused deputy by a
+            // page the presenter happens to have open, which a loopback bind does not.
+            // Deliberately not a secret — it is a same-origin proof, not an authenticator.
+            @RequestHeader(value = "X-Triage-Local") String localMarker) {
         // FND-37/FND-50: normalization now lives in DiagnosisOrchestrator.run() itself,
         // so every trigger (K1 and K3) normalizes identically for FND-31's coalescing map.
         return (runId == null || runId.isBlank())

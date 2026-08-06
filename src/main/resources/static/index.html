@@ -686,7 +686,11 @@ async function run() {
   try {
     const res = await fetch(`/api/diagnose/${encodeURIComponent(inc)}`, {
       method: 'POST',
-      headers: { 'X-Triage-Run-Id': runId },
+      // J21/NEP-2: X-Triage-Local is REQUIRED by the endpoint. It is not a secret and not
+      // an authenticator — it is a same-origin proof. A cross-origin page cannot attach a
+      // non-safelisted header without an OPTIONS preflight, and this app answers none, so the
+      // browser refuses to send the POST at all. This same-origin call needs no preflight.
+      headers: { 'X-Triage-Run-Id': runId, 'X-Triage-Local': '1' },
     });
     // FND-48: render() dereferences data.report.candidateSystems immediately, so a non-2xx
     // body (which has no `report`) used to surface as "TypeError: Cannot read properties of

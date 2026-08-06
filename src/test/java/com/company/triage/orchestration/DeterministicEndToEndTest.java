@@ -47,6 +47,7 @@ class DeterministicEndToEndTest {
     @Test
     void deterministicEngineProducesAWellFormedStepsArrayOverRealHttp() {
         HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Triage-Local", "1");   // J21/NEP-2: required on the mutating endpoint
         headers.set("X-Triage-Run-Id", UUID.randomUUID().toString());
         ResponseEntity<DiagnosisResult> response = rest.postForEntity(
                 "http://localhost:" + port + "/api/diagnose/" + SEEDED_INCIDENT,
@@ -110,9 +111,14 @@ class DeterministicEndToEndTest {
         // TASK-009's binding guarantee: the runId header is purely additive. A caller that
         // never sends it (like K1's IncidentPoller) must get an identical, fully-populated
         // response — not a degraded one missing `steps`.
+        // J21/NEP-2: X-Triage-Local is required, so "no headers at all" is no longer a
+        // legal request. The guarantee under test is about X-Triage-RUN-ID being additive,
+        // which is unchanged — this sends the local marker and omits the run-id.
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Triage-Local", "1");
         ResponseEntity<DiagnosisResult> response = rest.postForEntity(
                 "http://localhost:" + port + "/api/diagnose/" + SEEDED_INCIDENT,
-                null,
+                new HttpEntity<>(headers),
                 DiagnosisResult.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
