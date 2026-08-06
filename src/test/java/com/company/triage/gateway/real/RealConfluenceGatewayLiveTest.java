@@ -1,6 +1,7 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.SslConfiguration;
 import com.company.triage.model.KnowledgeDoc;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -76,7 +77,8 @@ class RealConfluenceGatewayLiveTest {
                 p.getProperty("triage.integrations.confluence.base-url"),
                 p.getProperty("triage.integrations.confluence.user"),
                 p.getProperty("triage.integrations.confluence.secret"), null);
-        return new RealConfluenceGateway(RestClient.builder(),
+        return new RealConfluenceGateway(RestClient.builder()
+                .requestFactory(SslConfiguration.createTrustAllRequestFactory()),
                 new IntegrationProperties(null, endpoint, null, null));
     }
 

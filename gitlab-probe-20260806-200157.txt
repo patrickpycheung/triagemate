@@ -1,0 +1,51 @@
+=== GitLab probe ===
+when:    2026-08-06T20:01:57+10:00
+host:    https://gitlab.cd.auspost.com.au
+project: enterprise/parcel-systems/applications/delivery-hazards
+
+--- [1] reachability + project resolves ---
+GET /projects/<id> → HTTP 200
+  path: enterprise/parcel-systems/applications/delivery-hazards
+  default_branch: develop
+  last_activity_at: 2026-07-10T05:29:00.507Z
+
+--- [2] the release boundary (newest tag) ---
+GET /repository/tags?per_page=1 → HTTP 200
+  newest tag: 1.9.0 2026-06-24T05:23:53.000+00:00
+
+--- [3] per-file commit history ---
+For each file: (a) commits since the tag — what the gateway asked FIRST;
+               (b) commits with no time bound — what the new fallback asks.
+
+  FILE: src/main/java/au/com/auspost/hazards/service/AddressService.java
+    (a) since 2026-06-24T05:23:53.000+00:00 → HTTP 200, 0 commit(s)
+    (b) unbounded    → HTTP 200, 5 commit(s)
+         2025-06-27T01:00:09.000+00:00 | VELA, Carl | carl.vela2@auspost.com.au
+         2023-02-21T11:21:05.000+11:00 | voc4 | chuong.vo4@auspost.com.au
+         2022-11-02T13:41:22.000+11:00 | bharatias | sanjay.bharatia@auspost.com.au
+         2021-11-12T10:24:15.000+11:00 | narayanad | divya.narayanan@auspost.com.au
+         2021-10-25T15:42:24.000+11:00 | narayanad | divya.narayanan@auspost.com.au
+
+  FILE: src/main/java/au/com/auspost/hazards/service/RoundService.java
+    (a) since 2026-06-24T05:23:53.000+00:00 → HTTP 200, 0 commit(s)
+    (b) unbounded    → HTTP 200, 5 commit(s)
+         2026-05-12T15:57:34.000+10:00 | Chuong VO | chuong.vo4@auspost.com.au
+         2025-06-27T01:00:09.000+00:00 | VELA, Carl | carl.vela2@auspost.com.au
+         2023-02-21T11:21:05.000+11:00 | voc4 | chuong.vo4@auspost.com.au
+         2022-12-09T10:03:42.000+11:00 | David Howe | david.howe@auspost.com.au
+         2022-11-24T13:57:07.000+11:00 | bharatias | sanjay.bharatia@auspost.com.au
+
+  FILE: src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java
+    (a) since 2026-06-24T05:23:53.000+00:00 → HTTP 200, 0 commit(s)
+    (b) unbounded    → HTTP 200, 5 commit(s)
+         2025-06-27T01:00:09.000+00:00 | VELA, Carl | carl.vela2@auspost.com.au
+         2025-05-11T23:47:34.000+00:00 | VELA, Carl | carl.vela2@auspost.com.au
+         2025-05-11T23:47:25.000+00:00 | VELA, Carl | carl.vela2@auspost.com.au
+         2024-11-11T14:24:43.000+11:00 | velac2 | carl.vela2@auspost.com.au
+         2024-11-11T13:47:59.000+11:00 | velac2 | carl.vela2@auspost.com.au
+
+--- verdict guide ---
+  (a)=0 and (b)>0            → working as designed; the fallback now uses (b).
+  no tags and (b)>0          → BUG: unbounded query should already have returned these.
+  (b)=0 for every file       → path/ref mismatch: the commits API is not seeing these paths.
+  any HTTP 401/403           → token scope (needs read_api / read_repository).

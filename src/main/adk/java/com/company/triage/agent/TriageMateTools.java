@@ -5,6 +5,7 @@ import com.company.triage.model.*;
 import com.google.adk.tools.Annotations.Schema;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -98,8 +99,13 @@ public final class TriageMateTools {
     public static Map<String, Object> findOwnership(
             @Schema(name = "applicationName") String applicationName) {
         return serviceNow.findOwnership(applicationName)
-                .map(o -> Map.<String, Object>of("supportGroup", o.supportGroup(),
-                        "businessService", o.businessService(), "source", o.source()))
+                .map(o -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("supportGroup", o.supportGroup());
+                    map.put("businessService", o.businessService());
+                    map.put("source", o.source());
+                    return map;
+                })
                 .orElse(Map.of("supportGroup", "unknown"));
     }
 
