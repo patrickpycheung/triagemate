@@ -1,7 +1,10 @@
 # J16 — Run-Trace Registry Lifecycle (who owns a live buffer, and for how long)
 
-**State**: 🟢 Built — RTR-1, RTR-2, RTR-4, RTR-5 complete; RTR-3 server-side complete, its
-client-side twin **deferred** (see the note in §RTR-3) ·
+**State**: 🟡 Partly built — RTR-1, RTR-2, RTR-4, RTR-5 complete; RTR-3 server-side complete, its
+client-side twin **deferred** (`index.html`, owned by another worktree at the time — see §RTR-3).
+*Downgraded from 🟢 on review: this repo uses 🟡 Partly built whenever an item remains open
+(J13, J14 both do), and a card that carries a deferral is not settled. 🟢 here would have read
+as "nothing left to do" to the next planner.* ·
 **Complexity**: Moderate · **Priority**: MEDIUM ·
 **Depends on**: J1 (orchestrator), J10 (poller), J11 (LT4 `runId` protocol) ·
 **Amends**: J11 (LT4 `runId` protocol rules 4 and 5, and the "Bound the buffer" paragraph) ·
