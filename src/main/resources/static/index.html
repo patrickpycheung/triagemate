@@ -1263,6 +1263,16 @@ function startLt4Poll(runId, cardEl) {
   // line, then the growing row list. The caption is the live counterpart of
   // LT3's replay frame: same slot, same styling, opposite claim.
   const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
+  // J23/LUH-3: connector provenance NOW (static config, already known). The ENGINE chip is
+  // deliberately NOT drawn here — which engine actually ran is not known until the first step
+  // arrives, and guessing it is the LUH-4 failure in a different costume.
+  if (uiConnectorModes) {
+    const chip = document.createElement('div');
+    chip.className = 'lt7-chips';
+    chip.innerHTML = `<span class="pill" title="Per-connector real vs fixture status for this run">`
+      + esc(connectorChipText(uiConnectorModes)) + `</span>`;
+    shell.rowsEl.parentNode.insertBefore(chip, shell.rowsEl);
+  }
   // J12: no cursor. Delivery is convergent — every poll returns the whole buffer and the
   // client upserts by (attempt, callId). `since` is still accepted by the endpoint for
   // wire compatibility, and deliberately not sent.
@@ -1650,7 +1660,14 @@ function render(data) {
 // fallback for whenever this endpoint doesn't answer (or the field was blank in
 // config), not something a demo runner has to remember to overtype. Never affects what
 // diagnose() sends — just what's sitting in the box when the page loads.
+// J23/LUH-3: connector modes are STATIC config, known before any run starts. Holding them
+// here lets the live window show provenance from the moment it opens instead of waiting for
+// the POST to return them — withholding a fact we already have, during the exact window an
+// audience is watching and forming a view about what the run is touching.
+let uiConnectorModes = null;
+
 fetch('/api/ui-config').then(r => r.ok ? r.json() : null).then(cfg => {
+  if (cfg && cfg.connectors) uiConnectorModes = cfg.connectors;
   if (cfg && cfg.defaultIncidentNumber) {
     document.getElementById('inc').value = cfg.defaultIncidentNumber;
   }

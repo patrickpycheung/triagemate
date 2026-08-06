@@ -123,7 +123,19 @@ public class StartupBanner {
         if (address.isBlank()) {
             return "all interfaces — ⚠ reachable from the network, not just this machine";
         }
-        return address + ("127.0.0.1".equals(address) ? " (loopback only)" : "");
+        if ("127.0.0.1".equals(address) || "::1".equals(address) || "localhost".equals(address)) {
+            return address + " (loopback only)";
+        }
+        // J21/NEP-4: the one escape hatch is `--server.address=0.0.0.0` at launch — no config
+        // key, because a `triage.demo.lan-mode` flag would create a SECOND supported posture
+        // that must then be tested, documented and defended, for a scenario the runbook does
+        // not contain (the presentation output is a screen driven off this laptop).
+        //
+        // "Taken loudly" is the other half of that bargain, and it has to be enforced here:
+        // an escape hatch nobody is told they took is just a quieter default. Anything that
+        // is not loopback warns, so a value nobody anticipated cannot pass silently either.
+        return address + " — ⚠ NOT loopback. This machine's mutating endpoint is reachable "
+                + "from the network, and a live ServiceNow connector would write to real tickets.";
     }
 
     /**
