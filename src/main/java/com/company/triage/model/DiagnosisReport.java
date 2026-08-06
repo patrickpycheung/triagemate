@@ -116,13 +116,17 @@ public record DiagnosisReport(
              .append(" — ").append(suggestedAssignment.confidence().name().toLowerCase())
              .append(" confidence\n");
         }
-        if (recommendedNextAction != null) {
-            b.append("Recommended next check: ").append(recommendedNextAction).append("\n");
-        }
         b.append(causeSection());
         b.append(resolutionSection());
+        b.append(nextActionsSection());
         if (missingInformation != null && !missingInformation.isEmpty()) {
-            b.append("Still missing: ").append(String.join(", ", missingInformation)).append("\n");
+            // One per line, not a comma-joined run-on. These are individually actionable
+            // ("no correlation id in the ticket"), and a single 300-character line in a
+            // ServiceNow work note wraps into a grey block nobody reads to the end of.
+            b.append("\nStill missing:\n");
+            for (String m : missingInformation) {
+                if (m != null && !m.isBlank()) b.append("  - ").append(m.trim()).append("\n");
+            }
         }
         b.append("\nAI-assisted and advisory. No reassignment, closure, or priority change has been made — "
                 + "the assigned engineer decides. Sources are in the comment above.");
@@ -176,6 +180,55 @@ public record DiagnosisReport(
         appendStep(b, "Mitigation", likelyResolution.mitigation());
         appendStep(b, "Permanent fix", likelyResolution.permanentFix());
         return b.toString();
+    }
+
+    /**
+     * The next actions, NUMBERED — the same worklist the UI card shows, so the engineer
+     * reading the ticket and the presenter reading the screen see the same thing.
+     *
+     * <p>Was a single {@code "Recommended next check: <sentence>"} line. Everything here is
+     * already established elsewhere on the report; nothing new is asserted, and an absent
+     * field contributes no step rather than a filler one, so a thin run yields a short list
+     * instead of a padded one. Order is deliberate: the cheap specific check first, then what
+     * actually closed comparable tickets.
+     */
+    private String nextActionsSection() {
+        List<String> steps = new java.util.ArrayList<>();
+        if (notBlank(recommendedNextAction)) steps.add(recommendedNextAction.trim());
+        if (likelyResolution != null) {
+            appendPrecedentStep(steps, "Mitigation", likelyResolution.mitigation());
+            appendPrecedentStep(steps, "Permanent fix", likelyResolution.permanentFix());
+        }
+        // Gap steps come from STRUCTURED fields, never from the missingInformation prose,
+        // which mixes absent DATA ("no correlation id") with disclosures about the run itself
+        // ("20 other systems appeared in the window but nothing here evidences them"). Only
+        // the first kind is a next action; prefixing the second with an imperative produced a
+        // step nobody can perform. The full set still renders under "Still missing" below.
+        if (identifiers == null || !notBlank(identifiers.correlationId())) {
+            steps.add("Capture a correlation/transaction id — the ticket carries none, which "
+                    + "is what would tie these log lines to one request.");
+        }
+        if (!notBlank(environment)) {
+            steps.add("Confirm the environment — the ticket does not state one, so 'prod' was "
+                    + "assumed and a log search bounded by it may be looking in the wrong place.");
+        }
+        if (steps.isEmpty()) return "";
+
+        StringBuilder b = new StringBuilder("\nRecommended next actions:\n");
+        for (int i = 0; i < steps.size(); i++) {
+            b.append("  ").append(i + 1).append(". ").append(steps.get(i)).append('\n');
+        }
+        return b.toString();
+    }
+
+    private static void appendPrecedentStep(List<String> steps, String label, ResolutionStep step) {
+        if (step == null) return;
+        steps.add("%s: similar incidents were closed as %s — see %s."
+                .formatted(label, step.resolutionCode(), step.citedArtifact()));
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     private static void appendStep(StringBuilder b, String label, ResolutionStep step) {

@@ -26,10 +26,12 @@ public class MockSumoGateway implements SumoGateway {
     private static final String G = "sumo";
     private final FixtureStore fixtures;
     private final FixtureSession session;
+    /** Simulated network delay — see {@link MockLatency}. */
+    private final MockLatency latency;
 
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockSumoGateway() {
-        this(FixtureStore.none(), new FixtureSession());
+        this(FixtureStore.none(), new FixtureSession(), MockLatency.none());
     }
 
     /**
@@ -39,9 +41,10 @@ public class MockSumoGateway implements SumoGateway {
      * found". Silent, and invisible to unit tests, which construct explicitly.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public MockSumoGateway(FixtureStore fixtures, FixtureSession session) {
+    public MockSumoGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency) {
         this.fixtures = fixtures;
         this.session = session;
+        this.latency = latency;
     }
 
     private static final List<LogEvidence> WINDOW = List.of(
@@ -72,6 +75,7 @@ public class MockSumoGateway implements SumoGateway {
      */
     @Override
     public List<LogEvidence> search(LogSearchRequest request) {
+        latency.pause();   // stand in for the network the real connector crosses
         // Recorded lines replay against the SCOPE + TERM only — the window moves every run
         // (the engine searches the last 24h), so it is excluded from the key by design; see
         // FixtureKeys. The cap is still applied below, because it is the caller's bound.

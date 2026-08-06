@@ -15,9 +15,20 @@ async function diagnose(page, number) {
   if (number !== null) await page.fill('#inc', number);
   const typed = await page.inputValue('#inc');
   await page.click('#go');
-  await page.waitForSelector('.card', { timeout: 30_000 });
-  await page.waitForTimeout(4000);          // let the progressive trace finish
-  return { typed, body: await page.textContent('body') };
+  // Wait for the RESULT, not for a fixed interval. '.card' appears instantly — it is also
+  // the "Investigating…" placeholder — and the mock connectors now take a randomised
+  // 120-400ms each (triage.connectors.mock-latency), so a run lands around 3-5s and any
+  // sleep long enough today is a flake waiting for a slower machine.
+  //
+  // Scoped to #out, NOT document.body: the page's <script> is inside <body>, so
+  // body.textContent contains the SOURCE too — including the literal 'Investigating…' and
+  // every other string the code mentions. A body-wide check can never go false, and a
+  // body-wide assertion tests the source rather than the screen.
+  await page.waitForFunction(
+      () => !document.getElementById('out').textContent.includes('Investigating'),
+      null, { timeout: 60_000 });
+  await page.waitForTimeout(500);           // let the last trace rows paint
+  return { typed, body: await page.textContent('#out') };
 }
 
 test('the pre-filled incident diagnoses with real Delivery Hazards evidence', async ({ page }) => {
@@ -80,4 +91,31 @@ test('the page raises no unexpected browser errors', async ({ page }) => {
   await diagnose(page, null);
 
   expect(errors).toEqual([]);
+});
+
+test('next actions render as a numbered worklist, every line an action', async ({ page }) => {
+  await diagnose(page, null);
+  const card = page.locator('.card', { hasText: 'Recommended next actions' });
+  const items = await card.locator('li').allTextContents();
+
+  // A list, not a paragraph.
+  expect(items.length).toBeGreaterThan(1);
+  // Each step is a thing to DO. "Fill the gap: N other systems appeared in the window but
+  // nothing evidences them" was a disclosure wearing an imperative — the steps are built
+  // from structured fields now, so it cannot come back.
+  expect(items.join(' ')).not.toContain('Fill the gap');
+  for (const t of items) expect(t.trim().length).toBeGreaterThan(10);
+});
+
+test('mocked contacts are capped but still show every source', async ({ page }) => {
+  const { body } = await diagnose(page, null);
+  const who = body.slice(body.indexOf('Who to talk to'), body.indexOf('Evidence'));
+
+  // triage.connectors.mock-contact-limit caps PER SOURCE, so the point being demonstrated
+  // — names arriving from three systems independently — survives the trim. The uncapped
+  // recorded bundle yields 23, ten of them Confluence.
+  for (const source of ['ServiceNow', 'Confluence', 'GitLab']) {
+    expect(who, `${source} should still be represented`).toContain(source);
+  }
+  expect((who.match(/@example\.com/g) || []).length).toBeLessThanOrEqual(8);
 });

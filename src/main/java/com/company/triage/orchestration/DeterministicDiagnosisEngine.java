@@ -114,6 +114,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private static final double KNOWLEDGE_RELEVANCE_FLOOR = 0.34;
 
     private final ServiceNowGateway serviceNow;
+    /** Which connectors are mock — the cap applies to those only. */
+    private final java.util.Map<String, String> connectorModes;
+    /** Max contacts kept per mocked source; 0 disables capping. */
+    private final int mockContactLimit;
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
     private final GitLabGateway gitLab;
@@ -122,9 +126,39 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     private final String sumoDefaultEnvironment;
     private final List<String> gitLabProjectAllowlist;
 
+    /**
+     * Unit-test constructor: no connector-mode knowledge, so the mock contact cap is off and
+     * the engine reports every name it finds. Tests that exercise the cap use the
+     * {@code @Autowired} constructor below with an explicit mode map.
+     */
     public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
                                         SumoGateway sumo, GitLabGateway gitLab,
                                         TriageProperties props) {
+        this(serviceNow, confluence, sumo, gitLab, props, java.util.Map.of(), 0);
+    }
+
+    /**
+     * @Autowired is LOAD-BEARING (FND-87, and again this session): a component with several
+     * constructors and no marker gets the one Spring picks, not the one you meant.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
+                                        SumoGateway sumo, GitLabGateway gitLab,
+                                        TriageProperties props,
+                                        com.company.triage.config.ConnectorModeProvider modes,
+                                        @org.springframework.beans.factory.annotation.Value(
+                                                "${triage.connectors.mock-contact-limit:2}")
+                                        int mockContactLimit) {
+        this(serviceNow, confluence, sumo, gitLab, props, modes.modes(), mockContactLimit);
+    }
+
+    private DeterministicDiagnosisEngine(ServiceNowGateway serviceNow, ConfluenceGateway confluence,
+                                         SumoGateway sumo, GitLabGateway gitLab,
+                                         TriageProperties props,
+                                         java.util.Map<String, String> connectorModes,
+                                         int mockContactLimit) {
+        this.connectorModes = connectorModes;
+        this.mockContactLimit = mockContactLimit;
         this.serviceNow = serviceNow;
         this.confluence = confluence;
         this.sumo = sumo;
@@ -1014,7 +1048,55 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // worth ranking above two. Stable, so equal counts keep discovery order.
         List<Contact> out = new ArrayList<>(merged.values());
         out.sort(Comparator.comparingInt((Contact c) -> -sourceCount(c)));
+        return capMockContacts(out);
+    }
+
+    /**
+     * Trims the contact list to a few examples PER SOURCE — mocked connectors only.
+     *
+     * <p>The recorded Delivery Hazards bundle yields 23 contacts, ten of them Confluence page
+     * authors, because five cited pages each carry authors, editors and named escalation
+     * contacts. That is honest output and useless as a demo: a wall of 23 names shows the
+     * feature less clearly than four names do, and nobody in the room reads past the third.
+     *
+     * <p>Capped per SOURCE rather than overall, so the point being demonstrated survives —
+     * that names arrive from ServiceNow, Confluence and GitLab independently. An overall cap
+     * would have let Confluence's ten crowd the other two off the list entirely, demoing one
+     * source instead of three.
+     *
+     * <p>Only mocked sources are capped. A real connector reports what it actually found:
+     * truncating live output would understate the estate, and the count is exactly the sort
+     * of thing someone checks against the real system. Mixed mode is honoured per connector,
+     * so {@code confluence=real, gitlab=mock} caps GitLab's names and leaves Confluence's
+     * alone. Set the limit to 0 to disable capping entirely.
+     *
+     * <p>Contacts are pre-sorted by corroboration, so a name found by two systems is kept
+     * ahead of one found by a single system, and it counts against BOTH their budgets — it is
+     * genuinely an example of each.
+     */
+    private List<Contact> capMockContacts(List<Contact> ranked) {
+        if (mockContactLimit <= 0 || ranked.size() <= mockContactLimit) return ranked;
+
+        Map<String, Integer> kept = new java.util.LinkedHashMap<>();
+        List<Contact> out = new ArrayList<>();
+        for (Contact c : ranked) {
+            List<String> sources = c.source() == null || c.source().isBlank()
+                    ? List.of("") : List.of(c.source().split("\\+"));
+            // A real connector's names are never dropped, so a mixed-mode run still reports
+            // the live estate in full.
+            boolean allReal = sources.stream().allMatch(s -> !isMocked(s));
+            boolean withinBudget = sources.stream()
+                    .allMatch(s -> !isMocked(s) || kept.getOrDefault(s, 0) < mockContactLimit);
+            if (allReal || withinBudget) {
+                out.add(c);
+                sources.forEach(s -> kept.merge(s, 1, Integer::sum));
+            }
+        }
         return out;
+    }
+
+    private boolean isMocked(String source) {
+        return "mock".equalsIgnoreCase(connectorModes.getOrDefault(source.trim().toLowerCase(), ""));
     }
 
     /**

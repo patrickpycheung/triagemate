@@ -91,6 +91,39 @@ triage:
     # Blank restores the strict FND-54 behaviour exactly — unknown number, 404, no stand-in.
     mock-stand-in: INC0010015
 
+    # MOCK ONLY — a random pause before each mock connector answers, uniform in
+    # [min-ms, max-ms], drawn independently per call.
+    #
+    # The mocks answer in microseconds, which is not what any of the four real systems does.
+    # On stage that made the whole run finish before the eye could follow it, so the live
+    # trace — the thing the demo is showing — arrived as a finished block instead of as work
+    # happening. It also hid timing: the fixture-latch race (two runs sharing one session)
+    # only reproduced because real HTTP left a window that microsecond mocks never did.
+    #
+    # Sized against the measured real deterministic run: ~16s wall clock over ~12 connector
+    # calls. These bounds give ~1.4-4.8s over the same 12 calls — the same SHAPE, faster than
+    # life, which is what a demo wants. Raise toward 800-1500 to rehearse against real-world
+    # pacing; set max-ms to 0 to disable entirely (what the unit tests use).
+    mock-latency:
+      min-ms: 120
+      max-ms: 400
+
+    # MOCK ONLY — how many "people to talk to" to keep PER SOURCE.
+    #
+    # The recorded Delivery Hazards bundle legitimately yields 23 contacts, ten of them
+    # Confluence page authors (five cited pages, each with authors, editors and named
+    # escalation contacts). Honest, and useless on stage: a wall of 23 names demonstrates the
+    # feature less clearly than four do, and nobody reads past the third.
+    #
+    # PER SOURCE, not overall, so the thing being demonstrated survives — that names arrive
+    # from ServiceNow, Confluence and GitLab independently. An overall cap would let
+    # Confluence's ten crowd the other two off the list, demoing one source instead of three.
+    #
+    # Real connectors are never capped: truncating live output would understate the estate,
+    # and the count is exactly what someone checks against the real system. Mixed mode is
+    # honoured per connector. 0 disables capping entirely.
+    mock-contact-limit: 2
+
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 
