@@ -178,6 +178,27 @@ separator in real ServiceNow subject lines and is precisely what FND-67 was fixe
 
 ### FRI-5 — the safety net degrades per call, and the trace shows it
 
+> **Now field-proven, not just review-derived (2026-08-06).** This item was written from a
+> code review — "a connector that returns 401" was hypothetical. It has since been **observed
+> live**: a `run-deterministic-real.sh` against the real GitLab instance returned
+> `404 Project Not Found` from `RealGitLabGateway.searchCode:68`, the exception propagated
+> through `DeterministicDiagnosisEngine.diagnose` uncaught, and **the run returned a 500 to
+> the UI** — the exact outcome this rule exists to prevent, on the fallback engine, on the
+> demo path. Field report: [`docs/Patrick_gitlab-call-failed-issue.md`](../../../Patrick_gitlab-call-failed-issue.md)
+> (cheungp, `934fb0a`).
+>
+> Two consequences for planning:
+> - **Raises this item's urgency above the rest of J14.** The others degrade a report; this
+>   one takes the whole run down, and it is reachable from the demo incident today.
+> - **It gates [J30](../J30-gitlab-estate-binding/README.md).** J30 adds entries to the GitLab
+>   allowlist, and the engine sweeps that list calling `searchCode` per entry — so until this
+>   lands, a longer allowlist means more chances to hit the aborting path, not more chances to
+>   find code. FRI-5 first, J30 second.
+>
+> The asymmetry inside the gateway is worth keeping as evidence: `recentCommitters` in the
+> same class already catches and returns an empty list. The resilience was understood — it
+> just was not applied to `searchCode`, which is why a per-call *rule* beats per-site care.
+
 **Rule**: every external call the deterministic engine makes **except `getIncident`**
 degrades to its empty result on failure. `getIncident` keeps propagating — with no incident
 there is nothing to diagnose, and `IncidentNotFoundException` is a deliberately typed
