@@ -1,6 +1,8 @@
 # J16 — Run-Trace Registry Lifecycle (who owns a live buffer, and for how long)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: MEDIUM ·
+**State**: 🟢 Built — RTR-1, RTR-2, RTR-4, RTR-5 complete; RTR-3 server-side complete, its
+client-side twin **deferred** (see the note in §RTR-3) ·
+**Complexity**: Moderate · **Priority**: MEDIUM ·
 **Depends on**: J1 (orchestrator), J10 (poller), J11 (LT4 `runId` protocol) ·
 **Amends**: J11 (LT4 `runId` protocol rules 4 and 5, and the "Bound the buffer" paragraph) ·
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 3 confirmed
@@ -143,6 +145,23 @@ the POST has not resolved, `startLt4Poll` renders it under the settled/replay ca
 than `LT4_FRAME_TEXT`. Five lines of JS, and it is the same idiom J11's honesty contract
 imposes everywhere else: never let the UI assert "live" over data that is not.
 
+> **⏸ DEFERRED — the client-side twin is NOT built.** The server half of RTR-3 shipped
+> (`aliasTo` refuses a `done` collector and returns `false`, pinned by
+> `InMemoryRunTraceRegistryTest#aliasToARunThatIsAlreadyDoneIsRefused`). The five lines of
+> JS in `startLt4Poll` were **not** written, because `src/main/resources/static/index.html`
+> was owned by a concurrent worktree with uncommitted changes at implementation time and
+> editing it would have destroyed that work. This is a scheduling deferral, not a design
+> change: the twin is still wanted exactly as specified above.
+>
+> **Consequence while deferred**: the server guarantees a waiter is never *bound* to a
+> terminal buffer, so the failure this closes cannot arise from aliasing. The uncovered
+> residue is the narrower case where a run's own first poll response arrives already
+> `done:true` — the UI still captions that as live for one frame. Harmless today (the POST
+> resolves immediately after), and the reason this half was safe to split.
+>
+> **To finish**: apply the `startLt4Poll` change described in this section once `index.html`
+> is free, and delete this note.
+
 ### RTR-4 — TTL derives from the run's own wall-clock bound
 
 **The rule.** `TTL = max(5 min, 2 × triage.orchestrator.timeout-ms + 60 s)`, computed from
@@ -182,16 +201,39 @@ and no test did.
   rewrite them to assert a server-minted runId *is* registered, and add
   `serverMintedRunIdIsStableForTheLifetimeOfTheRun`. Both are behaviour changes to pinned
   tests; the rewrite is the deliverable, not collateral.
+  *Shipped as* `headerlessRunRegistersAServerMintedRunId`,
+  `twoArgOverloadWithNullRunIdAlsoMintsAServerRunId`,
+  `blankRunIdIsTreatedAsAbsentAndServerMinted`,
+  `serverMintedRunIdIsStableForTheLifetimeOfTheRun`. A third test inverted for the same
+  reason and was **not** anticipated here: `coalescedCallerWithNoRunIdNeverCallsAlias` →
+  `coalescedCallerWithNoRunIdIsAliasedUnderItsServerMintedRunId` (under RTR-1 there is no
+  caller without a runId). `coalescedCallerRunIdIsAliasedToTheCanonicalIncident` was renamed
+  to `...ToTheCanonicalRunId` and now asserts the runId → runId binding of RTR-2.
 - **`InMemoryRunTraceRegistryTest`** (rework): `aliasWithNoCanonicalRegisteredIsANoOp`,
   `aliasPointsTheCoalescedRunIdAtTheCanonicalIncidentsCollector` and
   `aliasSweepsBeforeResolvingSoAStaleCanonicalRunIsANoOp` all key off the deleted
   incident index — re-express them against `aliasTo(runId, runId)`. Add
   `aliasToARunThatIsAlreadyDoneIsRefused` (RTR-3).
+  *Shipped as* `aliasToPointsTheCoalescedRunIdAtTheCanonicalRunsCollector`,
+  `aliasToAnUnregisteredCanonicalRunIdIsARefusedNoOp` (re-pointed, not deleted — it now also
+  pins the `false` return that lets the orchestrator distinguish a bound waiter from an
+  unbound one), `aliasToSweepsBeforeResolvingSoAStaleCanonicalRunIsARefusedNoOp`, and
+  `aliasToARunThatIsAlreadyDoneIsRefused`.
 - **New `RunTraceRegistryTtlContractTest`**: asserts `TTL >= 2 × props.orchestrator().timeoutMs()
   + 60_000` for the **shipped** `application.yml` value, so a future `timeout-ms` raise fails
   a test instead of silently arming a mid-run eviction. This is the whole point of RTR-4.
+  *Shipped as specified*, reading the committed YAML directly (multi-document, so the base
+  value is resolved across profile blocks) and asserting **through the Spring-wired
+  constructor** rather than the static helper, so rewiring the bean to stop reading
+  `TriageProperties` also fails. `atTodaysShippedTimeoutTheDerivedTtlIsUnchangedFromTheConstantItReplaced`
+  is the companion that pins RTR-4 as a *link, not a retune*.
 - **`IncidentPollerTest`**: assert a poller-triggered run leaves exactly one registry entry
   and that N ticks never exceed `MAX_RETAINED_RUNS` — the bound RTR-1 now leans on directly.
+  **Deviation, deliberate**: this landed as a new `UnattendedRunBufferBoundTest` instead.
+  `IncidentPollerTest`'s orchestrator is a `CountingOrchestrator` stub that *overrides*
+  `run(...)` and therefore never reaches a registry at all — asserting entry counts there
+  would have asserted nothing. The new test drives the same single-argument `run(String)`
+  overload K1 calls, against a real orchestrator and a real registry.
 - No test here requires `-Padk`: every case is engine-agnostic and runs under bare
   `mvn -B test`. The `-Padk` suite must stay green regardless (baseline **152 default / 201
   adk**, both green) since `DiagnosisOrchestrator`'s SPI is shared.

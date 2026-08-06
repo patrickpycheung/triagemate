@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -80,15 +81,28 @@ public class DiagnosisOrchestrator {
     private final Map<String, String> connectors;
     private final ExecutorService engineExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-    /** FND-31: coalesces concurrent runs for the same incident number. */
-    private final ConcurrentHashMap<String, CompletableFuture<DiagnosisResult>> inFlight =
-            new ConcurrentHashMap<>();
+    /**
+     * FND-31: coalesces concurrent runs for the same incident number.
+     *
+     * <p><b>J16/RTR-2: the entry carries the run's {@code runId}, not just its future.</b>
+     * A waiter needs to alias its own trace buffer onto the run it is about to block on, and
+     * the only way to name that run is its {@code runId}. Resolving it through a separate
+     * incident→runId index in the registry was a second source of truth racing this map — a
+     * waiter could resolve to a different run than the one it then awaited. Publishing both
+     * facts as ONE map value makes that unrepresentable: whatever {@code putIfAbsent} hands
+     * back is, by construction, the future being awaited AND the runId being aliased to.
+     */
+    private final ConcurrentHashMap<String, InFlightRun> inFlight = new ConcurrentHashMap<>();
+
+    /** The canonical in-flight run for an incident: what a waiter blocks on, and the
+     *  {@code runId} whose live buffer it should watch while it waits (J16/RTR-2). */
+    record InFlightRun(CompletableFuture<DiagnosisResult> future, String runId) {}
 
     /**
-     * Test/back-compat convenience: no {@link RunTraceRegistry} wired in means every run
-     * behaves exactly as before TASK-009 (LT4 {@code runId} support) existed — {@link
-     * #run(String)} still works and {@link #run(String, String)} simply has nothing to
-     * register a client-minted {@code runId} against.
+     * Test/back-compat convenience: no {@link RunTraceRegistry} wired in gets a private
+     * {@link InMemoryRunTraceRegistry} nothing else can poll. Since J16/RTR-1 every run
+     * registers a buffer, so this can no longer be "no registry at all" — the run needs a
+     * collector either way.
      */
     public DiagnosisOrchestrator(DiagnosisEngine engine,
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
@@ -165,11 +179,17 @@ public class DiagnosisOrchestrator {
     }
 
     /**
-     * TASK-009 (LT4 {@code runId} protocol): {@code runId} is the optional, client-minted
-     * id from the {@code X-Triage-Run-Id} header on {@code POST /api/diagnose/{incidentNumber}}.
-     * {@code null} (or blank) means the caller sent no header — most notably {@code
-     * IncidentPoller} (K1), which must NEVER register a buffer entry (LT4 rule 4: "no header
-     * ⇒ no buffer" — K1 runs unattended, indefinitely, with nobody to poll it).
+     * {@code runId} is the optional, client-minted id from the {@code X-Triage-Run-Id} header
+     * on {@code POST /api/diagnose/{incidentNumber}}. {@code null} or blank means the caller
+     * sent no header — most notably {@code IncidentPoller} (K1).
+     *
+     * <p><b>J16/RTR-1: no header no longer means no buffer.</b> LT4 rule 4 ("no header ⇒ no
+     * buffer") is retired. A headerless run now runs under a server-minted {@code "srv-" +
+     * UUID} and registers exactly like a header-carrying one; a client-supplied {@code runId}
+     * stays authoritative when present, so the header contract is untouched. Rule 4 made the
+     * existence of a live buffer depend on which trigger started the run, which broke the
+     * FND-31 mixed-trigger shape below: when K1 owned the run, an attended K3 caller
+     * coalescing onto it had nothing to alias to and no live trace to watch.
      */
     public DiagnosisResult run(String rawIncidentNumber, String runId) {
         // FND-50: normalize here, not just in DiagnosisController — K1 (IncidentPoller)
@@ -177,27 +197,35 @@ public class DiagnosisOrchestrator {
         // let K1 and K3 fail to coalesce on a case/whitespace difference, defeating
         // FND-31 for exactly the mixed-trigger case it exists for.
         String incidentNumber = rawIncidentNumber.trim().toUpperCase();
-        CompletableFuture<DiagnosisResult> mine = new CompletableFuture<>();
-        CompletableFuture<DiagnosisResult> existing = inFlight.putIfAbsent(incidentNumber, mine);
+        String effectiveRunId = hasText(runId) ? runId : "srv-" + UUID.randomUUID();
+
+        // J16/RTR-2 — the ordering here is the fix, not a narrowing of it. REGISTER the
+        // buffer, THEN publish (runId, future) as one value, THEN putIfAbsent. Because the
+        // collector exists before this run is visible in the map at all, any waiter that
+        // wins the putIfAbsent race and reads this entry is guaranteed to find a registered,
+        // non-terminal buffer to alias to. Publishing first and registering after would
+        // leave a window where a waiter aliases to a runId that has no collector yet.
+        TraceCollector collector = runTraceRegistry.register(effectiveRunId, incidentNumber);
+        InFlightRun mine = new InFlightRun(new CompletableFuture<>(), effectiveRunId);
+        InFlightRun existing = inFlight.putIfAbsent(incidentNumber, mine);
         if (existing != null) {
             log.info("diagnosis for {} already in flight — waiting for it instead of starting a duplicate (FND-31)",
                     incidentNumber);
             // FND-31 + LT4: this caller never runs an engine (it just waits below), so it
-            // owns no segment of its own — alias its runId to the canonical run's buffer so
-            // a client polling on it watches the same live steps instead of one that will
-            // never receive any. Left as a hand-off to TASK-010 how (or whether) eviction
-            // interacts with this; today's stub is a plain best-effort lookup.
-            if (hasText(runId)) {
-                runTraceRegistry.alias(runId, incidentNumber);
-            }
-            return awaitExisting(incidentNumber, existing);
+            // owns no segment of its own — alias its runId onto the canonical run's buffer
+            // so a client polling on it watches the same live steps instead of one that will
+            // never receive any. aliasTo refuses if the canonical run has already finished
+            // or aged out (J16/RTR-3); the waiter then has no live buffer and the client
+            // renders the final result from this call's response, which is honest.
+            runTraceRegistry.aliasTo(effectiveRunId, existing.runId());
+            return awaitExisting(incidentNumber, existing.future());
         }
         try {
-            DiagnosisResult result = runOnce(incidentNumber, runId);
-            mine.complete(result);
+            DiagnosisResult result = runOnce(incidentNumber, collector);
+            mine.future().complete(result);
             return result;
         } catch (RuntimeException e) {
-            mine.completeExceptionally(e);
+            mine.future().completeExceptionally(e);
             throw e;
         } finally {
             inFlight.remove(incidentNumber, mine);
@@ -214,8 +242,8 @@ public class DiagnosisOrchestrator {
             // A poller tick that coalesced onto this run as a waiter would block on that
             // future for the rest of the process lifetime — no WARN, no recovery, K1 simply
             // stops polling forever. Narrow window, unbounded consequence, two lines to close.
-            if (!mine.isDone()) {
-                mine.completeExceptionally(new IllegalStateException(
+            if (!mine.future().isDone()) {
+                mine.future().completeExceptionally(new IllegalStateException(
                         "diagnosis for " + incidentNumber + " ended without completing its result "
                                 + "(an Error escaped the run) — failing waiters rather than hanging them"));
             }
@@ -239,21 +267,15 @@ public class DiagnosisOrchestrator {
         }
     }
 
-    private DiagnosisResult runOnce(String incidentNumber, String runId) {
+    /**
+     * TASK-003 (J11/LT1): one collector per run, shared across the primary and (if needed)
+     * fallback engine calls — see {@link #diagnoseWithFallback} for the segment-per-attempt
+     * degrade handling. J16/RTR-2 moved its creation up into {@link #run(String, String)},
+     * because registering the buffer has to happen strictly BEFORE this run becomes visible
+     * in the in-flight map for a waiter to alias onto.
+     */
+    private DiagnosisResult runOnce(String incidentNumber, TraceCollector collector) {
         long t0 = System.currentTimeMillis();
-        // TASK-003 (J11/LT1): one collector per run, shared across the primary and (if
-        // needed) fallback engine calls — see diagnoseWithFallback for the segment-per-
-        // attempt degrade handling.
-        //
-        // TASK-009 (LT4): when the caller supplied a client-minted runId, this is NOT just
-        // a local variable — it is also registered as that runId's live buffer, so a
-        // GET /api/runs/{runId}/steps poll (a later task) sees exactly the steps this run
-        // ends up returning, no separate bookkeeping required. No runId ⇒ no registration ⇒
-        // nothing beyond this ordinary per-call collector (already existed pre-TASK-009) is
-        // allocated — that is what keeps K1 (which never sends a runId) buffer-free.
-        TraceCollector collector = hasText(runId)
-                ? runTraceRegistry.register(runId, incidentNumber)
-                : new TraceCollector();
         try {
             return runOnceWithCollector(incidentNumber, collector, t0);
         } finally {
@@ -313,8 +335,7 @@ public class DiagnosisOrchestrator {
         // all settled, i.e. the exact moment the POST is about to return its final 200. A
         // GET /api/runs/{runId}/steps poller's `done` flag must agree with that (design
         // doc, binding), so it cannot flip true merely because the last tool-call step
-        // resolved — writeback still had to happen after that. No runId ⇒ collector is a
-        // bare local instance nobody polls, so marking it done is harmless.
+        // resolved — writeback still had to happen after that.
         //
         // FND-77 moved the CALL to a finally in the caller so failure paths mark done too;
         // this success-path ordering is unchanged (the finally runs after this returns, and
