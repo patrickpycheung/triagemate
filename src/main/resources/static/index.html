@@ -266,7 +266,6 @@
        .card h2 keeps display:flex — the heading can carry an inline pill beside its text, and
        the flex row is what keeps that vertically centred. */
     .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
-    .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
     /* ---- Evidence / contacts: the TRACE ROW layout ---------------------------
        Operator instruction 2026-08-05. These used to render the platform chip
        INLINE, as a prefix to the sentence — so a two-line summary wrapped back
@@ -393,12 +392,12 @@
        layout reads as broken. break-word only splits tokens that ACTUALLY
        overflow, so normal prose wraps exactly as before. min-width:0 is the
        flex counterpart: a flex item defaults to min-width:auto and refuses to
-       shrink below its longest word, which defeats the wrap on .cand/.ev rows. */
+       shrink below its longest word, which defeats the wrap on .ev rows. */
     .wrap { overflow-x:clip; }
-    .card, .ev, .cand, .src, .trace, .diag-problem, .advisory {
+    .card, .ev, .src, .trace, .diag-problem, .advisory {
       overflow-wrap:break-word; min-width:0;
     }
-    .cand > *, .ev > * { min-width:0; }
+    .ev > * { min-width:0; }
     /* URLs get the stronger rule — they are one token with no spaces, and
        break-word alone still leaves a >900px path segment hanging out. */
     .ev-link { color:var(--acc2); text-decoration:underline; overflow-wrap:anywhere; }
@@ -1669,28 +1668,8 @@ function confidencePillHtml(level) {
   const color = confidenceColorVar(key);
   return `<span class="pill" style="color:${color}">${esc(key)}</span>`;
 }
-// CandidateSystem.confidence is a raw 0..1 double (CandidateSystem.java has
-// no LOW/MEDIUM/HIGH enum here, unlike DiagnosisReport.confidenceOverall and
-// SuggestedAssignment.confidence, which are the Confidence enum already).
-// Bucketing here is a UI-only display judgment call, not a value the backend
-// asserts — thresholds picked to roughly split "this is probably it" (HIGH)
-// from "plausible, keep it on the shortlist" (LOW), same 3-way split the
-// backend already applies to overall/assignment confidence.
-function bucketConfidence(fraction) {
-  const f = Number(fraction) || 0;
-  if (f >= 0.75) return 'HIGH';
-  if (f >= 0.45) return 'MEDIUM';
-  return 'LOW';
-}
-
 function render(data) {
   const r = data.report, t = data.trace || [];
-  // No percentage, no progress bar (direct product feedback): just which
-  // systems are implicated and how confident the diagnosis is in each —
-  // the LOW/MEDIUM/HIGH pill, same visual language as confidenceOverall.
-  const cands = r.candidateSystems.map(c =>
-    `<div class="cand"><span>${esc(c.name)}</span>${confidencePillHtml(bucketConfidence(c.confidence))}</div>`
-  ).join('');
   // FND-25: J7 always claimed "source badges + links" here; the link half was never
   // rendered (only the reconstructed sources-comment preview below had it).
   // Two columns — mark left, everything textual right — matching the tool-call trace
@@ -1838,7 +1817,6 @@ function render(data) {
         <div class="diag-fact"><span class="diag-label">Overall confidence</span>${confidencePillHtml(r.confidenceOverall)}</div>
       </div>
     </div>
-    <div class="card"><h2>Candidate systems</h2>${cands}</div>
     <div class="card"><h2>Suggested assignment</h2>
       <p>${esc(r.suggestedAssignment.group)} <span class="pill">${esc(r.suggestedAssignment.confidence)}</span></p></div>
     <div class="card"><h2>Who to talk to</h2>
