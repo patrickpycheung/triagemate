@@ -105,8 +105,8 @@ triage:
     # life, which is what a demo wants. Raise toward 800-1500 to rehearse against real-world
     # pacing; set max-ms to 0 to disable entirely (what the unit tests use).
     mock-latency:
-      min-ms: 120
-      max-ms: 400
+      min-ms: 500
+      max-ms: 800
 
     # MOCK ONLY — how many "people to talk to" to keep PER SOURCE.
     #
