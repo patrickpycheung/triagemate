@@ -369,6 +369,8 @@ motion-only. Reuses J7's existing `.ev` left-rail idiom.
 ⚠️ **`State` tokens must be mapped, not serialized** — the CSS keys off
 `queued/active/done/warn/fail`, which do not match the enum. Map
 `PENDING→queued, ACTIVE→active, DONE→done, FAILED→fail, DENIED→warn` and test all five.
+(2026-08-06: `ABANDONED→abandoned` was added later and the renderer maps and asserts all **six** —
+`index.html` `stepStateToDataState`. This line says five; the code is right, the prose is stale.)
 
 ### LT6 — Vendor logos ✅ **DONE** (operator ruling 2026-07-30/31)
 

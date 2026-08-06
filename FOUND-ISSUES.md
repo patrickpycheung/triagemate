@@ -1,6 +1,6 @@
 # Found issues
 
-**Backlog: 0 open.** FND-90 (the two ServiceNow enrichment calls J14/FRI-5 named but never
+**Backlog: 1 open** (FND-91 — a design decision, not a defect; explicitly NOT a pre-demo change). FND-90 (the two ServiceNow enrichment calls J14/FRI-5 named but never
 wrapped — a demo-critical 500 on the fallback engine) and FND-89 were resolved on 2026-08-06 and moved to the archive. FND-87 (Spring built the all-mock `ConnectorModeProvider`) and FND-88
 (raw stack trace in the ServiceNow work note) were both resolved on 2026-08-06 and moved to
 the archive. FND-84a/85a/85/86 were all resolved on 2026-08-05 and moved to
@@ -86,3 +86,37 @@ The two most consequential, both real bugs rather than doc drift:
 Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
 
 ---
+
+## FND-91 — J28's `PRIOR_RESOLUTION`-only gate outlived its reason · **LOW** (decision, not a defect)
+
+**Where** — `AdkDiagnosisEngine:200` (instruction: `"basis": "PRIOR_RESOLUTION", // the ONLY
+value you may use`) and `DeterministicDiagnosisEngine:1076` (hardcoded). Card: J28/PGC-5.
+
+**What** — PGC-5 restricted cause/resolution emission to one of the three `InferenceBasis`
+values because the other two rested on concepts that were then unbuilt: `KNOWN_ERROR_DOC` on
+J25, `CODE_PATH` on J13, with J24 also named for the ranker input. **All three shipped on
+2026-08-05/06.** The gate did not reopen with them, because nothing links a restriction to the
+condition that justified it.
+
+Two smaller findings inside it: the card says emission is "restricted by config", and **no such
+config key exists** — the restriction lives in an instruction string and a literal, so it
+cannot be changed without a rebuild. And the card's dependency table still rendered J13/J24/J25
+as 🔴 long after they were 🟢 (corrected 2026-08-06).
+
+**Why it matters** — cause and resolution are, per J28's own framing, "the only two fields that
+answer *why*". Today they can cite a prior incident's resolution and nothing else, even where a
+known-error runbook or a code path is available and now safe to quote. The output is honest —
+abstention is legal and no basis is ever claimed falsely — just narrower than the design allows.
+
+**Why it is NOT being fixed before the demo** — flipping it is a behaviour change to the most
+visible field in the report, on the strength of a rationale-expiry rather than evidence that
+the newly-built dependencies produce good citations in practice. That evidence does not exist
+yet (J25's relevance floor and J13's id scheme have not been exercised against a real
+Confluence/GitLab corpus for *quotation* purposes). Pre-demo is when you stop widening scope.
+The right sequence is: verify the two bases produce sound citations on real data, then open the
+gate, then re-run `/doc-test cds`.
+
+**Escape** — `expired-precondition`: a restriction recorded WHY it existed but nothing rechecks
+that reason when the blocking work lands. Third instance this week of the same family as
+FND-89/FND-90 (`contract-partial-implementation`) — a claim in a card and the code drifting
+apart with no mechanism to notice. **Retro input.**
