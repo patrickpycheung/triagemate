@@ -166,6 +166,22 @@ public record TriageProperties(
          * rest, so an off-convention or wildcard category is unrepresentable rather than
          * merely rejected. A per-project override wins over the default pattern.
          */
+        /**
+         * J19/ICF-1 — the ONE derivation of the fallback environment, shared by both engines.
+         *
+         * <p>It previously existed twice: computed here-ish in {@code DeterministicDiagnosisEngine}
+         * (prod if allowlisted, else the first entry) and written into the ADK instruction as the
+         * literal word "prod". Those agree only while {@code prod} is in the allowlist. A
+         * deployment whose environments are {@code staging, uat} would have the deterministic
+         * engine correctly fall back to {@code staging} while the model was still being told to
+         * use {@code prod} — a value the app then rejects, burning a tool call from its budget on
+         * a guaranteed exception.
+         */
+        public String defaultEnvironment() {
+            if (allowedEnvironments == null || allowedEnvironments.isEmpty()) return "prod";
+            return allowedEnvironments.contains("prod") ? "prod" : allowedEnvironments.get(0);
+        }
+
         public String sourceCategoryFor(String projectSlug, String environment) {
             String pattern = sourceCategoryOverrides == null
                     ? sourceCategoryPattern

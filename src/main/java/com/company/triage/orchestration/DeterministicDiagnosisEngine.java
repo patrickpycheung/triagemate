@@ -137,10 +137,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         this.sumoAllowedEnvironments = props.sumo().allowedEnvironments();
         // "prod" when it's a configured environment, else the first one, so a deployment
         // that renames its environments still gets a valid category rather than a blank.
-        this.sumoDefaultEnvironment =
-                sumoAllowedEnvironments == null || sumoAllowedEnvironments.isEmpty() ? "prod"
-                        : sumoAllowedEnvironments.contains("prod") ? "prod"
-                        : sumoAllowedEnvironments.get(0);
+        // J19/ICF-1: one derivation, owned by the config record both engines hold.
+        this.sumoDefaultEnvironment = props.sumo().defaultEnvironment();
         // FND-62: the GitLab project was a hardcoded literal here, so this engine ignored
         // triage.gitlab.allowed-projects while the ADK path enforced it — the same
         // two-sources-of-truth split FND-40 fixed for Sumo scopes and missed here.

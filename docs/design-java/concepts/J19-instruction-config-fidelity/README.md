@@ -1,6 +1,6 @@
 # J19 — Instruction/Config Fidelity (the prompt tells the truth about the run's bounds)
 
-**State**: 🔴 Designed, not built ·
+**State**: 🟡 **Mostly built** (2026-08-06) — ICF-1 (one derivation of the default environment, owned by TriageProperties.Sumo and used by both engines), ICF-2 (the last configurable literal — "use prod" — removed from the prompt), ICF-3 (budget disclosed as a number) and ICF-5 (invariant tests, run against an estate sharing none of the demo defaults) landed. **Remaining: ICF-4** (denials typed by cause) ·
 **Complexity**: Simple ·
 **Priority**: MEDIUM ·
 **Depends on**: J2 (ADK agent engine + `instruction()`), J8 (the bounds themselves) ·
