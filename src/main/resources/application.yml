@@ -108,6 +108,22 @@ triage:
       min-ms: 120
       max-ms: 400
 
+    # MOCK ONLY — how many "people to talk to" to keep PER SOURCE.
+    #
+    # The recorded Delivery Hazards bundle legitimately yields 23 contacts, ten of them
+    # Confluence page authors (five cited pages, each with authors, editors and named
+    # escalation contacts). Honest, and useless on stage: a wall of 23 names demonstrates the
+    # feature less clearly than four do, and nobody reads past the third.
+    #
+    # PER SOURCE, not overall, so the thing being demonstrated survives — that names arrive
+    # from ServiceNow, Confluence and GitLab independently. An overall cap would let
+    # Confluence's ten crowd the other two off the list, demoing one source instead of three.
+    #
+    # Real connectors are never capped: truncating live output would understate the estate,
+    # and the count is exactly what someone checks against the real system. Mixed mode is
+    # honoured per connector. 0 disables capping entirely.
+    mock-contact-limit: 2
+
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 

@@ -92,3 +92,30 @@ test('the page raises no unexpected browser errors', async ({ page }) => {
 
   expect(errors).toEqual([]);
 });
+
+test('next actions render as a numbered worklist, every line an action', async ({ page }) => {
+  await diagnose(page, null);
+  const card = page.locator('.card', { hasText: 'Recommended next actions' });
+  const items = await card.locator('li').allTextContents();
+
+  // A list, not a paragraph.
+  expect(items.length).toBeGreaterThan(1);
+  // Each step is a thing to DO. "Fill the gap: N other systems appeared in the window but
+  // nothing evidences them" was a disclosure wearing an imperative — the steps are built
+  // from structured fields now, so it cannot come back.
+  expect(items.join(' ')).not.toContain('Fill the gap');
+  for (const t of items) expect(t.trim().length).toBeGreaterThan(10);
+});
+
+test('mocked contacts are capped but still show every source', async ({ page }) => {
+  const { body } = await diagnose(page, null);
+  const who = body.slice(body.indexOf('Who to talk to'), body.indexOf('Evidence'));
+
+  // triage.connectors.mock-contact-limit caps PER SOURCE, so the point being demonstrated
+  // — names arriving from three systems independently — survives the trim. The uncapped
+  // recorded bundle yields 23, ten of them Confluence.
+  for (const source of ['ServiceNow', 'Confluence', 'GitLab']) {
+    expect(who, `${source} should still be represented`).toContain(source);
+  }
+  expect((who.match(/@example\.com/g) || []).length).toBeLessThanOrEqual(8);
+});

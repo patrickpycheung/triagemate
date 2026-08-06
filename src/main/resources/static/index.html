@@ -1862,6 +1862,56 @@ function render(data) {
       <ul style="margin:0 0 5px;padding-left:18px">${step('Mitigation', lr.mitigation)}${step('Permanent fix', lr.permanentFix)}</ul>`;
   };
 
+  // The next-actions card, as an ORDERED list rather than one long sentence.
+  //
+  // Everything here is already elsewhere on the report — the next check, how similar
+  // incidents were actually resolved, and the gaps the run could not close. Presented as
+  // prose it read as a single paragraph an engineer had to parse to find the one thing to do
+  // first; presented as steps it is a worklist. Nothing new is asserted: this composes
+  // evidenced fields, and a field that is absent contributes no step rather than a filler
+  // one, so a thin run yields a short list instead of a padded one.
+  //
+  // Order is deliberate — do the cheap specific check first, then look at what worked on
+  // comparable tickets, then go fill in what is missing.
+  const nextStepsHtml = (r) => {
+    const steps = [];
+    if (r.recommendedNextAction) steps.push(esc(r.recommendedNextAction));
+
+    const lr = r.likelyResolution;
+    if (lr) {
+      const fromPrecedent = (label, s) => s
+        ? `${label}: similar incidents were closed as <b>${esc(s.resolutionCode)}</b> — see ${esc(s.citedArtifact)}.`
+        : null;
+      const m = fromPrecedent('Mitigation', lr.mitigation);
+      const p = fromPrecedent('Permanent fix', lr.permanentFix);
+      if (m) steps.push(m);
+      if (p) steps.push(p);
+    }
+
+    // Gap steps come from STRUCTURED fields, not from the missingInformation prose.
+    //
+    // missingInformation mixes two different things: data genuinely absent from the ticket
+    // ("no correlation id"), and disclosures about the run itself ("20 other systems appeared
+    // in the log window but nothing here evidences them"). The first is a next action; the
+    // second is not, and prefixing it with an imperative made the list end on a step nobody
+    // can perform. Reading the two structured fields instead of pattern-matching the prose
+    // keeps this honest and stops it drifting when that wording changes — the full set is
+    // still on the "Missing information" card above.
+    if (r.identifiers && !r.identifiers.correlationId) {
+      steps.push('Capture a correlation/transaction id — the ticket carries none, '
+               + 'which is what would tie these log lines to one request.');
+    }
+    if (!r.environment) {
+      steps.push("Confirm the environment — the ticket does not state one, so 'prod' was "
+               + 'assumed and a log search bounded by it may be looking in the wrong place.');
+    }
+
+    if (!steps.length) return '<p class="src">— no next action could be established</p>';
+    return `<ol style="margin:0;padding-left:20px;line-height:1.55">
+      ${steps.map(s => `<li style="margin:0 0 6px">${s}</li>`).join('')}
+    </ol>`;
+  };
+
   // decision, the only place that actually knows.
   const writebackCard = data.writebackPosted ? `
     <div class="card"><h2>Posted to ServiceNow — automatically</h2>
@@ -1927,7 +1977,7 @@ function render(data) {
     <div class="card"><h2>Evidence</h2>${ev}</div>
     ${contra ? `<div class="card"><h2>Contradicting evidence</h2><ul>${contra}</ul></div>` : ''}
     ${miss ? `<div class="card"><h2>Missing information</h2><ul>${miss}</ul></div>` : ''}
-    <div class="card"><h2>Recommended next action</h2><p>${esc(r.recommendedNextAction)}</p></div>
+    <div class="card"><h2>Recommended next actions</h2>${nextStepsHtml(r)}</div>
     ${writebackCard}
     ${provenanceChipsHtml(data)}
     ${traceCardHtml}`;
