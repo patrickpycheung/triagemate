@@ -264,6 +264,12 @@ record IncidentSignals(
      * why the engine sweeps rather than picks. Stable, so equal scores keep config order.
      */
     static List<String> rankAllowlist(String app, List<String> allowlist) {
+        // J20/STV-4: a blast shield, not the guarantee. STV-3's @NotNull makes a null
+        // allowlist unreachable through Spring binding, but this is package-private static and
+        // stays reachable from every direct caller — IncidentSignalsTest alone calls it at four
+        // sites, and any future caller inherits the hazard. One line here costs nothing and
+        // means the validation and the method are independently safe rather than jointly.
+        if (allowlist == null) allowlist = List.of();
         Set<String> appTokens = tokens(app);
         List<String> ranked = new ArrayList<>(allowlist);
         ranked.sort(Comparator.comparingInt((String entry) -> {

@@ -148,7 +148,12 @@ the POST has not resolved, `startLt4Poll` renders it under the settled/replay ca
 than `LT4_FRAME_TEXT`. Five lines of JS, and it is the same idiom J11's honesty contract
 imposes everywhere else: never let the UI assert "live" over data that is not.
 
-> **⏸ DEFERRED — the client-side twin is NOT built.** The server half of RTR-3 shipped
+> **✅ NO LONGER DEFERRED (2026-08-06) — the client-side twin is built.** The scheduling
+> blocker was that index.html was owned by a concurrent worktree; that is resolved, and
+> startLt4Poll now settles the caption when the FIRST poll response already carries
+> done:true. Original note kept below for the reasoning.
+>
+> **⏸ was DEFERRED — the client-side twin was NOT built.** The server half of RTR-3 shipped
 > (`aliasTo` refuses a `done` collector and returns `false`, pinned by
 > `InMemoryRunTraceRegistryTest#aliasToARunThatIsAlreadyDoneIsRefused`). The five lines of
 > JS in `startLt4Poll` were **not** written, because `src/main/resources/static/index.html`

@@ -67,6 +67,18 @@ public class RealConfluenceGateway implements ConfluenceGateway {
         return s;
     }
 
+    /**
+     * J18/GEC-5 — a search term cannot change the shape of the CQL it lands in.
+     *
+     * <p>Strips the two characters that can escape the quoted literal this gateway builds: the
+     * quote itself, and the backslash that would escape the CLOSING quote and swallow the
+     * trailing {@code AND type = page} clause.
+     */
+    static String cqlValue(String query) {
+        if (query == null) return "";
+        return query.replace("\\", " ").replace("\"", " ").trim();
+    }
+
     @Override
     public List<KnowledgeDoc> search(String query) {
         log.info("[Confluence] searching pages for: {}", query);
@@ -95,7 +107,22 @@ public class RealConfluenceGateway implements ConfluenceGateway {
             //
             // `type = page` (KQR-3) drops attachments and database objects: three of the five
             // results in the field report were attachments whose "snippet" is a filename.
-            String cql = "siteSearch ~ \"" + query.replace("\"", " ") + "\" AND type = page";
+            // J18/GEC-5 (Confluence half, answered 2026-08-06). The card asked whether a
+            // backslash can terminate the quoted CQL literal, and hoped to record a CLOSED
+            // finding. It cannot be closed: it can.
+            //
+            // Quotes were already neutralised, but a TRAILING BACKSLASH escapes the closing
+            // quote this line adds. A query of `foo\` produces
+            //     siteSearch ~ "foo\" AND type = page"
+            // where `\"` reads as an escaped quote INSIDE the literal, so the string runs on
+            // and swallows `AND type = page`. The damage is not a syntax error — it is the
+            // silent loss of KQR-3's page-type filter, which is how attachments and database
+            // objects were getting cited as evidence in the first place.
+            //
+            // Same treatment as the quote, and for the same reason as J18/GEC-3: strip rather
+            // than escape, because a value that can change the SHAPE of a query is the thing
+            // being prevented, and the search term is user-influenced text.
+            String cql = "siteSearch ~ \"" + cqlValue(query) + "\" AND type = page";
             JsonNode resp = http.get()
                     .uri(uri -> uri.path("/wiki/rest/api/content/search")
                             .queryParam("cql", cql)

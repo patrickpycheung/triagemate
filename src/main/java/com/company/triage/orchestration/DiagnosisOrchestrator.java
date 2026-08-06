@@ -174,6 +174,53 @@ public class DiagnosisOrchestrator {
         return connectors;
     }
 
+    /**
+     * J17/PCS-4 — incidents that reached the end of a run successfully, <b>whatever trigger
+     * asked for it</b>. Bounded and insertion-ordered, same shape as the poller's own set.
+     *
+     * <p>This orchestrator is already "the ONE place their calls meet", so it is the only
+     * component that can see both triggers. K1 could otherwise re-diagnose an incident a
+     * presenter had just run from the UI seconds earlier — a second full agent pass, and a
+     * second pair of advisory comments on a ticket that already had them.
+     */
+    private final java.util.Set<String> recentlyCompleted =
+            java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<>());
+
+    private static final int RECENTLY_COMPLETED_CAP = 500;
+
+    /**
+     * J17/PCS-4 — <b>advisory to the poller only.</b> This orchestrator must never refuse a run
+     * because of it.
+     *
+     * <p>The asymmetry is the point. A human clicking Diagnose a second time on stage has
+     * asked for a second run and must get one —
+     * {@code DiagnosisOrchestratorTest#sequentialRunsOfTheSameIncidentAreNotCoalesced} pins
+     * that as intended, and this does not amend it. An unattended poller re-picking the same
+     * incident has asked for nothing; it merely has not been told.
+     */
+    public boolean wasRecentlyCompleted(String incidentNumber) {
+        return recentlyCompleted.contains(normalize(incidentNumber));
+    }
+
+    /**
+     * The same normalisation {@code run()} applies (FND-37/FND-50), so a UI call and a poller
+     * call for the same ticket agree about being the same ticket.
+     */
+    private static String normalize(String incidentNumber) {
+        return incidentNumber == null ? "" : incidentNumber.trim().toUpperCase();
+    }
+
+    private void recordCompleted(String incidentNumber) {
+        synchronized (recentlyCompleted) {
+            recentlyCompleted.add(normalize(incidentNumber));
+            var it = recentlyCompleted.iterator();
+            while (recentlyCompleted.size() > RECENTLY_COMPLETED_CAP && it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
+    }
+
     public boolean isAdkActuallyActive() {
         return engine != fallbackEngine;
     }
@@ -376,6 +423,11 @@ public class DiagnosisOrchestrator {
         // snapshot forward from diagnoseWithFallback — nothing emits new steps between
         // there and here (writeback is prose-only, added to `trace`), so no fresh
         // collector.steps() read is needed.
+        // J17/PCS-4: record the completion HERE — the one place both triggers' calls meet, and
+        // the last point at which the run is known to have finished. Advisory to the poller
+        // only; this method never consults it, so a human asking twice always gets two runs.
+        recordCompleted(incidentNumber);
+
         return new DiagnosisResult(result.report(), result.trace(), result.engine(), writebackPosted,
                 result.steps(), connectors);
     }

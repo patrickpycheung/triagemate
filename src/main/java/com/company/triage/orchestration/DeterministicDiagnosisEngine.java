@@ -226,6 +226,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // distinctive terms instead of English function words.
         List<String> knowledgeMisses = new ArrayList<>();
         List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
+        boolean codeSearchFailed = false;                   // J30/GEB-3
         String confluenceQuery = signals.confluenceQuery();
         // J25/KQR-4 + J14/FRI-5: the safety net degrades PER CALL. An unreachable Confluence
         // costs this run its runbook evidence and says so; it does not cost the run.
@@ -418,6 +419,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     codeHits = gitLab.searchCode(project, errorToken);
                 } catch (com.company.triage.gateway.GatewayUnavailableException e) {
                     // J14/FRI-5: one unreachable connector costs its own evidence, not the run.
+                    codeSearchFailed = true;   // J30/GEB-3
                     codeHits = List.of();
                     gatewayFailures.add(e.getMessage()
                             + " — the log line was not tied to the code that emits it");
@@ -451,10 +453,27 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                         .formatted(codeHits.size(), citedHits.size(), MAX_CODE_EVIDENCE));
             }
             codeHits = citedHits;
+            // J30/GEB-3: once the sweep SURVIVES a miss (J14/FRI-5), "0 hit(s)" became
+            // ambiguous — it reads the same for "searched and found nothing" and "never
+            // successfully searched anything", and those lead a triager to opposite
+            // conclusions. One means the code is probably not the culprit; the other means
+            // nothing has been learned at all.
+            //
+            // This is the same honesty rule as J25/KQR-4 (failed vs empty Confluence search)
+            // and J29/LLF-2 (an unreadable log level). Third instance of the pattern; the
+            // card notes it is worth stating once as a rule if a fourth appears.
+            if (codeSearchFailed) {
+                String traceFailed = "gitlab.searchCode(term='%s', projects=%s) → COULD NOT SEARCH "
+                        + "(GitLab unreachable) — this is not 'no code matched'"
+                        .formatted(errorToken, projectsToTry);
+                trace.add(traceFailed);
+                emitStep(sink, stepSeq, "gitlab.searchCode", traceFailed);
+            } else {
             String traceGitLabSearch = "gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
                     .formatted(errorToken, projectsToTry, codeHits.size());
             trace.add(traceGitLabSearch);
             emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSearch);
+            }
         } else {
             // The code search is only meaningful with an error token to search FOR — the
             // whole point is the log↔code citation, and there is no log line to cite.
