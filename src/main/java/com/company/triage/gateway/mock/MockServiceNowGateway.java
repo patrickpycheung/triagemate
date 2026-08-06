@@ -46,6 +46,10 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private final FixtureStore fixtures;
     private final FixtureSession session;
 
+    /** Recorded incident replayed under an unrecorded number; blank restores FND-54. */
+    @org.springframework.beans.factory.annotation.Value("${triage.connectors.mock-stand-in:}")
+    private String standInIncident;
+
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockServiceNowGateway() {
         this(FixtureStore.none(), new FixtureSession());
@@ -109,7 +113,11 @@ public class MockServiceNowGateway implements ServiceNowGateway {
             return abstentionIncident(number);
         }
         if (!KNOWN_INCIDENT.equalsIgnoreCase(n)) {
-            throw new com.company.triage.gateway.IncidentNotFoundException(number);
+            IncidentContext standIn = standInFor(n);
+            if (standIn == null) {
+                throw new com.company.triage.gateway.IncidentNotFoundException(number);
+            }
+            return standIn;
         }
         return new IncidentContext(
                 number,
@@ -133,6 +141,49 @@ public class MockServiceNowGateway implements ServiceNowGateway {
                 "Order Portal",
                 List.of("Service Desk (initial)")
         );
+    }
+
+    /**
+     * Offline demo convenience: let an UNRECORDED number be diagnosed anyway, by replaying a
+     * recorded incident's evidence under the number that was typed.
+     *
+     * <p>This deliberately relaxes FND-54, which made the mock reject unknown numbers. That
+     * guard was right for its context — a typo on stage used to return a confident diagnosis
+     * of a bug, headed with an incident that does not exist, and asserting something untrue is
+     * the worst failure this app has. The relaxation is bounded so that failure cannot return:
+     *
+     * <ul>
+     *   <li>it applies to the MOCK gateway only — {@code RealServiceNowGateway} still 404s, so
+     *       nothing invented can ever reach a real ticket or a real writeback;</li>
+     *   <li>the substitution is ANNOUNCED, at WARN, naming both numbers. The demo is honest
+     *       about being a demo; what FND-54 actually forbids is doing this silently;</li>
+     *   <li>it is switchable — {@code triage.connectors.mock-stand-in} to a different incident,
+     *       or blank to restore the strict FND-54 behaviour exactly.</li>
+     * </ul>
+     *
+     * <p>The session is re-latched to the STAND-IN's number, not the typed one, so every other
+     * connector replays the same bundle. Without that, Confluence/Sumo/GitLab would look up the
+     * typed number, find no fixture, and either fall back to the unrelated J7 payment story or
+     * report themselves unavailable — a diagnosis assembled from two different incidents.
+     *
+     * @return the stand-in context carrying the requested number, or null when no stand-in is
+     *         configured or recorded (caller then throws, preserving FND-54)
+     */
+    private IncidentContext standInFor(String requestedNumber) {
+        if (standInIncident == null || standInIncident.isBlank()) return null;
+        var base = fixtures.<IncidentContext>find(standInIncident, G, "getIncident",
+                FixtureKeys.of(standInIncident), new TypeReference<IncidentContext>() {});
+        if (base.isEmpty()) return null;
+
+        log.warn("mock: {} is not recorded — replaying {}'s evidence under that number "
+                        + "(offline demo; triage.connectors.mock-stand-in=<blank> to disable)",
+                requestedNumber, standInIncident);
+        session.set(standInIncident);
+        IncidentContext b = base.get();
+        return new IncidentContext(requestedNumber, b.shortDescription(), b.description(),
+                b.caller(), b.category(), b.subcategory(), b.openedAt(), b.environment(),
+                b.currentAssignment(), b.comments(), b.workNotes(), b.configurationItem(),
+                b.reassignmentHistory());
     }
 
     /**
@@ -180,7 +231,11 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
-        String number = incident == null || incident.number() == null ? "" : incident.number().trim();
+        // The SESSION, not incident.number(): under a stand-in the context deliberately
+        // carries the number the operator typed, while the recordings are filed under the
+        // stand-in's. Keying off the context here would miss every fixture and silently fall
+        // through to the payment-reconcile precedents below.
+        String number = session.current();
         if (fixtures.hasIncident(number)) {
             // A recorded incident never falls through to the payment-reconcile precedents
             // below — see FixtureStore#hasIncident. No recorded precedents means the live
