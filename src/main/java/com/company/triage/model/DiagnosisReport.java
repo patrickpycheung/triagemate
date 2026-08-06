@@ -65,6 +65,9 @@ public record DiagnosisReport(
      * posted first so the diagnosis that follows is auditable — every claim is one
      * click from its evidence. Each line links to the document / log / file / ticket.
      */
+    /** Continuation-line indent inside a "• " bullet, so a folded trace stays in the list. */
+    private static final String NOTE_INDENT = "  ";
+
     public String toSourcesNote() {
         StringBuilder b = new StringBuilder();
         b.append("[AI Triage · Sources consulted]\n");
@@ -73,9 +76,20 @@ public record DiagnosisReport(
             b.append("(no external sources were consulted)\n");
         } else {
             for (Evidence e : evidence) {
-                b.append("• ").append(e.source()).append(" — ").append(e.summary());
+                // FND-88: a Sumo `e-log` summary is the row's whole `_raw`, so on a real
+                // service this one bullet was a 100–300 line stack trace and the note became
+                // several screens with one useful sentence in it. Folded to the meaningful
+                // lines, with the elision STATED — a work-note reader has no expander and no
+                // link back to the row, so a shortening they cannot see would read as the
+                // whole trace. Non-trace evidence is returned untouched by fold().
+                StackTraceFold.Folded folded = StackTraceFold.fold(e.summary(), NOTE_INDENT);
+                b.append("• ").append(e.source()).append(" — ").append(folded.text());
                 if (e.link() != null && !e.link().isBlank()) {
                     b.append("  [").append(e.link()).append("]");
+                }
+                String abbreviated = StackTraceFold.summarise(folded);
+                if (abbreviated != null) {
+                    b.append("\n").append(NOTE_INDENT).append(abbreviated);
                 }
                 b.append("\n");
             }
