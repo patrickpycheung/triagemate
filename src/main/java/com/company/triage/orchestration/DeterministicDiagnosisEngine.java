@@ -190,7 +190,34 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         emitStep(sink, stepSeq, "understand:", traceUnderstand, StepState.DONE);
 
         // ---- Step 3: similar incidents + ownership ----------------------------
-        List<ResolvedIncident> similar = serviceNow.findSimilarIncidents(inc);
+        // Declared here rather than at the knowledge step: FND-90 added two earlier users
+        // (similar incidents, CMDB ownership), and a degradation list has to exist before the
+        // first call that can degrade.
+        List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
+        // FND-90 / J14/FRI-5: this call site was NAMED in FRI-5's mechanism and never wrapped,
+        // while sumo.search, gitLab.searchCode and confluence.search all were. Precedent is
+        // not decoration here: this engine is D2, the fallback the demo runbook keeps hot
+        // because "the demo cannot hard-fail on stage", and the orchestrator has no net under
+        // it — a throw from here became an HTTP 500 with no report at all, at exactly the
+        // moment the fallback was supposed to be saving the run.
+        //
+        // getIncident stays unwrapped, deliberately: without the ticket there is nothing to
+        // diagnose. Similar incidents are ENRICHMENT — losing them costs precedent, not the
+        // diagnosis.
+        List<ResolvedIncident> similarGathered;
+        boolean similarFailed = false;
+        try {
+            similarGathered = serviceNow.findSimilarIncidents(inc);
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            similarGathered = List.of();
+            similarFailed = true;
+            gatewayFailures.add(e.getMessage()
+                    + " — no past incidents were compared, so \"no precedent found\" is not a "
+                    + "conclusion this run is entitled to");
+            log.warn("  {} unreachable for similar incidents — continuing without precedent", e.system(), e);
+        }
+        // Effectively-final copy: assignment below captures this in a lambda.
+        final List<ResolvedIncident> similar = similarGathered;
         for (ResolvedIncident r : similar) {
             // J28: the resolution NOTE is appended so the evidence carries what the cause
             // section quotes. Without it, CR-8 (quote fidelity) could never pass — a
@@ -203,17 +230,35 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                             notBlank(r.resolutionNotes()) ? " — " + r.resolutionNotes().trim() : ""),
                     r.number()));
         }
-        String traceFindSimilar = "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
+        String traceFindSimilar = similarFailed
+                ? "servicenow.findSimilarIncidents → COULD NOT SEARCH (ServiceNow unreachable) "
+                  + "— this is not 'no similar incidents'"
+                : "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
         trace.add(traceFindSimilar);
-        emitStep(sink, stepSeq, "servicenow.findSimilarIncidents", traceFindSimilar, StepState.DONE);
+        emitStep(sink, stepSeq, "servicenow.findSimilarIncidents", traceFindSimilar,
+                similarFailed ? StepState.FAILED : StepState.DONE);
 
-        Optional<ServiceOwnership> ownership = serviceNow.findOwnership(inc.configurationItem());
+        // FND-90 — same rule, same reason. Ownership drives the suggested assignment group,
+        // so losing it degrades routing; it must not end the run.
+        Optional<ServiceOwnership> ownership;
+        boolean ownershipFailed = false;
+        try {
+            ownership = serviceNow.findOwnership(inc.configurationItem());
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            ownership = Optional.empty();
+            ownershipFailed = true;
+            gatewayFailures.add(e.getMessage()
+                    + " — the CMDB owner was not looked up, so no assignment group is suggested "
+                    + "from ownership");
+            log.warn("  {} unreachable for CMDB ownership — continuing without it", e.system(), e);
+        }
         ownership.ifPresent(o -> evidence.add(new Evidence("e-cmdb", "servicenow-cmdb",
                 "CMDB: %s owned by %s".formatted(o.application(), o.supportGroup()), o.source())));
         String traceFindOwnership = "servicenow.findOwnership(%s) → %s".formatted(
                 inc.configurationItem(), ownership.map(ServiceOwnership::supportGroup).orElse("none"));
         trace.add(traceFindOwnership);
-        emitStep(sink, stepSeq, "servicenow.findOwnership", traceFindOwnership, StepState.DONE);
+        emitStep(sink, stepSeq, "servicenow.findOwnership", traceFindOwnership,
+                ownershipFailed ? StepState.FAILED : StepState.DONE);
 
         // ---- Step 4: knowledge (Confluence) -----------------------------------
         // FND-59: this used to be the fixed literal "checkout order payment reconcile 500"
@@ -225,7 +270,6 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // FND-62: keywords + app rather than the whole sentence + app, so the search gets
         // distinctive terms instead of English function words.
         List<String> knowledgeMisses = new ArrayList<>();
-        List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
         boolean codeSearchFailed = false;                   // J30/GEB-3
         String confluenceQuery = signals.confluenceQuery();
         // J25/KQR-4 + J14/FRI-5: the safety net degrades PER CALL. An unreachable Confluence

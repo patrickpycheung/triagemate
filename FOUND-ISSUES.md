@@ -1,6 +1,7 @@
 # Found issues
 
-**Backlog: 0 open.** FND-89 was resolved on 2026-08-06 and moved to the archive. FND-87 (Spring built the all-mock `ConnectorModeProvider`) and FND-88
+**Backlog: 0 open.** FND-90 (the two ServiceNow enrichment calls J14/FRI-5 named but never
+wrapped — a demo-critical 500 on the fallback engine) and FND-89 were resolved on 2026-08-06 and moved to the archive. FND-87 (Spring built the all-mock `ConnectorModeProvider`) and FND-88
 (raw stack trace in the ServiceNow work note) were both resolved on 2026-08-06 and moved to
 the archive. FND-84a/85a/85/86 were all resolved on 2026-08-05 and moved to
 [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md).

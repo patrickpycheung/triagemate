@@ -1993,3 +1993,40 @@ implemented in full, and the two visible signals made the third's absence invisi
   recorded as done when two landed. The two visible signals (trace text, missingInformation)
   made the third's absence invisible, and no check exists that a multi-part rule is implemented
   in full.
+
+## FND-90 — the two ServiceNow enrichment calls FRI-5 named were never wrapped · **HIGH**
+
+**Where** — `DeterministicDiagnosisEngine` `serviceNow.findSimilarIncidents` / `findOwnership`;
+`RealServiceNowGateway` (no failure translation at all); `DiagnosisOrchestrator` (no catch under
+the fallback call).
+
+**What** — J14/FRI-5's mechanism names four aborting call sites: `sumo.search`,
+`gitLab.searchCode`, `serviceNow.findSimilarIncidents` and `findOwnership`. The first two were
+wrapped, and Confluence besides. **The ServiceNow pair never was** — while J14 carried
+🟢 *"Built — all six FRI rules landed"*. Two compounding gaps behind it:
+
+1. `RealServiceNowGateway` never translated transport failures into
+   `GatewayUnavailableException` — the exception the engine's safety net catches. Every other
+   real gateway does. So even a wrap would have missed the raw `RestClientException`.
+2. `DiagnosisOrchestrator` had no catch under `callWithTimeout(fallbackEngine, …)`. The FND-7
+   net covers the PRIMARY engine failing; nothing covered the fallback failing.
+
+**Why it mattered for the demo** — this engine is **D2**, the fallback the runbook keeps hot
+because *"the demo cannot hard-fail on stage"*. A ServiceNow 5xx, an expired session or a rate
+limit during either enrichment call propagated out as an unmapped **HTTP 500 with no report** —
+at precisely the moment D2 was supposed to be rescuing the run, since "the primary engine
+failed" is exactly when the fallback runs. Reachable on any real-connector run.
+
+- **Resolution**: fixed (2026-08-06). Gateway translates both methods' failures to
+  `GatewayUnavailableException`; the engine degrades each with all three FRI-5 signals (trace
+  line that says COULD NOT SEARCH rather than reporting a count it never obtained,
+  `missingInformation` entry, `FAILED` step); the orchestrator catches a failing fallback and
+  raises a named `BothEnginesFailedException` carrying **both** causes, mapped to 502 instead
+  of a bare 500. `getIncident` stays unwrapped deliberately — without the ticket there is
+  nothing to diagnose, and FRI-5 draws that line. Pinned by `ServiceNowEnrichmentDegradesTest`
+  (7 tests, all 7 confirmed failing against the pre-change engine — 5 as raw errors, which was
+  the bug itself).
+- **Escape**: `contract-partial-implementation` — the same layer as FND-89, found the same day.
+  A rule naming four call sites was marked Built with two done. Nothing checks that a
+  multi-part rule is implemented at every site it names, so the wrapped sites made the unwrapped
+  ones invisible. **Two instances in one day is a pattern, not a coincidence — retro input.**
