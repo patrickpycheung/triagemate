@@ -59,7 +59,7 @@ class RecordedIncidentNeverFallsBackToDemoDataTest {
         FixtureStore store = partiallyCaptured(dir);
         FixtureSession session = new FixtureSession();
 
-        IncidentContext inc = new MockServiceNowGateway(store, session, com.company.triage.gateway.mock.MockLatency.none()).getIncident(RECORDED);
+        IncidentContext inc = new MockServiceNowGateway(store, session, com.company.triage.gateway.mock.MockLatency.none(), null).getIncident(RECORDED);
 
         assertThat(inc.number()).isEqualTo(RECORDED);
         assertThat(inc.configurationItem()).isEqualTo("Delivery Hazards");
@@ -71,7 +71,7 @@ class RecordedIncidentNeverFallsBackToDemoDataTest {
             throws Exception {
         FixtureStore store = partiallyCaptured(dir);
         FixtureSession session = new FixtureSession();
-        new MockServiceNowGateway(store, session, com.company.triage.gateway.mock.MockLatency.none()).getIncident(RECORDED);   // latches the incident
+        new MockServiceNowGateway(store, session, com.company.triage.gateway.mock.MockLatency.none(), null).getIncident(RECORDED);   // latches the incident
 
         // NOT an empty list: "I could not search" and "I searched and found nothing" are
         // different claims, and only one of them is true here.
@@ -93,7 +93,7 @@ class RecordedIncidentNeverFallsBackToDemoDataTest {
         FixtureStore empty = new FixtureStore(dir.toString());
         FixtureSession session = new FixtureSession();
 
-        IncidentContext inc = new MockServiceNowGateway(empty, session, com.company.triage.gateway.mock.MockLatency.none()).getIncident(LEGACY);
+        IncidentContext inc = new MockServiceNowGateway(empty, session, com.company.triage.gateway.mock.MockLatency.none(), null).getIncident(LEGACY);
 
         assertThat(inc.configurationItem()).isEqualTo("Order Portal");
         assertThat(new MockConfluenceGateway(empty, session, com.company.triage.gateway.mock.MockLatency.none()).search("payment reconcile"))

@@ -155,6 +155,24 @@ triage:
     # diagnosis). No human in the loop. It only comments; never reassigns/closes/re-prioritises.
     enabled: true
 
+    # Post the two comments to the REAL ServiceNow ticket even when connectors are MOCK.
+    #
+    # Evidence stays offline and reproducible; the WRITE goes live. "And it comments on the
+    # ticket" is the half of the demo a viewer cannot check from a screenshot — it lands when
+    # someone opens the ticket in ServiceNow and the comments are there.
+    #
+    # Bounded, because this is the one place a mocked run touches the real world:
+    #   - it only ever ADDS a comment. No reassignment, closure or priority change exists in
+    #     this path at all — same RealServiceNowGateway.addWorkNote a production run uses,
+    #     including its already-posted check, so a re-run does not stack duplicates.
+    #   - no credentials means no posting. The offline demo on a fresh clone is unaffected.
+    #   - every failure is swallowed and logged. A ticket that does not exist (a stand-in
+    #     number, say) or an unreachable instance must never break a demo.
+    #   - the startup banner says which of the two is in effect, so nobody has to remember.
+    #
+    # Set false to keep mocked runs entirely offline.
+    post-to-live-servicenow: true
+
   orchestrator:
     # FND-15: wall-clock bound on a single engine call (either engine — the deterministic
     # one makes real HTTP calls too once triage.connectors.*=real). A hung gateway or proxy

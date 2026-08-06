@@ -47,6 +47,8 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private final FixtureSession session;
     /** Simulated network delay — see {@link MockLatency}. */
     private final MockLatency latency;
+    /** Posts the advisory notes to the REAL ticket; null when unavailable. See {@link LiveWorkNotePoster}. */
+    private final LiveWorkNotePoster livePoster;
 
     /** Recorded incident replayed under an unrecorded number; blank restores FND-54. */
     @org.springframework.beans.factory.annotation.Value("${triage.connectors.mock-stand-in:}")
@@ -54,7 +56,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockServiceNowGateway() {
-        this(FixtureStore.none(), new FixtureSession(), MockLatency.none());
+        this(FixtureStore.none(), new FixtureSession(), MockLatency.none(), null);
     }
 
     /**
@@ -64,10 +66,13 @@ public class MockServiceNowGateway implements ServiceNowGateway {
      * found". Silent, and invisible to unit tests, which construct explicitly.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public MockServiceNowGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency) {
+    public MockServiceNowGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency,
+                                 @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                 LiveWorkNotePoster livePoster) {
         this.fixtures = fixtures;
         this.session = session;
         this.latency = latency;
+        this.livePoster = livePoster;
     }
 
     /** One-shot: lets the offline K1 poller see a single "new" incident. See below. */
@@ -298,11 +303,30 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public void addWorkNote(String number, String workNote) {
-        if (postedNotes.contains(workNote)) {           // idempotency
+        // Keyed by TICKET + note, not by note alone. The diagnosis note's text does not
+        // contain the incident number, so under the stand-in feature two different tickets
+        // produce BYTE-IDENTICAL notes — and a note-only key made the second ticket's post a
+        // no-op. Invisible while this only wrote to a log; the moment mocked runs post for
+        // real it silently skipped a comment on a real ticket and the trace still said
+        // "posted". Same-ticket repeats are still deduped, here and again server-side by
+        // RealServiceNowGateway's already-posted check.
+        String key = number + "\u0000" + workNote;
+        if (postedNotes.contains(key)) {                // idempotency, per ticket
             log.info("[mock ServiceNow] identical AI work note already present on {} — skipping", number);
             return;
         }
-        postedNotes.add(workNote);
-        log.info("[mock ServiceNow] advisory work note posted to {}:\n{}", number, workNote);
+        postedNotes.add(key);
+
+        // The one place a mocked run deliberately touches the real world. Evidence stays
+        // offline and reproducible; the COMMENT goes to the actual ticket, because "and it
+        // writes back to ServiceNow" is the claim a viewer can only really check by opening
+        // the ticket. Absent credentials, or any failure at all, degrades to the log line
+        // below — a demo must not break over a comment.
+        boolean postedLive = livePoster != null && livePoster.tryPost(number, workNote);
+        if (postedLive) {
+            log.info("[mock ServiceNow] advisory work note posted to the LIVE ticket {}", number);
+        } else {
+            log.info("[mock ServiceNow] advisory work note posted to {}:\n{}", number, workNote);
+        }
     }
 }

@@ -222,9 +222,31 @@ public class StartupBanner {
         boolean enabled = !"false".equalsIgnoreCase(env.getProperty("triage.writeback.enabled", "true"));
         boolean liveServiceNow = "real".equalsIgnoreCase(env.getProperty("triage.connectors.servicenow", "mock"));
         if (!enabled) return "off — no comments will be posted";
-        return liveServiceNow
-                ? "ON, and ServiceNow is REAL — runs will post two comments to the live ticket"
+        if (liveServiceNow) {
+            return "ON, and ServiceNow is REAL — runs will post two comments to the live ticket";
+        }
+        // A mocked run posts to the live ticket too, when credentials exist — evidence stays
+        // offline, the WRITE goes out (see LiveWorkNotePoster). Saying "not to a real ticket"
+        // here would be the banner asserting something untrue about an outward-facing side
+        // effect, which is the one thing this line exists to prevent.
+        return liveWritebackConfigured()
+                ? "on (mock evidence) — but comments DO go to the live ServiceNow ticket"
                 : "on (fixtures) — comments go to the log and the UI, not to a real ticket";
+    }
+
+    /** Whether a mocked run can reach a live instance: the flag on, and full credentials. */
+    private boolean liveWritebackConfigured() {
+        if ("false".equalsIgnoreCase(
+                env.getProperty("triage.writeback.post-to-live-servicenow", "true"))) {
+            return false;
+        }
+        return notBlank(env.getProperty("triage.integrations.servicenow.base-url"))
+                && notBlank(env.getProperty("triage.integrations.servicenow.user"))
+                && notBlank(env.getProperty("triage.integrations.servicenow.secret"));
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     private java.util.Optional<String> hostnameLine(int port) {
