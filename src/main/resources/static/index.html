@@ -1361,13 +1361,41 @@ function renderLt3Replay(cardEl, data) {
   // growing. Appending is the only motion BOTH can do (the live path can't know
   // its steps ahead of time), so it's the one they now share. The pacing stays
   // the difference in TIMING, not in shape.
+  // The replay needs the SAME follow-the-bottom treatment as the live path, and
+  // needs it more. By the time this runs, render() has already drawn the entire
+  // report above — several thousand pixels of it — so the trace card the steps
+  // append into starts life well below the fold. Without following, the paced
+  // reveal plays out entirely off-screen: the viewer sits looking at a static
+  // report while the thing the pacing exists to show scrolls past unwatched.
+  const follower = createBottomFollower();
+
   let cumulativeDelay = 0;
   steps.forEach((step) => {
     const realDuration = typeof step.durationMs === 'number' ? step.durationMs : 0;
     cumulativeDelay += Math.max(realDuration, 400);
-    setTimeout(() => appendTraceRows(shell, [step]), cumulativeDelay);
+    setTimeout(() => {
+      appendTraceRows(shell, [step]);
+      follower.follow();
+    }, cumulativeDelay);
   });
+
+  // Once the last row has landed, hand the view back to the report. Returning to
+  // the top is the existing settled-state behaviour and the reason the trace is
+  // worth following at all — the steps are the narration, the report is the
+  // answer, and the answer is what the reader should be left on.
+  //
+  // Gated on the follower still being engaged: if the viewer took the scroll over
+  // mid-replay they chose where to be, and overriding that at the end would undo
+  // the one guarantee that makes auto-follow tolerable.
+  setTimeout(() => {
+    if (follower.engaged()) window.scrollTo({ top: 0, behavior: 'smooth' });
+    follower.detach();
+  }, cumulativeDelay + LT3_SETTLE_RETURN_MS);
 }
+
+// Breathing room after the final row before the view returns to the report, so the
+// last step is legible as a completed step rather than a flicker.
+const LT3_SETTLE_RETURN_MS = 900;
 
 /* ---- LT4: live poll renderer (J11, TASK-015) -----------------------------
    Renders the ADK path (data.engine === 'ADK') while the run is still IN FLIGHT —
@@ -1447,6 +1475,65 @@ function mintRunId() {
 // maps ABANDONED -> 'abandoned' already), and the boundary row's own label
 // text visibly announces the transition, rather than either being silently
 // dropped or requiring a bespoke second code path.
+/*
+  Keeps the newest trace row in view while a live run is still producing them.
+
+  The live card grows downward in normal page flow, so once a run emits more rows
+  than fit the viewport the interesting end of the trace — the call happening right
+  now — sits below the fold. The audience is then watching a stationary block of
+  already-finished steps while the actual work scrolls away unseen, which defeats
+  the entire point of narrating a run as it happens.
+
+  Following the bottom is only half of it. Auto-scroll that cannot be escaped is
+  worse than none: the moment someone scrolls up to read an earlier step, yanking
+  them back on the next poll makes the trace unreadable. So the follower treats the
+  user's own scroll as authoritative — scrolling up DISENGAGES it, and returning to
+  the bottom RE-ENGAGES it. That is the same contract a terminal or a chat log
+  honours, and it is what makes "follow" feel like help rather than a fight.
+
+  Engagement is derived from POSITION rather than tracked as a flag: after any
+  scroll, the follower is engaged if and only if the view is at the bottom. That
+  single rule covers both directions — a scroll up lands away from the bottom and
+  disengages, a scroll back down re-engages — with no state to get out of sync.
+
+  It also forces the scroll to be INSTANT rather than smooth. A smooth scroll
+  animates through many intermediate positions and fires a scroll event at each
+  one, nearly all of them not-at-the-bottom; the follower would read its own
+  animation as a user takeover and switch itself off after the first row. Instant
+  scrolling produces exactly one event, at the destination, which the rule above
+  reads correctly. Verified: with smooth, following died on row 1 and the
+  end-of-run return to the report never fired.
+*/
+function createBottomFollower() {
+  // Distance from the bottom still counted as "at the bottom". Sub-pixel layout
+  // rounding and a row landing between events both put the position a few pixels
+  // off exact; a small band absorbs that without swallowing a real scroll-up.
+  const NEAR_BOTTOM_PX = 120;
+  let engaged = true;
+
+  function atBottom() {
+    const gap = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    return gap <= NEAR_BOTTOM_PX;
+  }
+
+  function onScroll() {
+    engaged = atBottom();   // the viewer's position IS the instruction
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  return {
+    follow() {
+      if (!engaged) return;
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
+    },
+    // Lets a caller ask whether the viewer is still delegating scroll control,
+    // so an end-of-run reposition can respect a manual takeover.
+    engaged() { return engaged; },
+    detach() { window.removeEventListener('scroll', onScroll); },
+  };
+}
+
 function startLt4Poll(runId, cardEl) {
   // Same shell the replay path uses — header with a running count, one caption
   // line, then the growing row list. The caption is the live counterpart of
@@ -1469,11 +1556,18 @@ function startLt4Poll(runId, cardEl) {
   let timer = null;
   let everSawData = false;
   let notFoundStreak = 0;
+  // Only the LIVE card follows. renderLt4Final()/renderLt3Replay() draw a settled
+  // trace the reader arrives at deliberately, and dragging them to its end would
+  // hide the report the run just produced.
+  const follower = createBottomFollower();
 
   function stop() {
     if (stopped) return;
     stopped = true;
     if (timer) clearTimeout(timer);
+    // Release the window BEFORE the final render lands, so the settled view is
+    // positioned by the caller rather than by a follower still chasing rows.
+    follower.detach();
     // J23/LUH-1: the caption is owned by the STATE. The moment this card stops being fed,
     // it stops claiming to be. Doing it here rather than in each caller means a future exit
     // path inherits the honesty instead of having to remember it.
@@ -1523,6 +1617,10 @@ function startLt4Poll(runId, cardEl) {
         for (const attempt of (data.attempts || [])) {
           upsertTraceRows(shell, attempt.steps || []);
         }
+        // After the upsert, not before: the rows must already be in the document
+        // or scrollHeight still describes the previous frame and we'd chase a
+        // bottom that has since moved.
+        follower.follow();
         if (data.done) { stop(); return; }
       }
       // A non-404, non-ok response (transient 5xx) is swallowed here rather
