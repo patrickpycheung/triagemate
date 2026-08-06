@@ -1,6 +1,6 @@
 # J20 — Startup Truth & Validation
 
-**State**: 🟡 **Mostly built** (2026-08-06) — STV-1 (banner reports effective engine + connector state by asking the orchestrator, and shouts when triage.engine=adk was requested but no ADK engine is wired), STV-3 (@NotNull/@NotEmpty on the three fields whose absence throws downstream) and STV-5 (mechanism tests, not annotation tests) landed. **Remaining: STV-2** (LLM readiness probe), **STV-4** and **STV-6** · **Complexity**: Moderate · **Priority**: MEDIUM ·
+**State**: 🟡 **Mostly built** (2026-08-06) — STV-1 (banner reports effective engine + connector state by asking the orchestrator, and shouts when triage.engine=adk was requested but no ADK engine is wired), STV-3 (@NotNull/@NotEmpty on the three fields whose absence throws downstream) and STV-5 (mechanism tests, not annotation tests) landed. **STV-4 landed 2026-08-06** (null guard in rankAllowlist — a blast shield independent of the binding-time validation). **Remaining: STV-2** (LLM readiness probe) **and STV-6** · **Complexity**: Moderate · **Priority**: MEDIUM ·
 **Depends on**: J1, J2, J8 ·
 **Amends**: J2 (engine construction gains a readiness check), J8 (extends the
 `TriageProperties` "booted clean means valid" contract to the allowlists it owns) ·

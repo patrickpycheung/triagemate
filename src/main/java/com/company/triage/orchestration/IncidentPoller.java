@@ -186,7 +186,10 @@ public class IncidentPoller {
             String number = incident.number().trim().toUpperCase();
             boolean handled = false;
 
-            if (completed.contains(number)) {
+            // J17/PCS-4: the other trigger may have diagnosed this one seconds ago. Consulted
+            // in the same position as our own set and treated identically — skip, and count as
+            // handled so the cursor advances over it rather than freezing on work that IS done.
+            if (completed.contains(number) || orchestrator.wasRecentlyCompleted(number)) {
                 log.debug("poll: {} already diagnosed in this process — skipping", number);
                 handled = true;                     // done previously; safe to advance over
             } else if (!inFlight.add(number)) {
