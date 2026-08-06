@@ -45,7 +45,7 @@ the first fix breaks the second.
 
 | # | What | Where | Severity | Failure scenario |
 |---|---|---|---|---|
-| 1 | K1 marks an incident completed even when writeback failed — the two advisory comments are permanently lost after one attempt | [`IncidentPoller.java:192-202`](../../../../src/main/java/com/company/triage/orchestration/IncidentPoller.java#L192-L202) (`markCompleted` at :201) | MEDIUM | Poll enabled overnight (the K1 use case). INC0012345 is created; diagnosis succeeds; ServiceNow returns a transient 503 on the first `addWorkNote`. `runOnce()` catches it and returns `writebackPosted=false`; the poller logs "diagnosed via ADK", marks completed, and the FND-41 cursor advances past it. K1 has no UI and no buffer, so the two comments were the run's **only** durable output — gone, with one WARN line as the record. |
+| 1 | K1 marks an incident completed even when writeback failed — the two advisory comments are permanently lost after one attempt | [`IncidentPoller.java:192-202`](../../../../src/main/java/com/company/triage/orchestration/IncidentPoller.java#L192-L202) (`markCompleted` at :201) | MEDIUM | Poll enabled overnight (the K1 use case). INC0012345 is created; diagnosis succeeds; ServiceNow returns a transient 503 on the first `addWorkNote`. `runOnce()` catches it and returns `writebackPosted=false`; the poller logs "diagnosed via ADK", marks completed, and the FND-41 cursor advances past it. K1 has no UI and nobody watching, so the two comments were the run's **only** durable output — gone, with one WARN line as the record. |
 | 2 | Poller re-diagnoses an incident the manual trigger already completed — FND-31's original scenario survives in sequential form | [`IncidentPoller.java:184`](../../../../src/main/java/com/company/triage/orchestration/IncidentPoller.java#L184) (`completed.contains(number)`) | MEDIUM | Poll enabled with `interval-ms` raised past a run's duration. Incident created at T; presenter clicks at T+2s; the ADK run finishes at T+45s posting two comments. The tick at T+120s selects the incident (created after the cursor, absent from the *poller's* completed set), runs a second full ADK diagnosis, and posts two more comments whose wording does not match — four advisory notes on a real ticket plus doubled unattended LLM spend. |
 | 3 | Partial-writeback trace disclosure "at most one of the two comments may have posted" is wrong in two sub-cases — **unverified** (LOW tail item; one-look check before acting) | [`DiagnosisOrchestrator.java:263-265`](../../../../src/main/java/com/company/triage/orchestration/DiagnosisOrchestrator.java#L263-L265) | LOW | Real ServiceNow, slow but functioning: the second PATCH lands server-side at 21s, the client read timeout fires at 20s. The ticket shows **both** comments; the trace asserts at most one. And even in the ordinary case the trace is self-contradictory — it contains a definite "posted 'Sources consulted' comment" line two lines above a hedge saying at most one *may have* posted. |
 
@@ -217,8 +217,19 @@ tests), so the 152/201 baseline moves on the default count only.
   undecided; PCS-4 deliberately stops at in-process state and names the ServiceNow-query
   option as its successor.
 - **Live-trace buffers, aliasing, and what a coalesced client watches** — J16
-  (run-trace-registry-lifecycle) and J12 (live-trace-delivery). K1 sends no `runId` and
-  registers no buffer by design (LT4 rule 4); this card does not change that.
+  (run-trace-registry-lifecycle) and J12 (live-trace-delivery). This card does not change
+  them.
+
+  > **Corrected 2026-08-06.** This bullet previously read *"K1 sends no `runId` and registers
+  > no buffer by design (LT4 rule 4)"*. That is no longer true: **J16/RTR-1 retired LT4
+  > rule 4**. `DiagnosisOrchestrator.run(...)` now mints a server-side `runId`
+  > (`"srv-" + UUID`) when the caller supplied none and **always** registers a collector, so
+  > a K1-owned run — which reaches the orchestrator through the same `orchestrator.run(number)`
+  > call at `IncidentPoller.java:192` — does get a buffer.
+  >
+  > Nothing in PCS-1…PCS-5 depended on the old invariant; it was a boundary statement, not a
+  > premise, which is why J17 could be built against it without harm. Corrected anyway,
+  > because the next reader would have inherited a false fact about their own poller.
 - **Real-connector HTTP contract coverage in general** — J22 (real-gateway-contract-tests).
 - **Which incidents qualify for triage at all** (`C-T4` narrow criteria) — J10's open item,
   a cost/noise question, not a completion-semantics one.
