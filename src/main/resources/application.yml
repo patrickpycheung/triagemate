@@ -57,7 +57,13 @@ triage:
   # change it; never read by any diagnosis path. Blank leaves the field empty. NOT a
   # secret, so it lives here rather than in secrets.properties.
   ui:
-    default-incident-number: INC0010005
+    # INC0010015 — a REAL Delivery Hazards incident, replayed offline from recorded
+    # connector responses (src/main/resources/fixtures/INC0010015, captured by
+    # bin/record-fixtures.sh). The mocked run reproduces the real run's trace exactly,
+    # so the default demo now shows the actual estate rather than the invented
+    # payment-reconcile story. INC0010005 still works — type it to get the legacy J7
+    # dataset, which is what the e2e suite drives.
+    default-incident-number: INC0010015
     # Friendly hostname the startup banner offers alongside localhost. Display only —
     # the app never binds to it. It resolves to 127.0.0.1 via the machine's hosts file,
     # which bin/setup-custom-domain.sh sets up. Blank hides the line.
