@@ -1312,9 +1312,20 @@ function startLt4Poll(runId, cardEl) {
         return;
       }
       if (res.ok) {
+        // J16/RTR-3 client-side twin. If the run is ALREADY done on the very first response,
+        // this card never had a live window to narrate — the run finished before the poll
+        // loop's first fetch came back. Captioning it "live" for even one frame asserts
+        // something that did not happen, which is the same honesty rule J23/LUH-2 applies to
+        // the finished-run caption and J11 imposes everywhere else.
+        //
+        // Deferred when RTR-3 shipped because index.html was owned by a concurrent worktree
+        // with uncommitted changes; that conflict is resolved, and the card records the twin
+        // as still wanted exactly as specified.
+        const firstResponse = !everSawData;
         everSawData = true;
         notFoundStreak = 0;
         const data = await res.json();
+        if (firstResponse && data.done) settleTraceCaption(shell, LT4_FINISHED_TEXT);
         // J12: each response is the buffer's COMPLETE current contents, and
         // upsertTraceRows keys on (attempt, callId) — so re-delivered rows resolve
         // in place instead of duplicating, and a dropped poll costs nothing because

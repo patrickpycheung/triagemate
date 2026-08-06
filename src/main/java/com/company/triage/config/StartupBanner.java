@@ -102,6 +102,7 @@ public class StartupBanner {
         // problem into a demo-fidelity one — the automatic two-comment write-back with no
         // human in the loop is J5's stated differentiator, and a default that has to be
         // remembered before every demo is a worse stage hazard than the one it avoids.
+        llmReadinessNote().ifPresent(note -> log.warn("   llm:        {}", note));
         gitLabAllowlistNote().ifPresent(note -> log.warn("   gitlab:     {}", note));
         log.info("   bound:      {}", boundDescription());
         log.info("   writeback:  {}", writebackDescription());
@@ -118,6 +119,43 @@ public class StartupBanner {
      * and naming the script that fixes it is the only version that is both visible and
      * true.
      */
+    /**
+     * J20/STV-2 — LLM readiness is a BOOT fact, surfaced here rather than thrown.
+     *
+     * <p>The fork was real: hard-fail {@code AdkDiagnosisEngine}'s constructor, or warn and
+     * surface. Warn wins on three counts, and the first is the strongest — the FND-49
+     * precedent is recorded in the very file a throw would change
+     * ({@code DiagnosisOrchestrator}: "do NOT fail fast — a hackathon build shouldn't refuse to
+     * boot over this"). Inverting that for the sibling misconfiguration, in the same release,
+     * would leave two contradictory policies for one failure class.
+     *
+     * <p>Second, the measured blast radius: {@code AdkAllowlistVisibilityTest} constructs the
+     * engine twice with the LLM properties deliberately unset, because it only reads
+     * {@code instruction()}. A throwing constructor breaks that test for no gain to it.
+     *
+     * <p>Third — and this is what makes "warn" acceptable rather than a shrug — once STV-1
+     * landed, a warning is no longer a line that scrolls away. The banner IS the last thing
+     * printed, and this sits in it. The hard stop belongs one level up, in {@code run-adk.sh},
+     * where refusing to launch costs nothing and explains itself.
+     */
+    private java.util.Optional<String> llmReadinessNote() {
+        if (!"adk".equalsIgnoreCase(env.getProperty("triage.engine", "deterministic"))) {
+            return java.util.Optional.empty();
+        }
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String key : java.util.List.of("triage.integrations.llm.base-url",
+                                            "triage.integrations.llm.api-key",
+                                            "triage.integrations.llm.model")) {
+            String v = env.getProperty(key, "");
+            if (v.isBlank()) missing.add(key);
+        }
+        if (missing.isEmpty()) return java.util.Optional.empty();
+        return java.util.Optional.of("⚠ triage.engine=adk but " + missing
+                + " " + (missing.size() == 1 ? "is" : "are") + " not set — the live agent will "
+                + "fail on its first call and the run will degrade to the deterministic engine. "
+                + "Fill them in secrets.properties before demoing the agent.");
+    }
+
     /**
      * J30/GEB-4 — an unresolvable allowlist entry is a CONFIGURATION fault: true before the
      * run starts, discoverable without an incident. Surfacing it here means it is found while
@@ -191,12 +229,47 @@ public class StartupBanner {
                 : url + "   (not set up yet — run bin/setup-custom-domain.sh)");
     }
 
-    /** Does the OS resolve this name? Cheap: a hosts-file lookup, no network. */
+    /**
+     * J20/STV-6 — does the OS resolve this name, <b>within a bounded budget</b>?
+     *
+     * <p>This was documented "Cheap: a hosts-file lookup, no network", and that was true only
+     * for the branch it does NOT exercise. {@code InetAddress.getByName} consults the system
+     * resolver precisely when the name is absent from hosts — which is the case this method
+     * exists to detect. So the listener's cost was unbounded exactly when it took the slow
+     * path, on the ready event, holding up the banner that tells a presenter the app is up.
+     *
+     * <p><b>Decision: bound it, don't remove it.</b> The line it prints is genuinely useful —
+     * it tells you whether {@code bin/setup-custom-domain.sh} has been run. 250 ms on a daemon
+     * thread; on timeout the name is treated as unresolved, which is the truthful answer for a
+     * name that does not resolve promptly. A daemon thread so a hung resolver can never keep
+     * the JVM alive.
+     *
+     * <p>The original finding named mDNS, when the configured host was {@code .local}. It is
+     * now {@code .com.au}, so that specific leg no longer applies — but a corporate DNS server
+     * or proxy can be slower to answer than mDNS was, which is why the bound still matters.
+     */
     private static boolean resolves(String host) {
+        var result = new java.util.concurrent.CompletableFuture<Boolean>();
+        Thread probe = new Thread(() -> {
+            try {
+                java.net.InetAddress.getByName(host);
+                result.complete(true);
+            } catch (java.net.UnknownHostException e) {
+                result.complete(false);
+            } catch (RuntimeException e) {
+                result.complete(false);
+            }
+        }, "startup-hostname-probe");
+        probe.setDaemon(true);
+        probe.start();
         try {
-            java.net.InetAddress.getByName(host);
-            return true;
-        } catch (java.net.UnknownHostException e) {
+            return result.get(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            return false;   // did not resolve promptly — for a banner line, that IS "no"
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (java.util.concurrent.ExecutionException e) {
             return false;
         }
     }

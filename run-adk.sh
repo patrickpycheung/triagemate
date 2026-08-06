@@ -36,10 +36,38 @@ command -v mvn >/dev/null 2>&1 || {
   exit 1
 }
 
-if [ ! -f secrets.properties ]; then
-  echo "secrets.properties not found — copy secrets.properties.example and fill in" >&2
-  echo "triage.integrations.llm.{base-url,api-key,model}. Continuing anyway (the" >&2
-  echo "app will fail fast on first LLM call if it's genuinely missing)." >&2
+# J20/STV-2 — the hard stop lives HERE, not in AdkDiagnosisEngine's constructor, and it
+# fires BEFORE the proxy is started so nothing is spun up for a run that cannot work.
+#
+# The app itself only warns (the banner carries it), because inverting FND-49's recorded
+# "do NOT fail fast — a hackathon build shouldn't refuse to boot over this" for the sibling
+# misconfiguration would leave two contradictory policies for one failure class. This script
+# exists to launch the LIVE AGENT specifically, so refusing here costs nothing and explains
+# itself — whereas discovering it mid-demo costs the demo.
+#
+# This REPLACES the previous "Continuing anyway" warning rather than sitting beside it: two
+# policies for one failure in one script is the same defect the reasoning above rejects.
+missing_llm=""
+for key in base-url api-key model; do
+  value=""
+  if [ -f secrets.properties ]; then
+    value=$(grep -E "^triage\\.integrations\\.llm\\.$key=" secrets.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r')
+  fi
+  if [ -z "$value" ]; then missing_llm="$missing_llm triage.integrations.llm.$key"; fi
+done
+if [ -n "$missing_llm" ]; then
+  echo "" >&2
+  echo "  This script runs the LIVE ADK agent, and it has no LLM to talk to." >&2
+  echo "  Missing from secrets.properties:$missing_llm" >&2
+  echo "" >&2
+  echo "  Without these the agent fails on its first call and the run degrades to the" >&2
+  echo "  deterministic engine — which works, but is not what this script is for." >&2
+  echo "" >&2
+  echo "    cp secrets.properties.example secrets.properties   # then fill in the llm.* keys" >&2
+  echo "" >&2
+  echo "  To demo the offline engine deliberately, use:  ./run-deterministic.sh" >&2
+  echo "" >&2
+  exit 1
 fi
 
 PROXY_PORT="4000"
