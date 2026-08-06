@@ -151,6 +151,15 @@ public class DiagnosisOrchestrator {
      * contact a model — the exact opposite of what the FND-49 WARN above says at the same
      * moment. Same identity comparison FND-49 uses, exposed so K1 doesn't need its own.
      */
+    /**
+     * J20/STV-1: the connector modes this orchestrator is ACTUALLY using — resolved once at
+     * construction from {@code ConnectorModeProvider}, i.e. from which beans wired, not from
+     * the properties that asked for them.
+     */
+    public java.util.Map<String, String> connectorModes() {
+        return connectors;
+    }
+
     public boolean isAdkActuallyActive() {
         return engine != fallbackEngine;
     }
