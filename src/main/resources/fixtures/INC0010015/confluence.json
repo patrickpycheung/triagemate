@@ -13,7 +13,7 @@
     "id" : "139034851",
     "title" : "Delivery Hazards - Database",
     "url" : "/spaces/DEL/pages/139034851/Delivery+Hazards+-+Database",
-    "snippet" : "Version History Date Author/s Comments 2023 Divya Narayanan Initial version Oct 2024 Carl VELA Ben Fischer Updates as per Release 1 of project 0-02135 Delivery Hazards integration with Snap Send Solve 03 Mar 2025 Ben Fischer Changed descriptions of DH_HAZARD.WORK_CENTRE_CODE and DH_HAZARD.REPORTED_DATE_TIME from: The work centre code of the facility that the hazard is associated with The date and …"
+    "snippet" : "Version History Date Author/s Comments 2023 Anita Reddy Initial version Oct 2024 Owen MARSH Luke Bennett Updates as per Release 1 of project 0-02135 Delivery Hazards integration with Snap Send Solve 03 Mar 2025 Luke Bennett Changed descriptions of DH_HAZARD.WORK_CENTRE_CODE and DH_HAZARD.REPORTED_DATE_TIME from: The work centre code of the facility that the hazard is associated with The date and …"
   }, {
     "id" : "1469744193",
     "title" : "Delivery Hazards - End-to-End PVT",
@@ -26,68 +26,68 @@
     "snippet" : "Build pipeline Pipelines · Enterprise / Parcel Systems / Applications / delivery-hazards · GitLab Deployment pipeline Environment Application Platform dev Pipelines · Enterprise / Parcel Systems / Platform / infrastructure-as-code / Deployments / Applications / Dev / delivery-hazards · GitLab Pipelines · Enterprise / Parcel Systems / Platform / infrastructure-as-code / Deployments / Platform / Dev…"
   } ],
   "contributors|122396419" : [ {
-    "name" : "Christiaan Smith",
-    "handle" : "christiaan.smith@auspost.com.au",
+    "name" : "Jonathan Reid",
+    "handle" : "jonathan.reid@example.com",
     "source" : "confluence",
     "reason" : "last edited this page",
     "link" : "/spaces/NEMT/pages/122396419/Delivery+Hazards",
     "signal" : "last edited 2026-05-26T03:33:20.118Z"
   }, {
-    "name" : "Ben Dickens",
-    "handle" : "ben.dickens@auspost.com.au",
+    "name" : "Tom Hargrave",
+    "handle" : "tom.hargrave@example.com",
     "source" : "confluence",
     "reason" : "original author of this page",
     "link" : "/spaces/NEMT/pages/122396419/Delivery+Hazards",
     "signal" : "created 2024-05-06T04:13:34.178Z"
   } ],
   "contributors|139034890" : [ {
-    "name" : "Chuong VO",
-    "handle" : "chuong.vo4@auspost.com.au",
+    "name" : "Daniel NGUYEN",
+    "handle" : "daniel.nguyen3@example.com",
     "source" : "confluence",
     "reason" : "last edited this page",
     "link" : "/spaces/DEL/pages/139034890/Delivery+Hazards+-+System+Health+Check",
     "signal" : "last edited 2026-06-26T04:30:22.987Z"
   }, {
-    "name" : "Divya NARAYANAN (Deactivated)",
-    "handle" : "divya.narayanan@auspost.com.au",
+    "name" : "Anita REDDY (Deactivated)",
+    "handle" : "anita.reddy@example.com",
     "source" : "confluence",
     "reason" : "original author of this page",
     "link" : "/spaces/DEL/pages/139034890/Delivery+Hazards+-+System+Health+Check",
     "signal" : "created 2021-12-07T06:13:23.004Z"
   } ],
   "contributors|139034851" : [ {
-    "name" : "Ben Fischer",
-    "handle" : "ben.fischer@auspost.com.au",
+    "name" : "Luke Bennett",
+    "handle" : "luke.bennett@example.com",
     "source" : "confluence",
     "reason" : "last edited this page",
     "link" : "/spaces/DEL/pages/139034851/Delivery+Hazards+-+Database",
     "signal" : "last edited 2025-05-13T05:57:45.515Z"
   }, {
-    "name" : "Divya NARAYANAN (Deactivated)",
-    "handle" : "divya.narayanan@auspost.com.au",
+    "name" : "Anita REDDY (Deactivated)",
+    "handle" : "anita.reddy@example.com",
     "source" : "confluence",
     "reason" : "original author of this page",
     "link" : "/spaces/DEL/pages/139034851/Delivery+Hazards+-+Database",
     "signal" : "created 2021-12-07T06:16:48.496Z"
   } ],
   "contributors|1469744193" : [ {
-    "name" : "Patrick CHEUNG",
-    "handle" : "patrick.cheung@auspost.com.au",
+    "name" : "Simon LAU",
+    "handle" : "simon.lau@example.com",
     "source" : "confluence",
     "reason" : "last edited this page",
     "link" : "/spaces/DEL/pages/1469744193/Delivery+Hazards+-+End-to-End+PVT",
     "signal" : "last edited 2026-03-20T05:42:46.977Z"
   } ],
   "contributors|139049012" : [ {
-    "name" : "siyad SAJID",
-    "handle" : "siyad.sajid4@auspost.com.au",
+    "name" : "aaron TURNER",
+    "handle" : "aaron.turner4@example.com",
     "source" : "confluence",
     "reason" : "last edited this page",
     "link" : "/spaces/DEL/pages/139049012/Delivery+Hazards+-+Continuous+Integration",
     "signal" : "last edited 2026-06-17T22:09:45.002Z"
   }, {
-    "name" : "Patrick CHEUNG",
-    "handle" : "patrick.cheung@auspost.com.au",
+    "name" : "Simon LAU",
+    "handle" : "simon.lau@example.com",
     "source" : "confluence",
     "reason" : "original author of this page",
     "link" : "/spaces/DEL/pages/139049012/Delivery+Hazards+-+Continuous+Integration",

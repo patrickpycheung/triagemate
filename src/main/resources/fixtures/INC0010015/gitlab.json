@@ -1,21 +1,101 @@
 {
-  "searchCode|enterprise/parcel-systems/applications/delivery-hazards&dataintegrityviolationexception" : [ {
-    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
-    "filePath" : "src/main/java/au/com/auspost/hazards/service/AddressService.java",
-    "line" : 6,
-    "snippet" : "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\nimport org.springframework.transaction.annotation.Transactional;\n"
-  }, {
-    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
-    "filePath" : "src/main/java/au/com/auspost/hazards/service/RoundService.java",
-    "line" : 8,
-    "snippet" : "import org.springframework.cache.annotation.CacheEvict;\nimport org.springframework.cache.annotation.Cacheable;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\n\n"
-  }, {
-    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
-    "filePath" : "src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
-    "line" : 18,
-    "snippet" : "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.ResponseEntity;\n"
-  } ],
-  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/addressservice.java" : [ ],
-  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/roundservice.java" : [ ],
-  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/web/controller/rest/snapsendsolverestcontrollerv1.java" : [ ]
+  "searchCode|enterprise/parcel-systems/applications/delivery-hazards&dataintegrityviolationexception": [
+    {
+      "project": "enterprise/parcel-systems/applications/delivery-hazards",
+      "filePath": "src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "line": 6,
+      "snippet": "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\nimport org.springframework.transaction.annotation.Transactional;\n"
+    },
+    {
+      "project": "enterprise/parcel-systems/applications/delivery-hazards",
+      "filePath": "src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "line": 8,
+      "snippet": "import org.springframework.cache.annotation.CacheEvict;\nimport org.springframework.cache.annotation.Cacheable;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\n\n"
+    },
+    {
+      "project": "enterprise/parcel-systems/applications/delivery-hazards",
+      "filePath": "src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
+      "line": 18,
+      "snippet": "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.ResponseEntity;\n"
+    }
+  ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/addressservice.java": [
+    {
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "signal": "last touched 2025-06-27T01:00:09.000+00:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "nguyd3",
+      "handle": "daniel.nguyen3@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "signal": "last touched 2023-02-21T11:21:05.000+11:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "kaurp",
+      "handle": "priya.kaur@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "signal": "last touched 2022-11-02T13:41:22.000+11:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "reddya",
+      "handle": "anita.reddy@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
+      "signal": "last touched 2021-11-12T10:24:15.000+11:00 (nothing since 1.9.0)"
+    }
+  ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/roundservice.java": [
+    {
+      "name": "Daniel NGUYEN",
+      "handle": "daniel.nguyen3@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "signal": "last touched 2026-05-12T15:57:34.000+10:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "signal": "last touched 2025-06-27T01:00:09.000+00:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "Michael Grant",
+      "handle": "michael.grant@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "signal": "last touched 2022-12-09T10:03:42.000+11:00 (nothing since 1.9.0)"
+    },
+    {
+      "name": "kaurp",
+      "handle": "priya.kaur@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
+      "signal": "last touched 2022-11-24T13:57:07.000+11:00 (nothing since 1.9.0)"
+    }
+  ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/web/controller/rest/snapsendsolverestcontrollerv1.java": [
+    {
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
+      "source": "gitlab",
+      "reason": "last changed src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
+      "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
+      "signal": "last touched 2025-06-27T01:00:09.000+00:00 (nothing since 1.9.0)"
+    }
+  ],
+  "_note": "recentCommitters entries were RECONSTRUCTED on 2026-08-06, not captured. The committers, emails and dates are real (from bin/probe-gitlab.sh against the live instance, see gitlab-probe-20260806-200157.txt); what is synthesized is the Contact shape the recentCommitters fallback would have produced, because the original capture predates that fallback and returned []. Re-record with bin/record-fixtures.sh from the corp network to replace this with a genuine capture. Ignored at replay: no gateway method is named '_note'."
 }
