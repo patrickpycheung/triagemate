@@ -251,8 +251,18 @@ class DeterministicDiagnosisEngineTest {
         assertThat(r.reportedSymptom()).doesNotContain("checkout", "reconcile");
         assertThat(r.recommendedNextAction()).doesNotContain("payment_service.py");
 
-        // FND-62: the correlation id is extracted despite not matching the demo's INC-ORD- shape.
-        assertThat(r.identifiers().correlationId()).isEqualTo("BATCH-778812");
+        // FND-62: the identifier is extracted despite not matching the demo's INC-ORD- shape.
+        //
+        // J13/ECI-5 (2026-08-06): it lands in orderId, not correlationId. This previously
+        // asserted correlationId because the engine wrote the SAME string into both fields
+        // regardless of what it was — so the assertion passed without saying anything about
+        // typing. BATCH-778812 matches DASHED_ID, i.e. a business reference, and the card maps
+        // DASHED_ID -> orderId with UUID/HEX_TRACE -> correlationId. A null correlationId here
+        // is the honest answer: nothing in this ticket determined one.
+        assertThat(r.identifiers().orderId()).isEqualTo("BATCH-778812");
+        assertThat(r.identifiers().correlationId())
+                .as("no correlation id was determined — null is honest, and a wrong TYPE is not")
+                .isNull();
 
         // Every evidenceRef must resolve to Evidence actually in this report (the rule that
         // used to throw). Belt and braces alongside the validator inside diagnose().

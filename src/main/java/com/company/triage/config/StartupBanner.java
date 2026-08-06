@@ -97,6 +97,13 @@ public class StartupBanner {
         log.info("");
         log.info("   engine:     {}", engine);
         log.info("   connectors: {}", connectors);
+        // J21/NEP-3: the exposure becomes visible at the moment it matters, rather than
+        // writeback being defaulted off. Turning writeback off would convert a network
+        // problem into a demo-fidelity one — the automatic two-comment write-back with no
+        // human in the loop is J5's stated differentiator, and a default that has to be
+        // remembered before every demo is a worse stage hazard than the one it avoids.
+        log.info("   bound:      {}", boundDescription());
+        log.info("   writeback:  {}", writebackDescription());
         log.info("  ==========================================================");
         log.info("");
     }
@@ -110,6 +117,30 @@ public class StartupBanner {
      * and naming the script that fixes it is the only version that is both visible and
      * true.
      */
+    /** J21/NEP-3: what the socket is ACTUALLY bound to, not what was requested. */
+    private String boundDescription() {
+        String address = env.getProperty("server.address", "");
+        if (address.isBlank()) {
+            return "all interfaces — ⚠ reachable from the network, not just this machine";
+        }
+        return address + ("127.0.0.1".equals(address) ? " (loopback only)" : "");
+    }
+
+    /**
+     * J21/NEP-3: says what a write would actually DO. "enabled=true" alone is not the risk —
+     * enabled PLUS a live ServiceNow connector is, and those are two properties a reader would
+     * otherwise have to join for themselves at exactly the moment they have least attention to
+     * spare. The banner is the last thing printed before someone clicks Diagnose.
+     */
+    private String writebackDescription() {
+        boolean enabled = !"false".equalsIgnoreCase(env.getProperty("triage.writeback.enabled", "true"));
+        boolean liveServiceNow = "real".equalsIgnoreCase(env.getProperty("triage.connectors.servicenow", "mock"));
+        if (!enabled) return "off — no comments will be posted";
+        return liveServiceNow
+                ? "ON, and ServiceNow is REAL — runs will post two comments to the live ticket"
+                : "on (fixtures) — comments go to the log and the UI, not to a real ticket";
+    }
+
     private java.util.Optional<String> hostnameLine(int port) {
         String host = ui == null ? null : ui.publicHostname();
         if (host == null || host.isBlank()) {

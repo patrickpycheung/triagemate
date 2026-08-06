@@ -184,7 +184,6 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // IncidentSignals derives ids, keywords and the affected app from the ticket.
         IncidentSignals signals = IncidentSignals.from(inc);
         String orderId = signals.primaryIdentifier();
-        Identifiers ids = new Identifiers(orderId, null, orderId);
         String traceUnderstand = "understand: id=%s, keywords=%s, app=%s".formatted(
                 orderId, signals.keywords(), signals.app());
         trace.add(traceUnderstand);
@@ -357,6 +356,23 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
         String errorToken = errorLine == null ? null : searchTermFor(errorLine.message());
+
+        // J13/ECI-5 — each typed field is populated ONLY from a signal that determined THAT
+        // field. This used to be `new Identifiers(orderId, null, orderId)` at understand-time:
+        // the same string in two differently-named fields whatever it was, so a UUID (a
+        // correlation id) was also reported as an orderId, and errorCode was hardcoded null.
+        // The record's own javadoc says any field may be null, so null is the honest value
+        // rather than a gap — a wrong TYPE is not.
+        //
+        // Built here rather than at :187 because errorCode carries the Sumo-derived token,
+        // which does not exist until the log search above has run. Nothing between the two
+        // points reads `ids`.
+        Identifiers ids = new Identifiers(
+                signals.primaryIdentifierKind() == IncidentSignals.IdentifierKind.CORRELATION
+                        ? signals.primaryIdentifier() : null,
+                errorToken,
+                signals.primaryIdentifierKind() == IncidentSignals.IdentifierKind.ORDER
+                        ? signals.primaryIdentifier() : null);
         if (errorLine != null) {
             evidence.add(new Evidence("e-log", "sumo",
                     "%s log [%s]: %s".formatted(errorLine.logger(), errorLine.level(), errorLine.message()),

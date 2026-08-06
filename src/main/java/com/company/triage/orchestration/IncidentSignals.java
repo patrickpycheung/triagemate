@@ -52,8 +52,28 @@ record IncidentSignals(
         String symptomText,
         List<String> keywords,
         String primaryIdentifier,
+        /**
+         * J13/ECI-5 — WHICH kind of identifier {@link #primaryIdentifier} is.
+         *
+         * <p>Derivable here and nowhere else: {@code extractIdentifiers} tries DASHED_ID, UUID
+         * then HEX_TRACE in that order and takes the first hit, so the pattern that matched is
+         * known at the moment of extraction and lost immediately after. Re-matching the string
+         * in the engine would be a second source of truth for one classification — precisely
+         * the split FND-40 and FND-62 were about.
+         */
+        IdentifierKind primaryIdentifierKind,
         List<String> identifiers
 ) {
+
+    /** J13/ECI-5: what a matched identifier actually IS. */
+    enum IdentifierKind {
+        /** {@code INC-ORD-4471}, {@code ORD-1234} — a business/order reference. */
+        ORDER,
+        /** A UUID or long hex run — a correlation/trace id. */
+        CORRELATION,
+        /** Nothing matched. */
+        NONE
+    }
 
     /**
      * J24/SFF-2 — where {@link #app} came from.
@@ -128,8 +148,23 @@ record IncidentSignals(
             appSource = notBlank(app) ? AppSource.FROM_SUBJECT_LINE : AppSource.UNKNOWN;
         }
 
+        String primary = ids.isEmpty() ? null : ids.get(0);
         return new IncidentSignals(app, appSource, symptom, extractKeywords(rawText),
-                ids.isEmpty() ? null : ids.get(0), ids);
+                primary, kindOf(primary), ids);
+    }
+
+    /**
+     * J13/ECI-5 — classify by the pattern that matches, in the same order extraction used.
+     * Cheap to re-run on ONE short string, and it keeps the ordering decision in one place
+     * rather than threading the winning pattern out of the loop.
+     */
+    private static IdentifierKind kindOf(String identifier) {
+        if (identifier == null) return IdentifierKind.NONE;
+        if (DASHED_ID.matcher(identifier).matches()) return IdentifierKind.ORDER;
+        if (UUID.matcher(identifier).matches() || HEX_TRACE.matcher(identifier).matches()) {
+            return IdentifierKind.CORRELATION;
+        }
+        return IdentifierKind.NONE;
     }
 
     /** Identifiers in the ticket text, most specific pattern first, deduped, in order. */
