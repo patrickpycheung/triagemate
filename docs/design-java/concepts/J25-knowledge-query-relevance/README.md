@@ -1,11 +1,20 @@
 # J25 — Knowledge Query Relevance (a search the app issues must be a search a human would recognise)
 
-**State**: 🟡 Mostly built — **KQR-2 landed 2026-08-06** (relevance floor; scores system and symptom separately and takes the better, after an exact-match first cut dropped the demo's own runbook). **KQR-4 landed 2026-08-06** — implemented ONCE, jointly with J14/FRI-5, via a thrown `GatewayUnavailableException`. **All four rules built.** (2026-08-05) — **KQR-1** (siteSearch + symptom-as-written) and
-**KQR-3** (pages only) landed and are verified against the REAL AusPost instance with live
-credentials. The root cause turned out to be the CQL OPERATOR, not the query text: `text ~`
-has no relevance ranking, `siteSearch ~` is what backs Confluence's own UI search — which is
-why the reporter's words worked in the UI and not in the app. **Still open**: KQR-2
-(relevance floor before citing) and KQR-4 (failed vs empty) · **Complexity**: Moderate · **Priority**: MEDIUM
+**State**: 🟢 Built — all four rules landed. **KQR-1** (siteSearch + symptom-as-written) and
+**KQR-3** (pages only) landed 2026-08-05, verified against the REAL AusPost instance with live
+credentials; the root cause turned out to be the CQL OPERATOR, not the query text — `text ~`
+has no relevance ranking, `siteSearch ~` is what backs Confluence's own UI search, which is why
+the reporter's words worked in the UI and not in the app. **KQR-2** (relevance floor: scores
+system and symptom separately and takes the better, after an exact-match first cut dropped the
+demo's own runbook) and **KQR-4** (failed vs empty, implemented ONCE jointly with J14/FRI-5 via
+a thrown `GatewayUnavailableException`) landed 2026-08-06.
+
+> *State-line history: an earlier revision of this line asserted "All four rules built" while
+> its own tail still read "Still open: KQR-2 and KQR-4" — the new prefix was prepended without
+> retiring the old text, so the card contradicted itself in a single paragraph. Rewritten whole
+> rather than prepended-to again.*
+
+· **Complexity**: Moderate · **Priority**: MEDIUM
 **Depends on**: J6 (knowledge tools), J3 (gateway contracts), J24 (supplies the affected-system term)
 **Amends**: J6 (the Confluence query contract), J2 (`IncidentSignals.confluenceQuery`)
 **Source**: teammate field report — `docs/Siyad_Findings.md` §4 (and §1's log), by **sajids4**

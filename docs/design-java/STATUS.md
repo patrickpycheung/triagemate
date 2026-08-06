@@ -14,6 +14,19 @@ copilot-cli-runtime/` (the E2 LLM-backend decision).
 
 ## Concept table
 
+> **Legend — these markers are BUILD state, not CDS convergence state.** Read them as:
+> 🟢 Built · 🟡 Partly built (at least one design item still open) · 🔴 Designed, not built ·
+> 🔵 Proposed (design not yet written). **Every card J1–J30 is design-converged** — each has
+> Essence, a Design section with named items, Verification and Out-of-scope, audited
+> 2026-08-06. So a 🔴 here means "nobody has implemented this yet", NOT "the design is still
+> being explored", and the remedy is implementation, not another CDS round.
+>
+> *Why this note exists*: the two vocabularies collide on the same glyphs, and on 2026-08-06
+> two separate agents independently mis-read the table — one treated four already-built cards
+> (J12/J15/J22/J24) as unbuilt work to pick up. **The card's own `**State**:` line is the
+> source of truth**; this table is a summary of it and drifts. A drift check across all 30
+> cards is three lines of Python and worth re-running before anyone plans off this table.
+
 Implementation is at the **repo root** (`pom.xml`, `src/`; FND-11 — an earlier `app/`
 subdirectory was flattened away in `23778f4`), Maven, Java 21, Spring Boot 3.4.3.
 - `mvn test` → **140/140 pass** (default profile); `./run-deterministic.sh` boots in
@@ -68,7 +81,7 @@ makes the *fallback* engine throw, which is the one thing the safety net may nev
 | J13 | evidence-citation-integrity | Moderate | 🟡 **Partly built — ECI-6 landed 2026-08-06**, only ECI-5 (typed identifier fields) remains. (corrected 2026-08-05 — this row said "Designed, not built" while the card said "Partly built"; verified against code: `DiagnosisReportValidator:85` does reject duplicate evidence ids, but `AdkDiagnosisEngine:440` still validates *outside* `runAgentAndParse`, so **ECI-6's repair turn is genuinely unwired** and ECI-5 is not done). Makes J4's "every conclusion ties to evidence" enforceable: unique ids (multiple code hits currently all get `e-code`), candidates citing only evidence that names *their* system, and 0.86 code-citation confidence gated on system agreement | J4, J2, J3 (amends J4, J8) |
 | J14 | fallback-real-input-robustness | Moderate | 🟡 **Mostly built — FRI-3/4/5 landed 2026-08-06; only FRI-6 (fixture corpus) remains** (STATUS row corrected 2026-08-06 — card says Partly built and code agrees: FRI-1/FRI-2 landed, `DeterministicDiagnosisEngine:252,283` no longer dereference `openedAt`). Remaining scope below was: 🔴 Designed, not built — HIGH. Extends FND-63 to real-connector input: null/display-format `openedAt`, `_sourceCategory`-shaped loggers, hyphenated subjects, per-call connector degradation. "Degraded" must mean a weaker report, never a 500 | J2, J3, J5 (amends J2, J5, J3) |
 | J15 | port-contract-demo-runbook | Moderate | 🟢 **Built** (STATUS row corrected 2026-08-06 — verified: runbook T3 re-derived from the scripts, explicit `--server.port` pin honoured). Was: 🔴 Designed, not built — HIGH. The rehearsed on-stage fallback flip targets port 8081, which nothing has served since the 2026-08-04 port-80 change. Single-sources the port + proxy-endpoint contract and re-derives the runbook from it | J1, J2, J7 (amends J7) |
-| J16 | run-trace-registry-lifecycle | Moderate | 🔴 Designed, not built. A live buffer belongs to the run in flight, not to whoever last sent a header for that incident — fixes waiter aliasing onto stale/poller-owned runs, and derives the TTL from `timeout-ms` | J1, J10, J11 (amends J11) |
+| J16 | run-trace-registry-lifecycle | Moderate | 🟡 **Partly built** (2026-08-06, `4ae6955`). RTR-1/2/4/5 + RTR-3 server-side landed: every run registers a buffer (server-minted runId when the caller sent none), `aliasTo` binds runId→runId and the `currentRunIdByIncident` index is **deleted**, ordering is register→publish→putIfAbsent so the register race is eliminated rather than narrowed, and TTL derives from `timeout-ms` (a link, not a retune — 5 min at the shipped value, pinned by a test). **Open**: RTR-3's client-side twin in `index.html`, deferred because another worktree held that file | J1, J10, J11 (amends J11) |
 | J17 | poller-completion-semantics | Moderate | 🔴 Designed, not built. K1 "completed" becomes diagnosed AND delivered AND not-already-done-by-another-trigger, with a no-LLM redelivery queue — today a failed writeback marks the incident done and its only external output is lost permanently | J1, J5, J10 (amends J10, J1) |
 | J18 | guardrail-enforcement-completeness | Simple | 🔴 Designed, not built. A bound is owned by the boundary, not the caller: the GitLab allowlist FND-38 added to `search_code` is bypassed by `find_recent_committers`, and ServiceNow encoded-query values are unconstrained | J2, J5, J6, J8 (amends J8, J5) |
 | J19 | instruction-config-fidelity | Simple | 🔴 Designed, not built. Every bound the prompt states derives from the enforced `TriageProperties` value — no second hardcoded `prod`, budget disclosed up front, exhaustion phrased globally (completes FND-60's discipline) | J2, J8 (amends J8, J2) |
