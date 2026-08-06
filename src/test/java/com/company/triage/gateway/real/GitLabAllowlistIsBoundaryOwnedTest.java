@@ -1,6 +1,7 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.SslConfiguration;
 import com.company.triage.config.TriageProperties;
 import com.company.triage.config.TriagePropertiesFixture;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,8 @@ class GitLabAllowlistIsBoundaryOwnedTest {
     }
 
     private static RealGitLabGateway gateway() {
-        return new RealGitLabGateway(RestClient.builder(),
+        return new RealGitLabGateway(RestClient.builder()
+                .requestFactory(SslConfiguration.createTrustAllRequestFactory()),
                 new IntegrationProperties(null, null, null,
                         new IntegrationProperties.Endpoint("http://localhost:1", null, null, "t")),
                 allowlist());

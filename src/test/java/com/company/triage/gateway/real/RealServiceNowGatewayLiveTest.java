@@ -1,8 +1,11 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.SslConfiguration;
+import com.company.triage.config.TriageProperties;
 import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.model.IncidentContext;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.web.client.RestClient;
@@ -10,6 +13,7 @@ import org.springframework.web.client.RestClient;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
 import java.util.Properties;
 
 import com.company.triage.model.ResolvedIncident;
@@ -65,7 +69,8 @@ class RealServiceNowGatewayLiveTest {
                 p.getProperty("triage.integrations.servicenow.base-url"),
                 p.getProperty("triage.integrations.servicenow.user"),
                 p.getProperty("triage.integrations.servicenow.secret"), null);
-        return new RealServiceNowGateway(RestClient.builder(),
+        return new RealServiceNowGateway(RestClient.builder()
+                .requestFactory(SslConfiguration.createTrustAllRequestFactory()),
                 new IntegrationProperties(endpoint, null, null, null),
                 TriagePropertiesFixture.deterministic());
     }
@@ -78,11 +83,12 @@ class RealServiceNowGatewayLiveTest {
                 p.getProperty("triage.integrations.servicenow.user"),
                 p.getProperty("triage.integrations.servicenow.secret"), null);
         var base = TriagePropertiesFixture.deterministic();
-        var props = new com.company.triage.config.TriageProperties(
+        var props = new TriageProperties(
                 base.engine(), base.writeback(), base.orchestrator(), base.agent(), base.trigger(),
-                new com.company.triage.config.TriageProperties.ServiceNow("work_notes", "1,6,7", 0.25, 5, pins),
+                new TriageProperties.ServiceNow("work_notes", "1,6,7", 0.25, 5, pins),
                 base.sumo(), base.gitlab());
-        return new RealServiceNowGateway(RestClient.builder(),
+        return new RealServiceNowGateway(RestClient.builder()
+                .requestFactory(SslConfiguration.createTrustAllRequestFactory()),
                 new IntegrationProperties(endpoint, null, null, null), props);
     }
 
@@ -127,7 +133,7 @@ class RealServiceNowGatewayLiveTest {
     @Test
     @EnabledIf("credentialsPresent")
     void anUnknownIncidentNumberIsACleanNotFound() {
-        org.assertj.core.api.Assertions
+        Assertions
                 .assertThatThrownBy(() -> gateway().getIncident("INC0009999999"))
                 .isInstanceOf(com.company.triage.gateway.IncidentNotFoundException.class);
     }
@@ -158,7 +164,7 @@ class RealServiceNowGatewayLiveTest {
         assertThat(similar).extracting(ResolvedIncident::number)
                 .as("an incident is never its own duplicate").doesNotContain(PROBE_INCIDENT);
 
-        assertThat(similar.get(0).shortDescription())
+        assertThat(similar.getFirst().shortDescription())
                 .as("the top hit must be a genuine duplicate — same subject — not merely "
                         + "another ticket against the same application")
                 .isEqualToIgnoringWhitespace(probe.shortDescription());
@@ -175,7 +181,7 @@ class RealServiceNowGatewayLiveTest {
                                 .contains("no longer present"))
                 .allSatisfy(unrelated -> assertThat(unrelated.similarity())
                         .as("a different fault against the same CI must rank below a true twin")
-                        .isLessThan(similar.get(0).similarity()));
+                        .isLessThan(similar.getFirst().similarity()));
     }
 
     /** A pinned duplicate outranks every search hit and carries its real subject. */
@@ -185,9 +191,9 @@ class RealServiceNowGatewayLiveTest {
         var gateway = gatewayWithPins(java.util.Map.of(PROBE_INCIDENT, java.util.List.of("INC0010005")));
         var similar = gateway.findSimilarIncidents(gateway.getIncident(PROBE_INCIDENT));
 
-        assertThat(similar.get(0).number()).isEqualTo("INC0010005");
-        assertThat(similar.get(0).similarity()).isEqualTo(1.0);
-        assertThat(similar.get(0).shortDescription())
+        assertThat(similar.getFirst().number()).isEqualTo("INC0010005");
+        assertThat(similar.getFirst().similarity()).isEqualTo(1.0);
+        assertThat(similar.getFirst().shortDescription())
                 .as("a pin must be fetched, not fabricated from the configured id")
                 .containsIgnoringCase("hazards");
         assertThat(similar).extracting(ResolvedIncident::number)
@@ -246,7 +252,7 @@ class RealServiceNowGatewayLiveTest {
     @EnabledIf("credentialsPresent")
     void thePollerFeedAnswersWithoutError() {
         var found = gateway().findIncidentsCreatedSince(
-                java.time.OffsetDateTime.now().minusDays(30), 5);
+                OffsetDateTime.now().minusDays(30), 5);
 
         assertThat(found).as("a well-formed query must not throw").isNotNull();
         assertThat(found.size()).isLessThanOrEqualTo(5);

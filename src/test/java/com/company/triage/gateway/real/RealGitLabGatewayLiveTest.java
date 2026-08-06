@@ -1,6 +1,8 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.config.SslConfiguration;
+import com.company.triage.config.TriagePropertiesFixture;
 import com.company.triage.model.CodeSearchResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -104,8 +106,9 @@ class RealGitLabGatewayLiveTest {
         var endpoint = new IntegrationProperties.Endpoint(
                 p.getProperty("triage.integrations.gitlab.base-url"), null, null,
                 p.getProperty("triage.integrations.gitlab.token"));
-        var base = com.company.triage.config.TriagePropertiesFixture.deterministic();
-        return new RealGitLabGateway(RestClient.builder(),
+        var base = TriagePropertiesFixture.deterministic();
+        return new RealGitLabGateway(RestClient.builder()
+                .requestFactory(SslConfiguration.createTrustAllRequestFactory()),
                 new IntegrationProperties(null, null, null, endpoint), base);
     }
 
