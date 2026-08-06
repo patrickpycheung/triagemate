@@ -1,6 +1,6 @@
 # J16 — Run-Trace Registry Lifecycle (who owns a live buffer, and for how long)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate · **Priority**: MEDIUM ·
+**State**: 🟡 **Partly built** (2026-08-06) — RTR-4 landed: the TTL derives from the run's own wall-clock bound (max of a 5-minute reader floor and 2× the orchestrator timeout), so a buffer can no longer be evicted while its run is still writing to it. **Remaining: RTR-1, RTR-2, RTR-3, RTR-5** — the aliasing rework, which is a larger change to currentRunIdByIncident · **Complexity**: Moderate · **Priority**: MEDIUM ·
 **Depends on**: J1 (orchestrator), J10 (poller), J11 (LT4 `runId` protocol) ·
 **Amends**: J11 (LT4 `runId` protocol rules 4 and 5, and the "Bound the buffer" paragraph) ·
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 3 confirmed

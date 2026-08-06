@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  * TASK-010's bounded {@link RunTraceRegistry}: in-memory, capped at {@link
- * #MAX_RETAINED_RUNS} retained runs with a {@link #TTL} measured from each run's
+ * #MAX_RETAINED_RUNS} retained runs with a {@link #MIN_TTL a derived TTL} measured from each run's
  * <b>last write</b> — not its creation time — evicting oldest-first once either bound is
  * exceeded (design doc: {@code docs/design-java/concepts/J11-live-thinking-trace/README.md}
  * §LT4, "Bound the buffer"). Without this, K1 running unattended with no client ever
@@ -50,8 +50,24 @@ public class InMemoryRunTraceRegistry implements RunTraceRegistry {
     /** Cap on retained runs (design doc: "~20"). */
     static final int MAX_RETAINED_RUNS = 20;
 
-    /** TTL measured from a run's last write (design doc: "~5 minutes"). */
-    static final Duration TTL = Duration.ofMinutes(5);
+    /**
+     * J16/RTR-4 — the FLOOR under the TTL, not the TTL itself.
+     *
+     * <p>The TTL used to be exactly this constant, tied to nothing. A run is permitted to
+     * take {@code triage.orchestrator.timeout-ms}; if that ever exceeds five minutes, a
+     * buffer could be evicted <b>while its own run was still writing to it</b>, and a poller
+     * would see the eviction as {@code RunNotFoundException} — indistinguishable from
+     * "finished long ago". Two independently-tuned numbers where only one is a real bound.
+     *
+     * <p>So the TTL is now derived: {@code max(this floor, timeout × 2)}. The floor keeps a
+     * FINISHED run's steps readable long enough for a human to look; the derivation guarantees
+     * a run can never outlive its own buffer. Doubling leaves room for the settle-render after
+     * the run ends, which is when a poller that started late does its only fetch.
+     */
+    static final Duration MIN_TTL = Duration.ofMinutes(5);
+
+    /** Effective TTL for this instance — see {@link #MIN_TTL}. */
+    private final Duration ttl;
 
     private final Clock clock;
 
@@ -72,13 +88,35 @@ public class InMemoryRunTraceRegistry implements RunTraceRegistry {
      *  replaced it), so this map never outlives the collectors it can resolve to. */
     private final Map<String, String> currentRunIdByIncident = new LinkedHashMap<>();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public InMemoryRunTraceRegistry(com.company.triage.config.TriageProperties props) {
+        this(Clock.systemUTC(), ttlFor(props.orchestrator().timeoutMs()));
+    }
+
+    /**
+     * Visible for tests: the {@link #MIN_TTL} floor, which is what every pre-J16 test was
+     * already asserting against. Production always goes through the {@code TriageProperties}
+     * constructor so the TTL is derived (RTR-4); this exists so a test that does not care
+     * about TTL derivation does not have to construct config to say so.
+     */
     public InMemoryRunTraceRegistry() {
-        this(Clock.systemUTC());
+        this(Clock.systemUTC(), MIN_TTL);
     }
 
     /** Visible for tests: inject a fake clock to drive TTL expiry without sleeping. */
     InMemoryRunTraceRegistry(Clock clock) {
+        this(clock, MIN_TTL);
+    }
+
+    InMemoryRunTraceRegistry(Clock clock, Duration ttl) {
         this.clock = clock;
+        this.ttl = ttl;
+    }
+
+    /** J16/RTR-4: a buffer outlives the run that owns it, by construction. */
+    static Duration ttlFor(long orchestratorTimeoutMs) {
+        Duration derived = Duration.ofMillis(orchestratorTimeoutMs).multipliedBy(2);
+        return derived.compareTo(MIN_TTL) > 0 ? derived : MIN_TTL;
     }
 
     @Override
@@ -119,7 +157,7 @@ public class InMemoryRunTraceRegistry implements RunTraceRegistry {
      *  oldest-first (insertion order) until the map is at or under {@link
      *  #MAX_RETAINED_RUNS}. Must be called while holding {@link #lock}. */
     private void evictStaleAndOverflow(long nowEpochMs) {
-        long ttlMillis = TTL.toMillis();
+        long ttlMillis = ttl.toMillis();   // J16/RTR-4: derived, not a bare constant
         Iterator<Map.Entry<String, RunEntry>> it = collectors.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, RunEntry> entry = it.next();

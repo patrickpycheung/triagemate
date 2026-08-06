@@ -936,8 +936,29 @@ function traceCardShell(cardEl, mode, captionText) {
   return {
     rowsEl: cardEl.querySelector('.tc-rows'),
     countEl: cardEl.querySelector('.tc-count'),
+    captionEl: cardEl.querySelector('.lt3-frame'),
   };
 }
+
+/*
+  J23/LUH-1 + LUH-2 — the claim belongs to the STATE, not the renderer.
+
+  J11's honesty contract is "never assert on screen something that did not happen", and
+  every renderer that existed when a rule was written obeys it. The states added LATER do
+  not: a finished live run kept its present-tense caption, so the screen went on saying
+  "each step appears the moment that call returns" about a run that had stopped producing
+  steps minutes ago. Nothing is false in the words; what is false is the TENSE, and the
+  tense is a claim about which state the card is in.
+
+  Rewriting the caption at the transition, rather than at each renderer, is the point:
+  a future state gets the treatment by calling this, not by remembering a rule.
+*/
+function settleTraceCaption(shell, text) {
+  if (shell && shell.captionEl) shell.captionEl.textContent = text;
+}
+
+const LT4_FINISHED_TEXT = '■ Live run — finished. These steps appeared as each call '
+  + 'returned; the order and the results below are real. Nothing here is being updated now.';
 
 /**
  * J12 — upserts rows by their (attempt, callId) identity and keeps the header count in
@@ -1149,6 +1170,10 @@ function startLt4Poll(runId, cardEl) {
     if (stopped) return;
     stopped = true;
     if (timer) clearTimeout(timer);
+    // J23/LUH-1: the caption is owned by the STATE. The moment this card stops being fed,
+    // it stops claiming to be. Doing it here rather than in each caller means a future exit
+    // path inherits the honesty instead of having to remember it.
+    settleTraceCaption(shell, LT4_FINISHED_TEXT);
   }
 
   async function poll() {
@@ -1214,7 +1239,10 @@ function renderLt4Final(cardEl, data) {
     cardEl.innerHTML = `<h2>Tool-call trace (${t.length})</h2><div class="trace">${t.map(esc).join('\n')}</div>`;
     return;
   }
-  const shell = traceCardShell(cardEl, 'live', LT4_FRAME_TEXT);
+  // J23/LUH-2: this renders a run that has ALREADY FINISHED — the POST's 200 has landed
+  // and data.steps is the settled, authoritative picture. Drawing it under the present-tense
+  // live caption told the audience steps were still arriving from a run that had stopped.
+  const shell = traceCardShell(cardEl, 'live', LT4_FINISHED_TEXT);
   appendTraceRows(shell, steps);
 }
 
@@ -1261,13 +1289,41 @@ function connectorChipText(connectors) {
   return 'connectors: ' + entries.map(([name, mode]) => `${name}=${label(mode)}`).join(', ');
 }
 
-// data.engine scopes what "no network" can mean: DETERMINISTIC and its FND-7
-// DEGRADED_TO_DETERMINISTIC fallback never touch a model/LLM at all (offline);
+// data.engine scopes what "no network" can mean. DETERMINISTIC never touches a
+// model/LLM at all (offline). DEGRADED_TO_DETERMINISTIC is NOT offline - J23/LUH-4
+// corrected this comment along with the code: that run reached the proxy and the call
+// failed, which is precisely why it degraded;
 // ADK always talks to the Copilot proxy over the network to reach the model,
 // regardless of what the connector chip says. Same field render() already
 // reads for the degraded banner (FND-16) — no new data plumbing here either.
+/*
+  J23/LUH-4 — one branch per engine, and NO default-to-offline.
+
+  This was `engine === 'ADK' ? ... : 'deterministic · offline'`, so every non-ADK value
+  inherited the offline claim through the else. Two things were wrong with that:
+
+  - A DEGRADED_TO_DETERMINISTIC run is not offline. It reached the Copilot proxy and the
+    call failed; that is why it degraded. Labelling it "offline" describes a run that never
+    happened, on the one screen someone checks to find out what did — and it hides the very
+    fact that makes a degraded run worth noticing.
+  - "offline" arrived by DEFAULT rather than by decision. An engine value nobody anticipated
+    would silently assert something about the network, and a claim reached by falling through
+    an else is not a claim anyone made.
+*/
 function engineChipText(engine) {
-  return engine === 'ADK' ? 'ADK · via Copilot proxy' : 'deterministic · offline';
+  switch (engine) {
+    case 'ADK':
+      return 'ADK · via Copilot proxy';
+    case 'DETERMINISTIC':
+      return 'deterministic · offline';
+    case 'DEGRADED_TO_DETERMINISTIC':
+      // Says what happened, in order: the network WAS used, and it did not work.
+      return 'deterministic · after the live agent failed';
+    default:
+      // Name it rather than guess. An unknown engine is a fact we have; its network
+      // posture is not.
+      return `engine: ${engine || 'unknown'}`;
+  }
 }
 
 function provenanceChipsHtml(data) {

@@ -94,7 +94,7 @@ public class DiagnosisOrchestrator {
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  TriageProperties props) {
-        this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry());
+        this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry(props));
     }
 
     /**
