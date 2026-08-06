@@ -1,10 +1,10 @@
 # J28 — Precedent-grounded cause & resolution (why it broke, what was done about it)
 
-**State**: 🟢 **Converged** (CDS Rounds 1–10, 2026-08-05) · **Complexity**: Moderate ·
+**State**: 🟢 **Built — both engines** (deterministic 2026-08-05; **ADK path ungated 2026-08-06** when J13/ECI-6 landed, per PGC-7) · **Complexity**: Moderate ·
 **Priority**: MEDIUM ·
 **Depends on**: J4 (report contract), J5 (note rendering), J7 (UI), **J26** (similar-incident
 ranking — supplies the data it quotes), **J27** (ADK journal filter — prevents laundering) ·
-**Gated on** (emission, per PGC-5/PGC-7): **J13/ECI-6** (ADK path), **J25** (`KNOWN_ERROR_DOC`),
+**Gated on** (emission, per PGC-5/PGC-7): ~~J13/ECI-6 (ADK path)~~ ✅ **opened 2026-08-06**; **J25** (`KNOWN_ERROR_DOC`) — note J25 is 🟡 mostly built, so this may now be openable too;
 **J13** (`CODE_PATH`), **J24** (restores ~30% of J26's ranking input) ·
 **Amends**: J4 (two new components + three validator rules), J5 (`toDiagnosisNote` gains two
 sections), J7 (the write-back preview must render them too) ·

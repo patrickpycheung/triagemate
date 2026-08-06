@@ -99,7 +99,12 @@ public class RealSumoGateway implements SumoGateway {
                         // The _raw fallback behind it covers a source with no field-extraction
                         // rule configured, so the hole cannot reopen from the estate side.
                         parseLevel(f.path("_loglevel").asText(""), raw),
-                        f.path("_sourcecategory").asText(""),
+                        // J14/FRI-3: the EMITTER, never _sourcecategory. That field is pinned
+                        // to one composed value for the entire search, so using it made every
+                        // line claim the same "logger" — a property of the QUERY masquerading
+                        // as a property of the LINE, which downstream code reads as evidence
+                        // that one system emitted everything. Blank when unknowable.
+                        parseLogger(f, raw),
                         raw));
             });
             return out;
@@ -145,6 +150,39 @@ public class RealSumoGateway implements SumoGateway {
      * <p>Package-private static so {@link RealSumoGatewayLevelParseTest} can pin it against
      * captured real rows with no HTTP — the response-side contract test J22 never built.
      */
+    /**
+     * J14/FRI-3: the component that EMITTED this line, or blank.
+     *
+     * <p>Order of preference: the structured per-message host, then the logger token Spring
+     * Boot's default layout puts between the thread bracket and the message colon
+     * ({@code ... [thread] com.foo.Bar : message}), then nothing.
+     *
+     * <p><b>Never {@code _sourcecategory}.</b> {@code LogSearchRequest.toSumoQuery()} pins that
+     * to a single composed value for the whole search, so it is constant across every row by
+     * construction. Reporting it as the logger told the engine that one system emitted every
+     * line, which is both false and unfalsifiable — there was no emitter diversity left to
+     * notice its absence.
+     *
+     * <p>Blank is a real answer here, not a failure. A connector that cannot determine the
+     * emitter must say so, because the engine reasons about system attribution from this field
+     * and a plausible-looking wrong value is worse than no value.
+     */
+    static String parseLogger(JsonNode fields, String raw) {
+        String host = fields.path("_sourcehost").asText("");
+        if (!host.isBlank()) return host.trim();
+
+        if (raw == null || raw.isBlank()) return "";
+        java.util.regex.Matcher m = RAW_LOGGER.matcher(raw);
+        return m.find() ? m.group(1).trim() : "";
+    }
+
+    /**
+     * Spring Boot default layout: {@code ... --- [thread-name] logger.name  : message}. The
+     * logger is what sits between the closing bracket and the message separator.
+     */
+    private static final java.util.regex.Pattern RAW_LOGGER =
+            java.util.regex.Pattern.compile("]\\s+([\\w.$]+)\\s+:");
+
     static String parseLevel(String structured, String raw) {
         if (structured != null && !structured.isBlank()) return structured;
         if (raw == null) return "";

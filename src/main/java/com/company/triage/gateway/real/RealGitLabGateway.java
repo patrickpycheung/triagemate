@@ -131,7 +131,10 @@ public class RealGitLabGateway implements GitLabGateway {
             }
             return out;
         } catch (Exception e) {
-            return List.of();   // best-effort
+            // J25/KQR-4 + J14/FRI-5: a connector that could not answer must SAY so. Returning
+            // an empty list here made a base-URL 404 indistinguishable from a clean no-match,
+            // and the report narrated the search as having happened.
+            throw new com.company.triage.gateway.GatewayUnavailableException("GitLab", e);
         }
     }
 }

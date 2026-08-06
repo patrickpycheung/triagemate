@@ -1,6 +1,6 @@
 # J25 — Knowledge Query Relevance (a search the app issues must be a search a human would recognise)
 
-**State**: 🟡 Mostly built (2026-08-05) — **KQR-1** (siteSearch + symptom-as-written) and
+**State**: 🟡 Mostly built — **KQR-2 landed 2026-08-06** (relevance floor; scores system and symptom separately and takes the better, after an exact-match first cut dropped the demo's own runbook). **KQR-4 landed 2026-08-06** — implemented ONCE, jointly with J14/FRI-5, via a thrown `GatewayUnavailableException`. **All four rules built.** (2026-08-05) — **KQR-1** (siteSearch + symptom-as-written) and
 **KQR-3** (pages only) landed and are verified against the REAL AusPost instance with live
 credentials. The root cause turned out to be the CQL OPERATOR, not the query text: `text ~`
 has no relevance ranking, `siteSearch ~` is what backs Confluence's own UI search — which is
