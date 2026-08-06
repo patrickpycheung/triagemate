@@ -306,6 +306,30 @@
        everyone — just demoted to a meta line, exactly like .trace-meta. */
     .ev-meta { font-size:11px; color:var(--muted); margin-bottom:2px;
                text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+    /* ---- Folded stack trace inside an evidence body (see stackTraceHtml).
+       Monospace and pre-wrap like .trace — a stack trace IS machine output and
+       reads wrong in the body face — but with the frames demoted to --muted and
+       the lines that carry meaning (exception header, Caused by, OUR frames)
+       left at full contrast. The hierarchy does most of the shortening work:
+       even fully expanded, the eye lands on the four lines that matter. */
+    .stack { font:12px/1.55 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .stack-line.head  { color:var(--ink); font-weight:600; }
+    .stack-line.cause { color:var(--warn); font-weight:600; margin-top:3px; }
+    .stack-line.frame { color:var(--muted); padding-left:12px; }
+    /* An application frame is the point of the whole block: it names the file and
+       line an engineer will open. It keeps the link colour the page already uses
+       for "this is the thing to go look at". */
+    .stack-line.frame.app { color:var(--acc2); }
+    .stack-fold, .stack-raw { margin:2px 0; }
+    .stack-fold > summary, .stack-raw > summary {
+      cursor:pointer; color:var(--muted); font-size:11px; padding:1px 0 1px 12px;
+      text-transform:none; letter-spacing:0; list-style:none;
+    }
+    .stack-fold > summary::marker, .stack-raw > summary::marker { content:''; }
+    .stack-fold > summary:hover, .stack-raw > summary:hover { color:var(--acc2); text-decoration:underline; }
+    .stack-raw > summary { border-top:1px dashed var(--border); margin-top:5px; padding-top:5px; }
+    .stack-hidden { color:var(--muted); padding-left:12px; white-space:pre-wrap;
+                    overflow-wrap:anywhere; font:12px/1.5 ui-monospace,monospace; }
     .src { color:var(--muted); }
     ul { margin:6px 0 0; padding-left:18px; }
     .trace { font:12px/1.5 ui-monospace,monospace; color:var(--trace); white-space:pre-wrap; }
@@ -795,6 +819,172 @@ async function run() {
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ---- Stack-trace folding for evidence bodies -----------------------------
+   A real Sumo ERROR row is the whole `_raw` message, and for a Java service that
+   means a 100–300 line stack trace. Rendered flat it buries every other piece of
+   evidence on the page under a wall of `at org.springframework...` frames.
+
+   The fix is FOLDING, not truncation. "Keep the last N lines" is the obvious
+   move and it is wrong here: the deepest `Caused by:` — the thing that actually
+   says what broke — sits at the BOTTOM, while the application frames that say
+   WHERE it broke sit at the TOP, and any fixed window drops one end or the other.
+   So instead: keep every line that carries meaning, and collapse only the runs of
+   framework plumbing between them, behind a control that says how much is hidden.
+
+   Kept always:
+     • non-frame lines — the exception header, each `Caused by:`, `Suppressed:`,
+       `... N more`, and any interleaved message text;
+     • the first two frames of every run (the throw site);
+     • every APPLICATION frame (anything outside NOISE_PACKAGES) — these are ours,
+       they are the reason the trace is on screen at all;
+     • the last frame of every run (the entry point: controller, scheduler, thread).
+
+   Nothing is ever destroyed: the untouched original is one click away under the
+   footer toggle, and the JSON payload behind this page still carries it in full,
+   so the model, the API and this renderer all still see the same complete text.
+   Only the default VIEW is shortened. */
+
+const STACK_FRAME   = /^\s*at \S/;
+const STACK_MORE    = /^\s*\.\.\. \d+ (?:more|common frames omitted)/;
+const STACK_CAUSE   = /^\s*(?:Caused by|Suppressed):/;
+/* Packages nobody triaging an incident reads frame-by-frame. Deliberately a
+   prefix list of THIRD-PARTY roots rather than an "is it com.company?" test:
+   the app must fold correctly for an estate whose own code lives under some
+   other root, and an unrecognised package is treated as application code —
+   failing towards showing too much, which is recoverable, rather than towards
+   hiding the one frame that mattered, which is not. */
+const NOISE_PACKAGES = /^\s*at (?:java|javax|jakarta|jdk|sun|com\.sun|org\.springframework|org\.apache|org\.hibernate|org\.eclipse|org\.glassfish|org\.junit|org\.mockito|org\.slf4j|ch\.qos|io\.netty|io\.micrometer|reactor|okhttp3|retrofit2|feign|com\.zaxxer|com\.fasterxml|net\.sf)\./;
+
+/* The same two signals as above, but /m — these are tested against the WHOLE
+   blob, where a bare `^` anchors to the start of the string and therefore only
+   ever matches a trace whose very first character begins a frame. Real Sumo rows
+   start with a timestamp line, so the un-flagged form detected nothing and every
+   trace silently took the plain-text path. Kept as separate constants rather than
+   adding /m to the originals, because the originals are correct as line tests and
+   should keep reading as line tests. */
+const STACK_FRAME_ANY = /^\s*at \S/m;
+const STACK_CAUSE_ANY = /^\s*(?:Caused by|Suppressed):/m;
+
+/** Does this text look like a stack trace at all? Two signals, either suffices. */
+function looksLikeStackTrace(text) {
+  if (!text || text.indexOf('\n') < 0) return false;
+  return STACK_FRAME_ANY.test(text) || STACK_CAUSE_ANY.test(text);
+}
+
+/* A frame arrives with the emitter's own leading tab, and the block renders with
+   white-space:pre-wrap, so that tab is drawn ON TOP of the .frame indent — a ~5em
+   step that pushes half of every frame off the right edge and makes wrapped lines
+   hang further left than the lines they continue. The indent is the stylesheet's
+   job; strip the source's. */
+function deTab(line) { return line.replace(/^\s+/, ''); }
+
+/** `at com.foo.bar.Baz.run(Baz.java:9)` → `com.foo` — the label on a fold. */
+function framePackage(line) {
+  const m = /^\s*at ([\w$]+(?:\.[\w$]+)?)/.exec(line);
+  return m ? m[1] : '?';
+}
+
+/**
+ * Render one hidden run of frames as a native <details>. <details> rather than a
+ * JS toggle on purpose: it is keyboard-operable and screen-reader-announced for
+ * free, and it survives a re-render because there is no state of ours to lose.
+ */
+function stackFoldHtml(lines) {
+  const packages = [];
+  lines.forEach(l => { const p = framePackage(l); if (!packages.includes(p)) packages.push(p); });
+  const label = packages.slice(0, 2).join(', ') + (packages.length > 2 ? ', …' : '');
+  return `<details class="stack-fold"><summary>⋯ ${lines.length} framework frames · ${esc(label)}</summary>`
+       + `<div class="stack-hidden">${lines.map(l => esc(deTab(l))).join('\n')}</div></details>`;
+}
+
+/**
+ * The folded view of a stack trace, plus a footer that reveals the untouched
+ * original. Returns HTML; the caller has already decided this text is a trace.
+ */
+function stackTraceHtml(text) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+
+  // Pass 1 — decide, per line, whether it is kept. Runs of frames are examined
+  // as a unit because "first two" and "last one" are properties of the RUN, not
+  // of the file: a trace with three Caused-by blocks has three throw sites and
+  // three entry points, and all six are worth seeing.
+  const keep = new Array(lines.length).fill(true);
+  let i = 0;
+  while (i < lines.length) {
+    if (!STACK_FRAME.test(lines[i])) { i++; continue; }
+    let end = i;
+    while (end < lines.length && STACK_FRAME.test(lines[end])) end++;
+    for (let j = i; j < end; j++) {
+      const isEdge = (j < i + 2) || (j === end - 1);
+      keep[j] = isEdge || !NOISE_PACKAGES.test(lines[j]);
+    }
+    i = end;
+  }
+
+  // Pass 2 — emit, gathering each contiguous dropped run into one fold. A run of
+  // one or two lines is NOT folded: a control that hides two lines costs more
+  // screen and more attention than the lines it saves.
+  let html = '', pending = [];
+  const flush = () => {
+    if (!pending.length) return;
+    // A run too short to fold is rendered as ordinary frame lines — through the
+    // same deTab as every other frame, or the two lines a fold would have hidden
+    // become the only two on the block still carrying the emitter's tab.
+    html += pending.length > 2 ? stackFoldHtml(pending)
+                               : pending.map(l => `<div class="stack-line frame">${esc(deTab(l))}</div>`).join('');
+    pending = [];
+  };
+  lines.forEach((line, n) => {
+    if (!keep[n]) { pending.push(line); return; }
+    flush();
+    let cls = 'stack-line';
+    if (STACK_FRAME.test(line))      cls += NOISE_PACKAGES.test(line) ? ' frame' : ' frame app';
+    else if (STACK_CAUSE.test(line)) cls += ' cause';
+    else if (STACK_MORE.test(line))  cls += ' frame';
+    else                             cls += ' head';
+    // A single pathological line (a serialised payload dumped into the message)
+    // is clamped rather than folded — it has no internal structure to fold along,
+    // and the raw toggle below already carries it whole.
+    const flat = deTab(line);
+    const shown = flat.length > 400 ? flat.slice(0, 400) + ' …' : flat;
+    html += `<div class="${cls}">${esc(shown)}</div>`;
+  });
+  flush();
+
+  const hidden = keep.filter(k => !k).length;
+  html += `<details class="stack-raw"><summary>Show the raw log line`
+        + ` (${lines.length} lines${hidden ? `, ${hidden} folded above` : ''})</summary>`
+        + `<div class="stack-hidden">${esc(text)}</div></details>`;
+  return `<div class="stack">${html}</div>`;
+}
+
+/**
+ * The body of one evidence row. Three shapes, in order of how much structure the
+ * text has: a stack trace gets folded; a long unstructured blob gets a first
+ * paragraph plus a reveal; ordinary one-line evidence is untouched, because most
+ * evidence on this page is a sentence and must not grow a control it never needs.
+ */
+function evidenceBodyHtml(summary) {
+  const text = (summary ?? '').toString();
+  if (looksLikeStackTrace(text)) return stackTraceHtml(text);
+  if (text.length <= 320) return `<div>${esc(text)}</div>`;
+  const cut = text.slice(0, 320).lastIndexOf(' ');
+  const head = text.slice(0, cut > 200 ? cut : 320);
+  return `<div>${esc(head)} …`
+       + `<details class="stack-raw"><summary>Show the full text (${text.length} characters)</summary>`
+       + `<div class="stack-hidden">${esc(text)}</div></details></div>`;
+}
+
+/** One-line form for the sources-comment preview list, which is a list of
+    citations rather than a reading surface: the first meaningful line only. */
+function evidenceOneLine(summary) {
+  const text = (summary ?? '').toString();
+  const first = text.split('\n')[0];
+  const clipped = first.length > 180 ? first.slice(0, 180) + ' …' : first;
+  const rest = text.length - first.length;
+  return esc(clipped) + (rest > 0 ? ` <span class="src">(+${text.split('\n').length - 1} more lines)</span>` : '');
+}
 
 /* ---- LT5 visual vocabulary building blocks -------------------------------
    Building blocks only — no live TraceStep wiring here (that's TASK-014/015).
@@ -1509,13 +1699,13 @@ function render(data) {
     <div class="ev">${sourceMarkHtml(e.source)}
       <div class="ev-body">
         <div class="ev-meta">${esc(sourceMetaText(e.source))}</div>
-        <div>${esc(e.summary)}</div>
+        ${evidenceBodyHtml(e.summary)}
         ${e.link?`<div style="margin-top:2px"><span class="ev-link">[${esc(e.link)}]</span></div>`:''}
       </div>
     </div>`).join('');
   const miss = (r.missingInformation||[]).map(m=>`<li>${esc(m)}</li>`).join('');
   const contra = (r.contradictingEvidence||[]).map(m=>`<li>${esc(m)}</li>`).join('');
-  const sources = r.evidence.map(e => `<li>${sourceBadgeHtml(e.source)} ${esc(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
+  const sources = r.evidence.map(e => `<li>${sourceBadgeHtml(e.source)} ${evidenceOneLine(e.summary)}${e.link?` <span class="ev-link">[${esc(e.link)}]</span>`:''}</li>`).join('');
   // Same two-column shape as evidence. The green left rule stays: it distinguishes
   // "a person to talk to" from "a fact we found" at a glance, which is a different
   // axis from which system the row came from.
