@@ -257,9 +257,14 @@
     .card h2 { font-size:12.5px; text-transform:uppercase; letter-spacing:.07em;
                color:var(--acc); font-weight:700; margin:0 0 11px;
                display:flex; align-items:center; gap:7px; }
-    /* The little red rule that opens each heading on the poster. */
-    .card h2::before { content:''; width:3px; height:13px; border-radius:2px;
-                       background:var(--acc); flex:0 0 auto; opacity:.85; }
+    /* The poster's little red rule before each heading is REMOVED (operator instruction,
+       2026-08-06). It was carried over from the one-pager, where headings sit in running
+       body text and need something to mark them; here every heading already opens a bordered
+       card, so the rule was a second, weaker boundary 11px inside the first one — it read as
+       a stray "|" glyph rather than as structure.
+
+       .card h2 keeps display:flex — the heading can carry an inline pill beside its text, and
+       the flex row is what keeps that vertically centred. */
     .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; background:var(--chip); color:var(--acc); margin-left:6px; }
     .cand { margin-bottom:10px; display:flex; align-items:center; gap:8px; }
     /* ---- Evidence / contacts: the TRACE ROW layout ---------------------------
