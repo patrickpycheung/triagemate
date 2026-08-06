@@ -228,8 +228,19 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // FND-62: keywords + app rather than the whole sentence + app, so the search gets
         // distinctive terms instead of English function words.
         List<String> knowledgeMisses = new ArrayList<>();
+        List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
         String confluenceQuery = signals.confluenceQuery();
-        List<KnowledgeDoc> returned = confluence.search(confluenceQuery);
+        // J25/KQR-4 + J14/FRI-5: the safety net degrades PER CALL. An unreachable Confluence
+        // costs this run its runbook evidence and says so; it does not cost the run.
+        List<KnowledgeDoc> returned;
+        try {
+            returned = confluence.search(confluenceQuery);
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            returned = List.of();
+            knowledgeMisses.add(e.getMessage() + " — no runbook evidence was gathered "
+                    + "(this is a connector failure, not an absence of runbooks)");
+            log.warn("  {} unreachable — continuing without knowledge evidence", e.system(), e);
+        }
 
         // J25/KQR-2: a returned page must clear a relevance floor before it becomes EVIDENCE.
         // KQR-1 fixed the query (siteSearch, not text ~); this bounds what we do with the
@@ -328,7 +339,23 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         LogSearchRequest sumoRequest = slugIsAGuess ? null
                 : new LogSearchRequest(scope, sumoProps.index(), SUMO_QUERY_TERM,
                         searchFrom, searchTo, sumoProps.maxResults());
-        List<LogEvidence> logs = sumoRequest == null ? List.of() : sumo.search(sumoRequest);
+        // J14/FRI-5: three different "no logs" outcomes, kept distinct — no anchor to search
+        // from (handled above via sumoRequest == null), searched and found nothing, and could
+        // not search at all. Only the middle one is a finding.
+        List<LogEvidence> logs;
+        if (sumoRequest == null) {
+            logs = List.of();
+        } else {
+            try {
+                logs = sumo.search(sumoRequest);
+            } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+                logs = List.of();
+                gatewayFailures.add(e.getMessage()
+                        + " — the log window was not searched, so \"no errors found\" is not a "
+                        + "conclusion this run is entitled to");
+                log.warn("  {} unreachable — continuing without log evidence", e.system(), e);
+            }
+        }
         LogEvidence errorLine = logs.stream()
                 .filter(l -> "ERROR".equals(l.level())).findFirst().orElse(null);
         String errorToken = errorLine == null ? null : searchTermFor(errorLine.message());
@@ -373,7 +400,16 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             List<String> projectsToTry =
                     IncidentSignals.rankAllowlist(signals.app(), gitLabProjectAllowlist);
             for (String project : projectsToTry) {
-                codeHits = gitLab.searchCode(project, errorToken);
+                try {
+                    codeHits = gitLab.searchCode(project, errorToken);
+                } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+                    // J14/FRI-5: one unreachable connector costs its own evidence, not the run.
+                    codeHits = List.of();
+                    gatewayFailures.add(e.getMessage()
+                            + " — the log line was not tied to the code that emits it");
+                    log.warn("  {} unreachable — continuing without code evidence", e.system(), e);
+                    break;
+                }
                 if (!codeHits.isEmpty()) break;
             }
             // J13/ECI-4: cap the fan-out. GitLab's blob search can return many hits for a
@@ -564,6 +600,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
         List<String> missing = new ArrayList<>();
         missing.addAll(knowledgeMisses);   // J25/KQR-2
+        missing.addAll(gatewayFailures);   // J14/FRI-5 — a connector that could not answer
         if (orderId == null) missing.add("No transaction/correlation identifier in the ticket text");
         // J14: distinguish "we searched and found nothing" from "we could not search at all".
         // Claiming the former when the latter happened is the FND-8 class — narrating an
@@ -737,9 +774,15 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
         int committerCount = 0;
         for (CodeSearchResult h : codeHits) {
-            List<Contact> committers = gitLab.recentCommitters(h.project(), h.filePath());
-            committerCount += committers.size();
-            raw.addAll(committers);
+            try {
+                List<Contact> committers = gitLab.recentCommitters(h.project(), h.filePath());
+                committerCount += committers.size();
+                raw.addAll(committers);
+            } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+                // Contacts are display-only (J9). Losing them degrades the report; it must
+                // never be the reason a diagnosis fails to appear.
+                log.warn("  {} unreachable while gathering committers — continuing", e.system(), e);
+            }
         }
         String traceCommitters = codeHits.isEmpty()
                 ? "gitlab.recentCommitters → skipped (no code file was located to look up committers for)"

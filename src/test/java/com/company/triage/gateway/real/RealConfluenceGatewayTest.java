@@ -132,22 +132,32 @@ class RealConfluenceGatewayTest {
     }
 
     /**
-     * Documents CURRENT behaviour, and it is behaviour J25/KQR-4 will deliberately change:
-     * an HTTP error is swallowed into an empty list, so "the search failed" is indistinguishable
-     * from "the search found nothing". That is what turned FND-83's 404 into a clean-looking
-     * empty result and a `missingInformation` line asserting no page matched.
+     * J25/KQR-4 (implemented 2026-08-06) — an HTTP error is no longer swallowed.
+     *
+     * <p>This test previously asserted the opposite, under the name
+     * {@code anHttpErrorIsCurrentlySwallowedIntoAnEmptyList_seeJ25}: it deliberately pinned the
+     * defect and named the card that would fix it. The defect was that
+     * {@code catch (Exception) -> List.of()} makes "the search failed" indistinguishable from
+     * "the search found nothing" — which is how FND-83's base-URL 404 read as a clean empty
+     * result for a full day, complete with a {@code missingInformation} line calmly asserting
+     * that no page matched.
+     *
+     * <p>Nobody goes looking for a broken connector while the app is reporting that the search
+     * worked. That is the whole cost of the collapse, and why the fix is a thrown type rather
+     * than a log line.
      */
     @Test
-    void anHttpErrorIsCurrentlySwallowedIntoAnEmptyList_seeJ25() {
+    void anHttpErrorIsReportedAsUnreachableRatherThanAsAnEmptySearch() {
         var f = build();
         f.server().expect(org.springframework.test.web.client.match.MockRestRequestMatchers
                         .requestTo(org.hamcrest.Matchers.containsString("/content/search")))
                 .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
                         .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
 
-        assertThat(f.gateway().search("anything"))
-                .as("today: indistinguishable from a successful empty search — J25/KQR-4 fixes this")
-                .isEmpty();
+        org.assertj.core.api.Assertions
+                .assertThatThrownBy(() -> f.gateway().search("anything"))
+                .isInstanceOf(com.company.triage.gateway.GatewayUnavailableException.class)
+                .hasMessageContaining("Confluence is unreachable");
     }
 
     // --- J25/KQR-1,3: the CQL form, pinned offline ---------------------------------------
