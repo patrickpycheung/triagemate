@@ -174,10 +174,19 @@ public class StartupBanner {
         String projects = env.getProperty("triage.gitlab.allowed-projects", "");
         String mode = env.getProperty("triage.connectors.gitlab", "mock");
         if (!"real".equalsIgnoreCase(mode)) return java.util.Optional.empty();
-        if (projects.contains("order-payments/payment-service")) {
-            return java.util.Optional.of("⚠ allow-projects still contains the OFFLINE DEMO project "
-                    + "'order-payments/payment-service', which does not exist in the real estate — "
-                    + "real-mode code search will 404 for it (J30/GEB-1)");
+        // J30/GEB-1 (2026-08-06): the demo project being PRESENT is fine and deliberate —
+        // the offline fixture cites it, and removing it would break the mock walkthrough that
+        // has to work on stage with no network. What matters is whether a real-mode run has
+        // anything real to search. Warning on mere presence would cry wolf on the shipped
+        // config, and a warning that fires when nothing is wrong stops being read.
+        boolean onlyTheDemoProject = !projects.isBlank()
+                && java.util.Arrays.stream(projects.split(","))
+                        .map(String::trim).filter(x -> !x.isEmpty())
+                        .allMatch(x -> x.equals("order-payments/payment-service"));
+        if (onlyTheDemoProject) {
+            return java.util.Optional.of("⚠ allow-projects contains ONLY the offline demo project "
+                    + "'order-payments/payment-service', which exists in no real estate — every "
+                    + "real-mode code search will 404. Add the real repository (J30/GEB-1).");
         }
         return java.util.Optional.empty();
     }

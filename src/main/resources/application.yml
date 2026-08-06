@@ -245,8 +245,24 @@ triage:
   gitlab:
     # J8 allowlist (FND-38: was documented as enforced but search_code accepted any
     # model-supplied project unchecked, same class of gap as FND-20's Sumo bound).
-    # Enforced server-side in TriageMateTools.searchCode, not by beforeToolCallback.
+    # J18/GEC-2 moved enforcement to the GATEWAY boundary, so every method taking a
+    # project id is bounded rather than just the one caller someone remembered.
+    #
+    # J30/GEB-1 (2026-08-06) — this list names the REAL estate, and says which entry is
+    # which. It previously held only `order-payments/payment-service`, which exists in the
+    # offline demo fixture and NOWHERE in the real GitLab, so every real-mode code search
+    # 404'd. Field-reported by cheungp from a live run-deterministic-real.sh; the real path
+    # was unobtainable from a dev machine, because the corp perimeter 403s identically with
+    # and without a token, so this waited on someone on a network that could reach GitLab.
+    #
+    # Both entries are kept deliberately. The demo project is what the OFFLINE fixture
+    # cites, so removing it would break the mock walkthrough that has to work on stage with
+    # no network; the real one is what a `-real` run needs. They are labelled because an
+    # unlabelled list is exactly how the demo value came to be mistaken for an estate value.
     allowed-projects:
+      # Real estate — Delivery Hazards (supplied by cheungp, docs/Patrick_gitlab-update_allowed-projects.md)
+      - enterprise/parcel-systems/applications/delivery-hazards
+      # Offline demo fixture only — cited by MockGitLabGateway, does not exist in the real estate
       - order-payments/payment-service
 
   # Credentials for real connectors. Set these in secrets.properties (preferred, see

@@ -1,6 +1,6 @@
 # J30 — GitLab estate binding (the allowlist must name projects that exist)
 
-**State**: 🟡 **Partly built** (2026-08-06) — GEB-2 arrived with J14/FRI-5 (the stated hard prerequisite, now satisfied), and GEB-3 (the trace separates could-not-search from no-match) and GEB-4 (advisory startup warning when the demo project is still allowlisted in real mode) landed. **GEB-1 remains genuinely blocked** — it needs the real GitLab path, which the perimeter 403 makes undiscoverable from a dev machine (see Blocker) · **Complexity**: Simple
+**State**: 🟢 **Built** (2026-08-06) — GEB-2 arrived with J14/FRI-5, GEB-3 and GEB-4 landed, and **GEB-1 unblocked the same day**: cheungp supplied the real path (docs/Patrick_gitlab-update_allowed-projects.md) from a network that can reach GitLab. The allowlist now names the real estate AND labels which entry is which; the demo entry is kept deliberately, because the offline fixture cites it. · **Complexity**: Simple
 **Depends on**: J6 (GitLab gateway), J3 (gateway contracts), **J14/FRI-5 (hard prerequisite — see below)**
 **Amends**: J8 (what `triage.gitlab.allowed-projects` is *for*), J7 (the demo dataset's reach into real-mode config)
 **Source**: teammate field report — [`docs/Patrick_gitlab-call-failed-issue.md`](../../../Patrick_gitlab-call-failed-issue.md),
