@@ -1,6 +1,6 @@
 # J17 — Poller Completion Semantics (diagnosed ≠ delivered ≠ nobody-else-did-it)
 
-**State**: 🟡 **Mostly built** (2026-08-06) — PCS-1 (conjunctive completion), PCS-2 (bounded redelivery queue, no engine re-run), PCS-3 (per-call delivery outcome) and PCS-5 (loud unattended failure) landed. **PCS-4 landed 2026-08-06** — the orchestrator records every completed run whatever trigger asked, and the poller consults it in the same position as its own set. Advisory to the POLLER only: a human clicking Diagnose twice still gets two runs. **All five rules built.** · **Complexity**: Moderate · **Priority**: MEDIUM ·
+**State**: 🟢 **Built** — all five PCS rules (2026-08-06) — PCS-1 (conjunctive completion), PCS-2 (bounded redelivery queue, no engine re-run), PCS-3 (per-call delivery outcome) and PCS-5 (loud unattended failure) landed. **PCS-4 landed 2026-08-06** — the orchestrator records every completed run whatever trigger asked, and the poller consults it in the same position as its own set. Advisory to the POLLER only: a human clicking Diagnose twice still gets two runs. **All five rules built.** · **Complexity**: Moderate · **Priority**: MEDIUM ·
 **Depends on**: J1, J5, J10 · **Amends**: J10 (what "handled" means; the "never diagnose
 the same incident twice" property), J1 (writeback failure disclosure) ·
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 2 confirmed

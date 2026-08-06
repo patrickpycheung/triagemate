@@ -1,6 +1,6 @@
 # J21 — Network Exposure Posture (who may reach the mutating endpoint)
 
-**State**: 🟡 **Mostly built** (2026-08-06) — NEP-1 (loopback bind) and NEP-2 (required non-safelisted header on the mutating endpoint, sent by the UI) landed. **NEP-3 landed 2026-08-06** — the banner gains bound: and writeback: lines, verified in a real run; writeback stays ON by default per the card. **NEP-4 landed 2026-08-06** — no config key, per the card; the hatch is --server.address=0.0.0.0 at launch, and anything that is not loopback now WARNS, so an escape hatch cannot be taken quietly. **All four rules built.** · **Complexity**: Simple · **Priority**: MEDIUM ·
+**State**: 🟢 **Built** — all four NEP rules (2026-08-06) — NEP-1 (loopback bind) and NEP-2 (required non-safelisted header on the mutating endpoint, sent by the UI) landed. **NEP-3 landed 2026-08-06** — the banner gains bound: and writeback: lines, verified in a real run; writeback stays ON by default per the card. **NEP-4 landed 2026-08-06** — no config key, per the card; the hatch is --server.address=0.0.0.0 at launch, and anything that is not loopback now WARNS, so an escape hatch cannot be taken quietly. **All four rules built.** · **Complexity**: Simple · **Priority**: MEDIUM ·
 **Depends on**: J1 (endpoint + error contract), J5 (writeback), J7 (browser UI), J11 (the
 `X-Triage-Run-Id` protocol this must *not* overload) ·
 **Amends**: J1 (the `POST /api/diagnose/{n}` request contract gains one required header),

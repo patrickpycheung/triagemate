@@ -1,11 +1,21 @@
 # J14 — Fallback Robustness on Real Input
 
-**State**: 🟡 Partly built — **FRI-3 and FRI-4 landed 2026-08-06**. **FRI-5 landed 2026-08-06** (per-call degradation, implemented once jointly with J25/KQR-4). **FRI-6 landed 2026-08-06** — a six-shape corpus (null openedAt, blank cmdb_ci with a hyphenated first word, one-logger and blank-logger log sets, a throwing Sumo, a throwing GitLab) each asserted to produce a J4-valid report. **All six rules built.** (2026-08-05) — **FRI-1** (opened_at parsed tolerantly across the
-display formats ServiceNow actually emits, with a WARN when none match) and **FRI-2** (a
-missing window anchor skips the log search and says so, instead of NPE-ing inside the
-fallback engine) landed in `0dd4005`. J24/SFF-3 also delivered FRI-2's sibling case for an
-unmatched scope. **Still open**: FRI-3 (logger means emitter), FRI-4 (hyphens inside words),
-FRI-5 (per-call connector degradation), FRI-6 (real-shaped fixture corpus) · **Complexity**: Moderate · **Priority**: HIGH ·
+**State**: 🟢 **Built** — all six FRI rules. FRI-1 (`opened_at` parsed tolerantly across the
+display formats ServiceNow actually emits, with a WARN when none match) and FRI-2 (a missing
+window anchor skips the log search and says so, instead of NPE-ing inside the fallback engine)
+landed in `0dd4005`; J24/SFF-3 delivered FRI-2's sibling case for an unmatched scope. FRI-3
+(logger means emitter), FRI-4 (a hyphen inside a word is not a separator), FRI-5 (per-call
+connector degradation, implemented once jointly with J25/KQR-4) and FRI-6 (the real-shaped
+fixture corpus) landed 2026-08-06.
+
+> **Card hygiene note (2026-08-06).** This State block previously carried a "Still open:
+> FRI-3, FRI-4, FRI-5, FRI-6" tail *below* a prefix announcing those same rules as landed —
+> the new text was prepended and the old tail left in place, so the card contradicted itself
+> and disagreed with STATUS.md. Exactly the failure J25's card records against itself. Verified
+> against code before rewriting: all six rules have implementations, FRI-1 marked `J14:` rather
+> than `FRI-1` which is why a marker grep initially missed it.
+
+· **Complexity**: Moderate · **Priority**: HIGH ·
 **Depends on**: J2, J3, J5 · **Amends**: J2 (the deterministic engine's FND-63 guarantee),
 J5 (`getIncident`'s field contract), J3 (what a gateway may put in `LogEvidence.logger`)
 **Source**: application review 2026-08-05 (multi-agent + Codex + Gemini), 4 confirmed
