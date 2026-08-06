@@ -93,8 +93,23 @@ public class RealSumoGateway implements SumoGateway {
                 out.add(new LogEvidence(
                         f.path("_messagetime").asText(),
                         // J29/LLF-1: this estate never sets loglevel — fall back to _raw.
-                        parseLevel(f.path("loglevel").asText(""), f.path("_raw").asText("")),
-                        f.path("_sourcecategory").asText(""),
+                        //
+                        // Both spellings are read because the two live field reports disagree:
+                        // FND-85 recorded `_loglevel` (with underscore) "verified against the
+                        // live AU instance", J29 recorded no level key at all. Neither of us
+                        // can adjudicate that from here, and the cost of reading both is one
+                        // extra lookup against the cost of the level silently being "" again —
+                        // which is the exact defect that disabled the whole GitLab limb.
+                        parseLevel(firstNonBlank(f.path("_loglevel").asText(""),
+                                                 f.path("loglevel").asText("")),
+                                   raw),
+                        // J14/FRI-3: the EMITTER, never _sourcecategory. That field is pinned
+                        // to one composed value for the entire search, so using it made every
+                        // line claim the same "logger" — a property of the QUERY masquerading
+                        // as a property of the LINE, which downstream code reads as evidence
+                        // that one system emitted everything. Blank when unknowable: a blank
+                        // logger is the honest answer and the engine now handles it.
+                        parseLogger(f, raw),
                         raw));
             });
             return out;
@@ -131,6 +146,47 @@ public class RealSumoGateway implements SumoGateway {
      * <p>Package-private static so {@link RealSumoGatewayLevelParseTest} can pin it against
      * captured real rows with no HTTP — the response-side contract test J22 never built.
      */
+    /** First non-blank of the candidates, or "" — used where two field spellings are in play. */
+    private static String firstNonBlank(String... candidates) {
+        for (String c : candidates) {
+            if (c != null && !c.isBlank()) return c;
+        }
+        return "";
+    }
+
+    /**
+     * J14/FRI-3: the component that EMITTED this line, or blank.
+     *
+     * <p>Order of preference: the structured per-message host, then the logger token Spring
+     * Boot's default layout puts between the thread bracket and the message colon
+     * ({@code ... [thread] com.foo.Bar : message}), then nothing.
+     *
+     * <p><b>Never {@code _sourcecategory}.</b> {@code LogSearchRequest.toSumoQuery()} pins that
+     * to a single composed value for the whole search, so it is constant across every row by
+     * construction. Reporting it as the logger told the engine that one system emitted every
+     * line, which is both false and unfalsifiable — there was no emitter diversity left to
+     * notice its absence.
+     *
+     * <p>Blank is a real answer here, not a failure. A connector that cannot determine the
+     * emitter must say so, because the engine reasons about system attribution from this field
+     * and a plausible-looking wrong value is worse than no value.
+     */
+    static String parseLogger(JsonNode fields, String raw) {
+        String host = fields.path("_sourcehost").asText("");
+        if (!host.isBlank()) return host.trim();
+
+        if (raw == null || raw.isBlank()) return "";
+        java.util.regex.Matcher m = RAW_LOGGER.matcher(raw);
+        return m.find() ? m.group(1).trim() : "";
+    }
+
+    /**
+     * Spring Boot default layout: {@code ... --- [thread-name] logger.name  : message}. The
+     * logger is what sits between the closing bracket and the message separator.
+     */
+    private static final java.util.regex.Pattern RAW_LOGGER =
+            java.util.regex.Pattern.compile("]\\s+([\\w.$]+)\\s+:");
+
     static String parseLevel(String structured, String raw) {
         if (structured != null && !structured.isBlank()) return structured;
         if (raw == null) return "";

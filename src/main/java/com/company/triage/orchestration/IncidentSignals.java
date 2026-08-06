@@ -334,12 +334,31 @@ record IncidentSignals(
      * are no longer present" → "Delivery Hazards". Used only when {@code cmdb_ci} is empty,
      * which real tickets frequently are.
      */
+    /**
+     * J14/FRI-4: separators are separators; a hyphen inside a word is not.
+     *
+     * <p>The split used to be the character class {@code [-:|—]}, which treats every hyphen as
+     * a boundary. Real subject lines are full of hyphenated words — "e-mail", "single-sign-on",
+     * "read-only", "Track-and-Trace" — and a ticket opening "Track-and-Trace is down" yielded
+     * the affected application <b>"Track"</b>. That name then propagated into the Sumo scope
+     * and the candidate systems, so one punctuation mark quietly mis-scoped the whole run.
+     *
+     * <p>A dash only separates when it is <b>flanked by whitespace</b> (" - ", " — "), which is
+     * how a human writing a subject line signals a break. {@code :} and {@code |} keep their
+     * bare form: nobody writes a colon inside a word.
+     */
+    private static final java.util.regex.Pattern PHRASE_SEPARATOR =
+            java.util.regex.Pattern.compile("\\s+[-\\u2014]\\s+|[:|]");
+
     private static String leadingPhrase(String symptom) {
         if (symptom == null || symptom.isBlank()) return "";
-        String head = symptom.split("[-:|\\u2014]", 2)[0].trim();
+        String head = PHRASE_SEPARATOR.split(symptom, 2)[0].trim();
         String[] words = head.split("\\s+");
         return words.length <= 4 ? head : String.join(" ", java.util.Arrays.copyOf(words, 4));
     }
+
+    /** Package-private seam for J14/FRI-4's separator tests — no production caller. */
+    static String leadingPhraseForTest(String symptom) { return leadingPhrase(symptom); }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 }

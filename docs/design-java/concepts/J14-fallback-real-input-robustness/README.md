@@ -1,6 +1,6 @@
 # J14 — Fallback Robustness on Real Input
 
-**State**: 🟡 Partly built (2026-08-05) — **FRI-1** (opened_at parsed tolerantly across the
+**State**: 🟡 Partly built — **FRI-3 and FRI-4 landed 2026-08-06**. **Remaining: FRI-5** (per-call degradation, shared with J25/KQR-4 — implement once) **and FRI-6** (real-shaped fixture corpus). (2026-08-05) — **FRI-1** (opened_at parsed tolerantly across the
 display formats ServiceNow actually emits, with a WARN when none match) and **FRI-2** (a
 missing window anchor skips the log search and says so, instead of NPE-ing inside the
 fallback engine) landed in `0dd4005`. J24/SFF-3 also delivered FRI-2's sibling case for an

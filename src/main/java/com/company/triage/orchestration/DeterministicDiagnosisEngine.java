@@ -96,6 +96,23 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      */
     private static final String SUMO_QUERY_TERM = "ERROR";
 
+    /**
+     * J25/KQR-2: the share of wanted terms a Confluence page must match to be cited.
+     *
+     * <p>0.34 means "at least one solid title hit, or two body mentions, out of three wanted
+     * terms" — enough to exclude the Teradata data-model PDF that was cited as evidence for a
+     * delivery-hazards incident on the live instance, without demanding the runbook repeat the
+     * whole subject line.
+     *
+     * <p><b>A constant, not a config key</b> — a deliberate deviation from the card, which
+     * specifies "a configured floor". {@code TriageProperties} has no Confluence section, so
+     * adding one means a new component on the top-level record and an edit to every fixture
+     * that constructs it. The card's actual intent — that the threshold be named, explained,
+     * and tunable in one place rather than buried in an expression — is met here; promoting it
+     * to config is a five-minute change if anyone ever needs to tune it without a rebuild.
+     */
+    private static final double KNOWLEDGE_RELEVANCE_FLOOR = 0.34;
+
     private final ServiceNowGateway serviceNow;
     private final ConfluenceGateway confluence;
     private final SumoGateway sumo;
@@ -210,14 +227,38 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // lookups below.
         // FND-62: keywords + app rather than the whole sentence + app, so the search gets
         // distinctive terms instead of English function words.
+        List<String> knowledgeMisses = new ArrayList<>();
         String confluenceQuery = signals.confluenceQuery();
-        List<KnowledgeDoc> docs = confluence.search(confluenceQuery);
+        List<KnowledgeDoc> returned = confluence.search(confluenceQuery);
+
+        // J25/KQR-2: a returned page must clear a relevance floor before it becomes EVIDENCE.
+        // KQR-1 fixed the query (siteSearch, not text ~); this bounds what we do with the
+        // answer. On the live instance a five-result response included a Teradata data-model
+        // PDF, and all five were cited — an evidence list padded with irrelevant entries
+        // damages the credibility of the entries that are real. Precision over recall, the
+        // same trade FND-67 already made for contact extraction.
+        List<KnowledgeDoc> docs = returned.stream()
+                .filter(d -> knowledgeRelevance(d, signals) >= KNOWLEDGE_RELEVANCE_FLOOR)
+                .toList();
         for (KnowledgeDoc d : docs) {
             evidence.add(new Evidence("e-kb-" + d.id(), "confluence",
                     "%s (%s): %s".formatted(d.title(), d.id(), d.snippet()), d.url()));
         }
-        String traceConfluenceSearch = "confluence.search(query=\"%s\") → %d page(s)"
-                .formatted(confluenceQuery, docs.size());
+        int dropped = returned.size() - docs.size();
+        if (!returned.isEmpty() && docs.isEmpty()) {
+            // Say it, rather than letting "no runbook" and "runbooks that matched nothing"
+            // look identical — J25's own distinction between a failed search and an empty one.
+            knowledgeMisses.add("%d Confluence page(s) were returned but none matched the symptom terms"
+                    .formatted(returned.size()));
+        }
+        String traceConfluenceSearch = returned.isEmpty()
+                ? "confluence.search(query=\"%s\") → 0 page(s)".formatted(confluenceQuery)
+                : "confluence.search(query=\"%s\") → %d page(s), %d cleared the relevance floor"
+                        .formatted(confluenceQuery, returned.size(), docs.size());
+        if (dropped > 0) {
+            log.info("  J25/KQR-2 · {} of {} Confluence page(s) below the relevance floor — not cited",
+                    dropped, returned.size());
+        }
         trace.add(traceConfluenceSearch);
         emitStep(sink, stepSeq, "confluence.search", traceConfluenceSearch);
 
@@ -387,7 +428,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         if (inc.configurationItem() != null) knownSystemNames.add(inc.configurationItem());
         if (inc.currentAssignment() != null) knownSystemNames.add(inc.currentAssignment());
         ownership.ifPresent(o -> { knownSystemNames.add(o.application()); knownSystemNames.add(o.supportGroup()); });
-        logs.forEach(l -> knownSystemNames.add(prettifySystem(l.logger())));
+        // J14/FRI-3: only a real emitter names a system. A blank logger used to arrive here
+        // as prettifySystem("") and seed J9's person filter with a non-name.
+        logs.forEach(l -> { if (notBlank(l.logger())) knownSystemNames.add(prettifySystem(l.logger())); });
         // FND-67: the TITLE names the thing that is broken, so its Title Case phrases are
         // system names, not people. The first real ServiceNow run suggested "Delivery
         // Hazards" as someone to talk to — straight out of its own subject line. This is the
@@ -499,9 +542,20 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         List<String> contradicting = new ArrayList<>();
         final List<LogEvidence> observedLogs = logs;   // effectively final for the lambda below
         ownership.ifPresent(o -> {
-            boolean cmdbSystemSeenInLogs = observedLogs.stream()
-                    .anyMatch(l -> prettifySystem(l.logger()).equalsIgnoreCase(o.application()));
-            if (!cmdbSystemSeenInLogs && !observedLogs.isEmpty()) {
+            // J14/FRI-3: this claim's PREMISE is "the CMDB owner is absent from the set of
+            // systems seen emitting". That set only exists when the lines actually name their
+            // emitters. When every logger is blank — or all identical, as they were when the
+            // gateway reported the query's _sourcecategory as the logger — there is no set to
+            // be absent from, and asserting the conclusion anyway is FND-8 (narrating what did
+            // not happen) in the most damaging spot available: the engine contradicting itself
+            // on stage, about a system it never actually looked for.
+            java.util.Set<String> emitters = observedLogs.stream()
+                    .map(LogEvidence::logger).filter(DeterministicDiagnosisEngine::notBlank)
+                    .map(DeterministicDiagnosisEngine::prettifySystem)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+            boolean cmdbSystemSeenInLogs = emitters.stream()
+                    .anyMatch(e -> e.equalsIgnoreCase(o.application()));
+            if (!cmdbSystemSeenInLogs && !observedLogs.isEmpty() && emitters.size() >= 2) {
                 contradicting.add(("%s is the CMDB owner for this CI, but no %s errors appear in the "
                         + "searched window — the failure looks downstream of it.")
                         .formatted(o.application(), o.application()));
@@ -509,6 +563,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         });
 
         List<String> missing = new ArrayList<>();
+        missing.addAll(knowledgeMisses);   // J25/KQR-2
         if (orderId == null) missing.add("No transaction/correlation identifier in the ticket text");
         // J14: distinguish "we searched and found nothing" from "we could not search at all".
         // Claiming the former when the latter happened is the FND-8 class — narrating an
@@ -875,6 +930,82 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
 
         if (mitigation == null && permanentFix == null) return null;
         return new LikelyResolution(mitigation, permanentFix);
+    }
+
+    /**
+     * J25/KQR-2 — how well a returned page matches what we were actually looking for, 0..1.
+     *
+     * <p>Term overlap against the affected system plus the symptom's distinctive keywords,
+     * with the <b>title weighted above the body</b>: a runbook that is ABOUT the thing names
+     * it in the title, whereas a body mention is as likely to be an aside. On the live
+     * instance a Teradata data-model PDF was cited as evidence for a delivery-hazards
+     * incident purely on incidental body overlap.
+     *
+     * <p>Deliberately dumb — no stemming, no TF-IDF. The deterministic engine is the
+     * no-LLM fallback and this must stay explainable in one sitting; the failure it prevents
+     * is "wildly unrelated page", not "slightly less relevant page".
+     */
+    private static double knowledgeRelevance(KnowledgeDoc doc, IncidentSignals signals) {
+        java.util.Set<String> title = tokens(doc.title());
+        java.util.Set<String> body = tokens(doc.snippet());
+
+        // Scored on the SYSTEM and the SYMPTOM separately, then the better of the two — a
+        // runbook for the affected system is relevant even when it uses none of the reporter's
+        // words, and a page describing this exact symptom is relevant even if it never names
+        // the system. Summing them instead would penalise both kinds of genuinely useful page
+        // for not also being the other kind, which is how the first cut of this dropped the
+        // demo's own "Order Payment Reconciliation" runbook.
+        double bySystem = overlap(tokens(signals.app()), title, body);
+        java.util.Set<String> symptomTerms = new java.util.LinkedHashSet<>();
+        for (String k : signals.keywords()) symptomTerms.addAll(tokens(k));
+        double bySymptom = overlap(symptomTerms, title, body);
+
+        if (bySystem < 0 && bySymptom < 0) return 1.0;   // nothing to match on — don't filter blindly
+        return Math.max(bySystem, bySymptom);
+    }
+
+    /**
+     * Share of {@code wanted} present in the page, title counting double a body mention.
+     * Returns -1 when there is nothing to look for, so the caller can tell "no signal" apart
+     * from "looked and found nothing".
+     */
+    private static double overlap(java.util.Set<String> wanted,
+                                  java.util.Set<String> title, java.util.Set<String> body) {
+        if (wanted.isEmpty()) return -1;
+        double hits = 0;
+        for (String w : wanted) {
+            if (matches(w, title)) hits += 1.0;
+            else if (matches(w, body)) hits += 0.5;
+        }
+        return hits / wanted.size();
+    }
+
+    /**
+     * Prefix match rather than equality, so {@code orders} finds {@code order} and
+     * {@code reconciliation} finds {@code reconcile}. Crude stemming on purpose: a real
+     * stemmer is a dependency and a behaviour nobody here can predict at 3am, while the
+     * failure being prevented is a wildly unrelated page, not a near-miss.
+     */
+    private static boolean matches(String wanted, java.util.Set<String> haystack) {
+        for (String h : haystack) {
+            if (h.equals(wanted)) return true;
+            int shared = Math.min(h.length(), wanted.length());
+            if (shared >= 5 && (h.startsWith(wanted.substring(0, shared))
+                    || wanted.startsWith(h.substring(0, shared)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Lowercased alphanumeric words of 3+ chars — short tokens carry no signal. */
+    private static java.util.Set<String> tokens(String s) {
+        if (s == null || s.isBlank()) return java.util.Set.of();
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (String t : s.toLowerCase(java.util.Locale.ROOT).split("[^a-z0-9]+")) {
+            if (t.length() >= 3) out.add(t);
+        }
+        return out;
     }
 
     /** {@code payment_service} / {@code order-payments/payment-service} → {@code Payment Service}. */
