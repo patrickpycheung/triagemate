@@ -83,3 +83,25 @@ The two most consequential, both real bugs rather than doc drift:
 Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
 
 ---
+
+## FND-87 — the raw stack trace also goes into the ServiceNow work note · **MEDIUM**
+
+**Where** — `DiagnosisReport.toSourcesNote()` (`src/main/java/com/company/triage/model/DiagnosisReport.java:76`),
+`b.append("• ").append(e.source()).append(" — ").append(e.summary())`.
+
+**What** — the `e-log` evidence summary is the Sumo row's whole `_raw`, which for a real
+Java service is a 100–300 line stack trace. The UI now folds that for display
+(`stackTraceHtml` in `index.html`), but the work-note composer still writes it out flat, so
+every triaged incident gets a sources comment several screens long with one useful sentence
+in it. Same defect, second surface — the UI fold does not reach it.
+
+**Why it matters** — not logged as a UI nit but as an outbound-content change: this text is
+posted into a live ServiceNow ticket and read by the assignment group, so shortening it is a
+decision about what the app tells other people, not about what a page looks like. The fold
+rule itself is already settled and could be ported to Java as-is (keep headers, every
+`Caused by:`, the throw site, application frames; elide runs of framework frames with a
+count) — what needs deciding is whether a work note may elide at all, given a reader there
+has no expander to click and no link back to the full row.
+
+**Escape** — `surface-coverage`: the same evidence string is rendered by two different
+composers and only one was in scope when the display problem was found.
