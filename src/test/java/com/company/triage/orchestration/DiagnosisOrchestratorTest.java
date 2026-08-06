@@ -138,7 +138,12 @@ class DiagnosisOrchestratorTest {
         assertThat(snow.notes).hasSize(2);   // first write landed, second was attempted and failed
         assertThat(r.report()).isSameAs(report);   // diagnosis itself is not lost
         assertThat(r.writebackPosted()).as("FND-36: a partial write is not a success").isFalse();
-        assertThat(r.trace()).anyMatch(s -> s.contains("writeback failed partway through"));
+        // J17/PCS-3 (2026-08-06): the trace used to say "at most one of the two advisory
+        // comments may have posted", because both writes shared one try block and the code
+        // genuinely did not know which had landed. Per-call tracking means it now names the
+        // one that failed — "may have" is not a fact anyone can act on.
+        assertThat(r.trace()).anyMatch(s -> s.contains("'First-pass diagnosis' comment did NOT post"));
+        assertThat(r.trace()).anyMatch(s -> s.contains("posted 'Sources consulted' comment"));
     }
 
     @Test

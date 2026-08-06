@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -133,6 +134,10 @@ public class IncidentPoller {
             return;
         }
         try {
+            // J17/PCS-2: held diagnoses go out FIRST. They are older than anything this tick
+            // will find, they cost nothing to send, and leaving them behind new work is how a
+            // transient ServiceNow blip turns into a permanently lost diagnosis.
+            retryPendingDeliveries();
             pollOnce();
         } finally {
             running.set(false);
@@ -198,7 +203,26 @@ public class IncidentPoller {
                     } else {
                         log.info("poll: {} diagnosed via {}", number, result.engine());
                     }
-                    markCompleted(number);
+                    // J17/PCS-1: completion is a CONJUNCTION — diagnosed AND delivered.
+                    // Returning without throwing was the weakest of the facts that matter: a
+                    // run can complete perfectly and deliver nothing (both advisory comments
+                    // lost to a transient ServiceNow failure), and on an unattended run the
+                    // write-back IS the only output. Marking that "completed" retired the
+                    // incident from the poller forever and discarded the only copy of the work.
+                    if (result.writebackPosted()) {
+                        markCompleted(number);
+                    } else {
+                        // J17/PCS-2: it goes to the delivery queue, NOT back through the
+                        // engine. The diagnosis is already correct and already paid for — a
+                        // re-run would spend another live agent pass (~37s and real tokens) to
+                        // reproduce a report we are holding.
+                        queueForRedelivery(number, result);
+                        // J17/PCS-5: nobody is watching a UI here. If this is not loud, a
+                        // silently undelivered diagnosis is indistinguishable from a quiet day.
+                        log.error("poll: {} was DIAGNOSED BUT NOT DELIVERED — queued for redelivery "
+                                + "({} awaiting). The advisory comments are not on the ticket.",
+                                number, pendingDelivery.size());
+                    }
                     handled = true;
                 } catch (Exception e) {
                     // One bad incident must neither stop the batch nor be lost: it stays out
@@ -220,6 +244,59 @@ public class IncidentPoller {
         if (advanceTo != null && advanceTo.isAfter(cursor)) {
             cursor = advanceTo;
             log.debug("poll: cursor advanced to {}", cursor);
+        }
+    }
+
+    /**
+     * J17/PCS-2 — diagnoses that were produced but not delivered, awaiting another attempt.
+     *
+     * <p>Bounded and FIFO for the same reason as {@link #completed}: an in-process buffer that
+     * grows without limit on a bad afternoon is a second defect, not a fix. When it overflows
+     * the oldest entry is dropped <b>loudly</b> — losing a diagnosis silently is the thing this
+     * card exists to stop, so the queue must not reintroduce it at its own edge.
+     */
+    private final java.util.Map<String, DiagnosisResult> pendingDelivery =
+            java.util.Collections.synchronizedMap(new LinkedHashMap<>());
+
+    private void queueForRedelivery(String number, DiagnosisResult result) {
+        synchronized (pendingDelivery) {
+            pendingDelivery.put(number, result);
+            int cap = props.trigger().poll().completedCap();
+            while (pendingDelivery.size() > cap) {
+                var it = pendingDelivery.entrySet().iterator();
+                String dropped = it.next().getKey();
+                it.remove();
+                log.error("poll: delivery queue full ({}) — DROPPING the undelivered diagnosis for {}. "
+                        + "It will be re-diagnosed from scratch if the incident is seen again.",
+                        cap, dropped);
+            }
+        }
+    }
+
+    /**
+     * J17/PCS-2 — retry delivery only. No engine, no LLM: the report is already in hand, and
+     * the failure being retried was ServiceNow's, not ours.
+     */
+    private void retryPendingDeliveries() {
+        java.util.List<String> numbers;
+        synchronized (pendingDelivery) {
+            if (pendingDelivery.isEmpty()) return;
+            numbers = new java.util.ArrayList<>(pendingDelivery.keySet());
+        }
+        for (String number : numbers) {
+            DiagnosisResult held;
+            synchronized (pendingDelivery) { held = pendingDelivery.get(number); }
+            if (held == null) continue;
+            try {
+                serviceNow.addWorkNote(number, held.report().toSourcesNote());
+                serviceNow.addWorkNote(number, held.report().toDiagnosisNote());
+                synchronized (pendingDelivery) { pendingDelivery.remove(number); }
+                markCompleted(number);
+                log.info("poll: redelivered the held diagnosis for {} — now complete", number);
+            } catch (RuntimeException e) {
+                log.warn("poll: redelivery for {} failed again ({}: {}) — still queued",
+                        number, e.getClass().getSimpleName(), e.getMessage());
+            }
         }
     }
 
