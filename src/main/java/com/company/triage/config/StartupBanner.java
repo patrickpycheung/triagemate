@@ -102,6 +102,7 @@ public class StartupBanner {
         // problem into a demo-fidelity one — the automatic two-comment write-back with no
         // human in the loop is J5's stated differentiator, and a default that has to be
         // remembered before every demo is a worse stage hazard than the one it avoids.
+        gitLabAllowlistNote().ifPresent(note -> log.warn("   gitlab:     {}", note));
         log.info("   bound:      {}", boundDescription());
         log.info("   writeback:  {}", writebackDescription());
         log.info("  ==========================================================");
@@ -117,6 +118,32 @@ public class StartupBanner {
      * and naming the script that fixes it is the only version that is both visible and
      * true.
      */
+    /**
+     * J30/GEB-4 — an unresolvable allowlist entry is a CONFIGURATION fault: true before the
+     * run starts, discoverable without an incident. Surfacing it here means it is found while
+     * someone is reading the console, not mid-demo when a code search quietly returns nothing.
+     *
+     * <p><b>Advisory, never boot-blocking.</b> The corp network answers a 403 at the perimeter
+     * for GitLab — identical with and without a token, and on the plain web root — so a
+     * perfectly correct config can legitimately fail to verify from a dev machine. A gate here
+     * would block boot on a machine where the config was right, which is worse than the silence
+     * it replaces.
+     *
+     * <p>Also cheap by construction: it compares strings against the shipped demo fixture and
+     * makes no network call, so it cannot become the unbounded startup I/O J20/STV-6 warns about.
+     */
+    private java.util.Optional<String> gitLabAllowlistNote() {
+        String projects = env.getProperty("triage.gitlab.allowed-projects", "");
+        String mode = env.getProperty("triage.connectors.gitlab", "mock");
+        if (!"real".equalsIgnoreCase(mode)) return java.util.Optional.empty();
+        if (projects.contains("order-payments/payment-service")) {
+            return java.util.Optional.of("⚠ allow-projects still contains the OFFLINE DEMO project "
+                    + "'order-payments/payment-service', which does not exist in the real estate — "
+                    + "real-mode code search will 404 for it (J30/GEB-1)");
+        }
+        return java.util.Optional.empty();
+    }
+
     /** J21/NEP-3: what the socket is ACTUALLY bound to, not what was requested. */
     private String boundDescription() {
         String address = env.getProperty("server.address", "");
