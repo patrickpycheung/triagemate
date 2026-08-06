@@ -9,6 +9,11 @@ renders correctly) · **Complexity**: Complex ·
 **Depends on**: J1, J2, J4, J7, J8 · **Amends**: J1 (response shape), J7 (UI), J8 (observability)
 **Source**: DDS `docs/discovery/live-thinking-trace-ui/` (Phase 4, concepts LT1–LT7)
 
+**Amended by** (reciprocal — added 2026-08-06): [J12](../J12-live-trace-delivery/README.md) (LTD: the `since` cursor replaced by convergent re-read), [J16](../J16-run-trace-registry-lifecycle/README.md) (RTR: LT4 rules 4 and 5, and the buffer bound), [J23](../J23-live-ui-honesty/README.md) (LUH: the honesty contract made state-owned).
+*This line exists because 33 `Amends` references in this workspace are one-directional: a card
+records what it amends, the amended card never learns of it. That is how LT4 rule 4 stayed
+stated-as-live here while J16 retired it and J17/J21 went on citing it.*
+
 ## Essence
 Show the copilot's *process*, not a spinner. A per-step trace where each row carries the
 **logo of the platform it touched**, animates while that step is in progress, and
@@ -310,8 +315,26 @@ and no change to the POST response:
    `{attempts: [{attempt, state, steps: [...]}], done: bool}`.
 3. The POST still returns its usual `200 DiagnosisResult` at the end, unchanged. The client
    stops on `done` or when the POST resolves — whichever is first.
-4. **No header ⇒ no buffer.** Absent the header the orchestrator uses `TraceSink.NOOP` and
-   allocates nothing — which is exactly what **K1 must do** (see the bound below).
+4. ~~**No header ⇒ no buffer.** Absent the header the orchestrator uses `TraceSink.NOOP` and
+   allocates nothing — which is exactly what **K1 must do** (see the bound below).~~
+   **RETIRED 2026-08-06 by [J16](../J16-run-trace-registry-lifecycle/README.md)/RTR-1**
+   (`4ae6955`). `DiagnosisOrchestrator.run(...)` now mints a server-side `runId`
+   (`"srv-" + UUID`) when the caller sent none and **always** registers a collector — so a
+   K1-owned run does get a buffer.
+
+   *Why the retirement was safe*: this rule's stated premise was memory growth ("K1 runs
+   unattended, indefinitely, with nobody to poll it"). The **Bound the buffer** paragraph
+   directly below removed that premise — the map is capped at ~20 with a TTL swept on every
+   `register`, and a K1 tick registering *is* a `register` call, so each unattended tick
+   sweeps the map it grows. The bound survives; only this rule's argument for itself did not.
+   J16/RTR-2 additionally deleted `currentRunIdByIncident`, because with every run registered
+   the orchestrator's own `inFlight` map is the single authority on what is live.
+
+   > **The header stays `required = false`.** [J21](../J21-network-exposure-posture/README.md)
+   > builds a CORS argument on that optionality, and it is unaffected: RTR-1 mints an id when
+   > the header is absent rather than demanding one. J21 deliberately declined to weld its
+   > trust boundary to `X-Triage-Run-Id`, warning that "the day someone makes tracing optional
+   > again … the drive-by path silently re-opens". This *was* that day, and the separation held.
 5. **FND-31 coalescing**: caller B blocks in `awaitExisting` and never runs an engine, so it
    owns no segment. Alias B's `runId` to the canonical run's buffer so it watches the same
    live steps instead of a permanently empty one.
