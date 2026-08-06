@@ -350,8 +350,12 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                     String callId = toolCtx.functionCallId().orElseGet(
                             () -> "no-call-id-" + tool.name() + "-" + stepSeq.get());
 
-                    if (!bounds.allow(tool.name())) {
-                        String why = bounds.denialReason(tool.name());
+                    var denial = bounds.deny(tool.name());
+                    if (denial.isPresent()) {
+                        // J19/ICF-4: `why` stays the existing text — J11/LT2 carries it into the
+                        // DENIED row's `result`, so allowlist-rejection and budget-exhaustion
+                        // must stay distinguishable in the TRACE exactly as they are today.
+                        String why = denial.get().reason();
                         // The real denial (returned below) does not depend on anything past
                         // this line — deniedCallIds must be recorded regardless of whether
                         // the sink call succeeds, so a later after/onToolError firing for
@@ -373,8 +377,14 @@ public class AdkDiagnosisEngine implements DiagnosisEngine {
                             log.warn("beforeToolCallbackSync trace observer failed on DENIED path "
                                     + "— denial proceeds untouched", e);
                         }
-                        return Optional.of(Map.of("error", why
-                                + "; stop calling that tool and produce the report from what you have"));
+                        // What the MODEL is told is derived from the CAUSE, and only the
+                        // wording differs. "Stop calling THAT tool" is right for an allowlist
+                        // miss — other tools remain available and switching is the correct
+                        // response. It is actively misleading when the budget is gone: it
+                        // invites another call, which is refused identically, until the run
+                        // ends with no report at all.
+                        return Optional.of(Map.of("error",
+                                BoundsCallback.modelFacingMessage(denial.get(), maxToolCalls)));
                     }
 
                     try {
