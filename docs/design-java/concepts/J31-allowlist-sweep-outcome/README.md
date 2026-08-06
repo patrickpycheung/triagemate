@@ -1,22 +1,34 @@
-# J31 — Allowlist sweep outcome (one bad entry must not speak for the whole sweep)
+# J31 — Allowlist sweep outcome (the sweep must report what actually happened)
 
-**State**: 🔵 **Proposed** (2026-08-06) · **Complexity**: Simple
-**Depends on**: J30 (estate binding), J14/FRI-5 (connector degradation), J6 (GitLab gateway)
-**Amends**: J30/GEB-3 (which stated the honesty rule but not the aggregation rule)
-**Source**: derived while reviewing [`docs/Patrick_gitlab-update_allowed-projects.md`](../../../Patrick_gitlab-update_allowed-projects.md)
-(cheungp) against the current tree on 2026-08-06. Patrick's file is **already implemented** —
-J30/GEB-1 shipped the real path. This card is the defect that implementation left behind.
+**State**: 🟡 **Stable** (2026-08-06, Round 5 — ASO-4 decided, no open items) · **Complexity**: Moderate
+**Depends on**: J30 (estate binding), J14/FRI-5 (per-call degradation), J6 (GitLab gateway contract)
+**Amends**: **J30/GEB-2** (whose per-project rule the code does not implement), **J30/GEB-3**
+(which specified the failed-vs-empty distinction for a single attempt, not for a sweep).
+**Does not amend J14/FRI-5** — ASO-4 satisfies its trace contract rather than changing it
+(see the decision there).
+**Source**: derived while checking cheungp's
+[`Patrick_gitlab-update_allowed-projects.md`](../../../Patrick_gitlab-update_allowed-projects.md)
+against the tree, 2026-08-06. Patrick's recommendation is **already implemented** (J30/GEB-1);
+this card is the defect that implementation exposed.
+
+> **Round 3 correction (2026-08-06).** The first draft of this card claimed *"all four J30
+> rules hold as written"* and that this card amended GEB-3 alone. **That was wrong**, and the
+> conflict pass caught it: GEB-2 already requires per-project continuation, so the shipped
+> `break` violates a converged rule rather than falling into a gap beside it. The draft also
+> mis-stated GEB-4 as proposed (it shipped), overstated the reachability of ASO-A, and carried
+> a third rule (mode-specific project eligibility) that reaches far outside this card — now
+> split out as [J32](../J32-allowlist-eligibility-vs-authorization/README.md). Recorded rather
+> than silently rewritten, because the error is the useful part: a card that *asserts* its
+> neighbours are unaffected is exactly the claim a conflict round exists to test.
 
 ## Essence
 
-`triage.gitlab.allowed-projects` now holds two entries, deliberately (J30/GEB-1): the real
-estate project `enterprise/parcel-systems/applications/delivery-hazards`, and the offline demo
-fixture `order-payments/payment-service`, which **does not exist in the real GitLab estate**.
+`triage.gitlab.allowed-projects` holds two entries by design (J30/GEB-1): the real estate
+project, and the offline demo fixture `order-payments/payment-service`, which does not exist
+in the real estate. `IncidentSignals.rankAllowlist` **sorts and never filters**, so in real
+mode the phantom is a live candidate the engine calls GitLab with.
 
-`IncidentSignals.rankAllowlist` **sorts, it does not filter** (`IncidentSignals.java:266` —
-`ranked.sort(...)`, returning the whole list). So in real mode the phantom project is not a
-dormant config line; it is a live candidate the engine will call GitLab with. Two things then
-go wrong, both in `DeterministicDiagnosisEngine.java:416-429`:
+`DeterministicDiagnosisEngine.java:417-429`:
 
 ```java
 for (String project : projectsToTry) {
@@ -30,107 +42,140 @@ for (String project : projectsToTry) {
 }
 ```
 
-**ASO-A — a failure aborts the sweep, so a phantom entry can prevent the real search.**
-`break` in the catch ends the loop for every remaining candidate. Ranking is by token overlap
-with the incident's app, so on a "Delivery Hazards" incident the real project sorts first and
-this stays hidden — but any incident whose tokens do not favour it puts the phantom first, its
-404 breaks the loop, and **the real project is never searched at all**. The allowlist's order
-of attempt becomes load-bearing, and nothing says so.
+Two defects, and **neither is a new design question** — both are places where the code
+disagrees with rules that are already converged.
 
-**ASO-B — the last attempt overwrites the outcome of a successful one.** When the real project
-IS searched first and legitimately returns zero hits, the loop does not break (it only breaks
-on non-empty hits), continues to the phantom, 404s, and sets `codeSearchFailed = true`. The run
-then reports **"could not search"** for a code search that ran successfully and truthfully
-found nothing.
+### ASO-A — the `break` violates J30/GEB-2
 
-That second one is the [FND-8 class](../../../audit/found-issues-archive.md) the codebase
-guards everywhere else — and it is precisely the distinction **J30/GEB-3** demanded ("`0 hit(s)`
-means both *searched, found nothing* and *never successfully searched anything*… those lead a
-triager to opposite conclusions"). GEB-3 shipped the *flag*; what it did not specify is how the
-flag aggregates over **several** attempts. With one allowlist entry the question could not
-arise. GEB-1 added the second entry, and made it arise.
+GEB-2 is unambiguous: *"a project that cannot resolve is a **skipped** project, not a failed
+run"*, and J30's own verification table requires *"a 404 on the first ranked project → the
+sweep continues to the next"*. `GatewayUnavailableException`'s javadoc says the same thing a
+third time: *"the engine catches per call site … and continues: the safety net degrades per
+call, never per run."*
 
-## Why this is not J30 re-litigated
+The code breaks out of the loop. So a phantom entry ranked first stops the real project from
+ever being searched.
 
-J30 is 🟢 Built and its four rules are all satisfied as written. This card does not reopen it:
+**Reachability, stated precisely** (the first draft overstated this): `List.sort` is stable
+and `application.yml` lists the real project first, so equal or zero token overlap preserves
+config order and the real project goes first. The phantom leads **only** when it has *strictly
+greater* overlap with the incident's app — e.g. an incident whose app is "Payment Service".
+Rarer than the draft implied, and worse when it happens.
 
-| J30 rule | Status | Relationship |
-|---|---|---|
-| GEB-1 — allowlist names the real estate, entries labelled | ✅ shipped | **Cause.** Adding the second entry is correct and stays; it is what makes a *sweep* real rather than a one-element loop |
-| GEB-2 — a project that cannot resolve is skipped, not fatal | ✅ shipped (J14/FRI-5) | Holds at the level of the RUN. This card is the level below: skipped-project semantics *within* the sweep |
-| GEB-3 — trace distinguishes "no code matched" from "could not search" | ✅ shipped | **Amended.** The distinction is recorded; the aggregation across attempts is not specified, so a later failure silently overwrites an earlier success |
-| GEB-4 — an unresolvable entry is visible before a demo | 🔵 proposed (J20 home) | Complementary: GEB-4 warns ahead of time, this card makes the run correct when it was not heeded |
+### ASO-B — the outcome records the last attempt, not the sweep
 
-## Evidence — verified against the tree 2026-08-06
+`codeSearchFailed` is a boolean set by whichever attempt failed last. When the real project is
+searched first and legitimately returns empty, the loop continues, the phantom 404s, and the
+run reports **"could not search"** for a search that ran and truthfully found nothing.
 
-| Claim | How it was checked |
-|---|---|
-| Both entries present, phantom included | `application.yml:262-266` — labelled exactly as GEB-1 specifies |
-| Ranking never filters | `IncidentSignals.rankAllowlist` sorts by token overlap and returns `List.copyOf(ranked)` — every entry survives |
-| A 404 becomes `GatewayUnavailableException` | `RealGitLabGateway.searchCode` wraps `catch (Exception e)` → `throw new GatewayUnavailableException("GitLab", e)` |
-| The allowlist check passes for the phantom | `requireAllowlisted` tests membership of the configured list, not existence in the estate — an allowlisted-but-absent project is exactly the gap |
-| Failure ends the sweep | the `break` inside the catch at `DeterministicDiagnosisEngine.java:427` |
+GEB-3 asked for exactly this distinction, and shipped it — for **one** attempt. With a
+one-entry allowlist the aggregation question could not arise. GEB-1 added the second entry and
+made it arise.
 
-**Not verified live** — `gitlab.cd.auspost.com.au` is behind the same perimeter 403 J30
-documents, so this is derived from the code path, not observed on the wire. The reachability
-argument does not depend on the network: it is ordinary control flow.
+**Why GEB-3's own test cannot catch this**: `CodeSearchFailedIsNotNoMatchTest` has three tests
+and all three use a *uniform* gateway stub — every project unreachable, or every project empty.
+The mixed sweep is unreachable by construction. That is the escape layer, and ASO-3 below is
+written to close it.
 
 ## Design
 
-### ASO-1 — a failed project is skipped, the sweep continues
+### ASO-1 — restore GEB-2: a failed project is skipped, the sweep continues
 
-Replace the `break` in the catch with `continue`. One unresolvable entry costs its own attempt,
-not the candidates behind it — the same principle J14/FRI-5 applies one level up (one
-unreachable connector costs its evidence, not the run), applied per allowlist entry.
+`continue`, not `break`. This is **not a new rule** — it is GEB-2, implemented. J31 owns the
+correction; J30 keeps the rule.
 
-Failures are still recorded; a run where **every** attempt failed is still a failed search.
+### ASO-2 — the sweep reports a structured outcome, not a boolean
 
-### ASO-2 — the outcome aggregates honestly across attempts
+A boolean cannot express a sweep. Replace `codeSearchFailed` with the attempt record —
+projects attempted, which succeeded, which failed and why — and derive the report line from
+it. **Four states, not two**:
 
-`codeSearchFailed` must mean *"no attempt succeeded"*, not *"the last attempt failed"*. A
-sweep where any project was searched successfully — including one that returned zero hits — is
-a **search that happened**, and the report must say so. Concretely: only set the failure state
-if no attempt returned normally, and keep the per-project failures in `gatewayFailures` so the
-note can still say which entries could not be reached.
-
-This makes the three outcomes distinct, which is what GEB-3 was after:
-
-| What happened | Report should say |
+| Outcome | The report must say |
 |---|---|
-| Some project searched, hits found | the citations |
-| Some project searched, no hits anywhere | searched, found nothing (**not** a degradation) |
-| No project could be searched | could not search — with which ones failed and why |
+| Any project returned hits | the citations |
+| All projects searched, none had hits | searched, found nothing — **not** a degradation |
+| Some searched (empty), some failed | searched *partially*; names what could not be reached |
+| No project could be searched | could not search — with the failures |
 
-### ASO-3 — the demo fixture should not be a real-mode candidate
+The third row is the one the first draft got wrong. It said any successful attempt makes the
+sweep "not a degradation" — **false**: if another project failed, nothing is known about that
+project, and a report claiming a clean negative would overclaim. Partial is its own state.
 
-The deeper fix, and the one Patrick's file implied by saying *update to* rather than *add*: an
-entry that exists only for the offline fixture has no business being called against the real
-estate. J30 kept it for a good reason (`MockGitLabGateway` cites it, and the stage walkthrough
-must work with no network) — but "kept in config" need not mean "swept in real mode".
+**Failures must carry the project.** `GatewayUnavailableException` holds only the system
+(`"GitLab is unreachable: …"`), so two failed entries are indistinguishable in
+`gatewayFailures` today. The attempt record stores `{project, error}`, or at minimum the
+engine prefixes the project when it records the failure. Without this, the "partial" state
+cannot name what it could not reach, which is the only thing that makes it actionable.
 
-Scope it to the mock profile, or mark it in config as demo-only and have the real gateway's
-sweep skip entries so marked. Either removes the phantom 404 at the source instead of handling
-it — ASO-1/2 are then defence in depth rather than the only guard.
+### ASO-3 — the mixed sweep is a fixture case, not just a rule
 
-**Decide between the two mechanisms at implementation time** (ADM-1, reversible, local): the
-profile split is cleaner but moves config into two places; the marker keeps one list at the
-cost of a field. Prefer whichever leaves the labelled single list J30/GEB-1 argued for.
+Add the mixed-outcome stub GEB-3's tests lack: a gateway that succeeds-empty for one project
+and throws for another. This is the J14/FRI-6 idea (a fixture corpus is what stops finding
+number six) applied to the sweep, and it is the artefact that keeps ASO-B closed.
+
+### ASO-4 — the trace needs a state for a partly-failed sweep
+
+J14/FRI-5 requires a failed call to resolve its `TraceStep` as **`FAILED`**, never `DONE` —
+"using `DONE` would make the trace assert a step succeeded when it did not". A sweep with one
+success and one failure fits neither state, and today `emitStep` emits `DONE` regardless,
+including for the "COULD NOT SEARCH" line.
+
+**Decision (ADM-2, settled 2026-08-06 from the code, Round 5): one `TraceStep` per attempt.
+No new `StepState`.** The two candidates were per-attempt rows, or a single aggregate row with
+a new `PARTIAL` state. Three facts decide it:
+
+1. **The spine already models this unit.** `TraceSink.before/after/onError` wrap *a call*, and
+   a sweep is N calls. Per-attempt rows are what LT1 already describes; the aggregate line
+   ("`gitLab.searchCode(...) → N hit(s)`") is a separate narrative `emitStep`, not a lifecycle
+   row, and it stays.
+2. **A 7th enum member would widen an existing gap.** `StepState` already has six members
+   (`PENDING, ACTIVE, DONE, FAILED, DENIED, ABANDONED`), while LT5's documented CSS mapping
+   covers five and says "test all five" — `ABANDONED` arrived later and was never added to it.
+   Adding `PARTIAL` on top of an already-stale mapping trades a small display gain for a
+   second untested state.
+3. **ASO-2 needs per-project attribution anyway.** Per-attempt rows carry it for free; an
+   aggregate would need the same information threaded separately, i.e. the same facts in two
+   representations.
+
+So a failed attempt resolves `FAILED` (FRI-5's contract, unchanged), a successful one `DONE`,
+and "partial" is a property the reader *sees* — some rows failed, some did not — rather than a
+state the enum has to name. **This card therefore no longer amends J14/FRI-5's trace
+contract**; it satisfies it.
+
+> Noticed while deciding this, and **not fixed here**: LT5's `StepState`→CSS mapping is one
+> member behind the enum (`ABANDONED` unmapped, so it falls through to whatever the renderer
+> defaults to). That is J11's, not this card's — recorded so it is not lost.
+
+## Relationship to J30 — corrective, not competing
+
+| J30 rule | Shipped? | This card |
+|---|---|---|
+| GEB-1 — allowlist names the real estate, entries labelled | ✅ | **Cause, not defect.** The second entry is correct and stays |
+| GEB-2 — an unresolvable project is skipped, not fatal | ⚠️ **rule converged, code disagrees** | **ASO-1 repairs it** |
+| GEB-3 — trace distinguishes "no code matched" from "could not search" | ✅ for one attempt | **ASO-2 extends it** to a sweep |
+| GEB-4 — an unresolvable entry is visible before a demo | ✅ **shipped** (`StartupBanner.gitLabAllowlistNote`) — warns when the demo project is the *sole* real-mode entry | Untouched. Deliberately does not fire on the current config, where a real entry is present |
 
 ## Verification
 
 | Check | Passes when |
 |---|---|
-| Sweep with a failing FIRST entry | remaining projects are still attempted; a hit in a later project is still cited |
-| Sweep where a real search returns empty and a later entry 404s | report says *searched, found nothing* — `codeSearchFailed` is false |
-| Sweep where every entry fails | report says *could not search*, listing each failure |
-| Real-mode run | the demo fixture is never called against the real estate (ASO-3) |
-| Offline demo | `run-deterministic.sh` walkthrough unchanged — the fixture still resolves in mock mode |
-| `mvn test` | green, with a regression test per ASO-1/ASO-2 that fails before the change |
+| Failing FIRST entry | remaining projects are still attempted; a later hit is still cited |
+| Real search empty + later entry fails | report says *searched partially*, naming the unreachable project — neither a clean negative nor a blanket "could not search" |
+| All entries fail | *could not search*, listing each failure with its project |
+| All entries searched, none hit | *searched, found nothing* — no degradation claimed |
+| Mixed-outcome fixture exists | a stub that succeeds-empty for one project and throws for another (ASO-3) |
+| Trace | every attempted project is attributable; no step claims `DONE` for a failure (ASO-4) |
+| `mvn test` | green, with a regression test per ASO-1/ASO-2 failing before the change |
 
 ## Out of scope
 
 - **The allowlist's contents** — J30/GEB-1 owns them, and they are correct.
-- **`searchCode`'s error handling** — J14/FRI-5 owns it; this card only changes what the
+- **Mode-specific project eligibility** (should the demo fixture be a real-mode candidate at
+  all?) — split to **[J32](../J32-allowlist-eligibility-vs-authorization/README.md)**. It
+  changes a list that J6 uses as a *security allowlist* and that also feeds ADK tool
+  validation, the ADK instruction text, gateway enforcement and the startup banner. Not this
+  card's blast radius.
+- **`searchCode`'s error handling** — J14/FRI-5 owns it; this card changes only what the
   *caller* does with the exception.
-- **Startup detection of unresolvable entries** — J30/GEB-4, whose home is J20.
-- **Whether the search term is right** — J29, shipped.
+- **`GitLabGateway.searchCode` staying singular** — it searches one project and must continue
+  to (J6). The sweep is the engine's, and stays there.
