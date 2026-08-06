@@ -78,6 +78,19 @@ triage:
     sumo: mock
     gitlab: mock
 
+    # MOCK ONLY — which recorded incident stands in when an UNRECORDED number is diagnosed.
+    # Lets the offline demo accept any ticket number the presenter types: the evidence is
+    # INC0010015's, replayed under whatever number was entered.
+    #
+    # This relaxes FND-54, which made the mock reject unknown numbers after a typo on stage
+    # produced a confident diagnosis headed with an incident that does not exist. The relax
+    # is bounded so that cannot recur: it is the mock gateway only (the real gateway still
+    # 404s, so nothing invented can reach a real ticket), and every substitution is announced
+    # at WARN naming both numbers. What FND-54 forbids is doing this SILENTLY.
+    #
+    # Blank restores the strict FND-54 behaviour exactly — unknown number, 404, no stand-in.
+    mock-stand-in: INC0010015
+
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 
