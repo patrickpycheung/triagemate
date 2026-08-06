@@ -1,6 +1,7 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.gateway.GatewayUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -8,6 +9,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
@@ -139,5 +141,17 @@ class RealGitLabGatewayTest {
         f.gateway().searchCode("order-payments/payment-service", "TOKEN&scope=admin");
 
         f.server().verify();
+    }
+
+    @Test
+    void searchCodePropagatesErrorsAsGatewayUnavailableException() {
+        var f = build();
+        f.server().expect(requestTo(containsString("/search")))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound());
+
+        assertThatThrownBy(() -> f.gateway().searchCode("order-payments/payment-service", "TOKEN"))
+                .isInstanceOf(GatewayUnavailableException.class)
+                .hasMessageContaining("GitLab is unreachable")
+                .hasMessageContaining("404");
     }
 }

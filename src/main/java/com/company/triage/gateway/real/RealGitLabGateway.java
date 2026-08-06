@@ -1,10 +1,12 @@
 package com.company.triage.gateway.real;
 
 import com.company.triage.config.IntegrationProperties;
+import com.company.triage.gateway.GatewayUnavailableException;
 import com.company.triage.gateway.GitLabGateway;
 import com.company.triage.model.CodeSearchResult;
 import com.company.triage.model.Contact;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,8 +29,7 @@ import java.util.Map;
 @ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "real")
 public class RealGitLabGateway implements GitLabGateway {
 
-    private static final org.slf4j.Logger log =
-            org.slf4j.LoggerFactory.getLogger(RealGitLabGateway.class);
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(RealGitLabGateway.class);
 
     private final RestClient http;
 
@@ -82,19 +83,23 @@ public class RealGitLabGateway implements GitLabGateway {
         // The rule this establishes, and the reason it is a rule rather than a fix: caller-
         // derived text is ALWAYS a URI variable, NEVER spliced into the template and never
         // pre-encoded. One encoder, one pass, at the boundary that owns the URI.
-        JsonNode hits = http.get()
-                .uri(uri -> uri.path("/api/v4/projects/{id}/search")
-                        .queryParam("scope", "blobs")
-                        .queryParam("search", searchTerm)
-                        .build(project))
-                .retrieve().body(JsonNode.class);
-        List<CodeSearchResult> out = new ArrayList<>();
-        if (hits != null) hits.forEach(h -> out.add(new CodeSearchResult(
-                project,
-                h.path("path").asText(),
-                h.path("startline").asInt(0),
-                h.path("data").asText(""))));
-        return out;
+        try {
+            JsonNode hits = http.get()
+                    .uri(uri -> uri.path("/api/v4/projects/{id}/search")
+                            .queryParam("scope", "blobs")
+                            .queryParam("search", searchTerm)
+                            .build(project))
+                    .retrieve().body(JsonNode.class);
+            List<CodeSearchResult> out = new ArrayList<>();
+            if (hits != null) hits.forEach(h -> out.add(new CodeSearchResult(
+                    project,
+                    h.path("path").asText(),
+                    h.path("startline").asInt(0),
+                    h.path("data").asText(""))));
+            return out;
+        } catch (Exception e) {
+            throw new GatewayUnavailableException("GitLab", e);
+        }
     }
 
     /**
@@ -113,8 +118,8 @@ public class RealGitLabGateway implements GitLabGateway {
                     .uri(uri -> uri.path("/api/v4/projects/{id}/repository/tags")
                             .queryParam("per_page", 1).build(project))
                     .retrieve().body(JsonNode.class);
-            String tagName = tags != null && tags.size() > 0 ? tags.get(0).path("name").asText("") : "";
-            String since = tags != null && tags.size() > 0
+            String tagName = tags != null && !tags.isEmpty() ? tags.get(0).path("name").asText("") : "";
+            String since = tags != null && !tags.isEmpty()
                     ? tags.get(0).path("commit").path("committed_date").asText("") : "";
 
             // 2. commits touching this path since that date (fall back to unfiltered)
@@ -157,7 +162,7 @@ public class RealGitLabGateway implements GitLabGateway {
             // J25/KQR-4 + J14/FRI-5: a connector that could not answer must SAY so. Returning
             // an empty list here made a base-URL 404 indistinguishable from a clean no-match,
             // and the report narrated the search as having happened.
-            throw new com.company.triage.gateway.GatewayUnavailableException("GitLab", e);
+            throw new GatewayUnavailableException("GitLab", e);
         }
     }
 }
