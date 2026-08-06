@@ -73,6 +73,14 @@ class DeterministicDiagnosisEngineTest {
         // Was "confluence+gitlab" before ServiceNow contributed names at all.
         Contact top = r.suggestedContacts().get(0);
         assertThat(top.name()).isEqualTo("Priya Nair");
+
+        // One commit touching N files arrives N times with an IDENTICAL signal. Merging used
+        // to concatenate blindly, so a real run rendered "last touched X · last touched X ·
+        // last touched X" — one fact printed three times, reading like three findings.
+        assertThat(r.suggestedContacts()).allSatisfy(c -> {
+            String[] parts = c.signal().split(" · ");
+            assertThat(parts).doesNotHaveDuplicates();
+        });
         assertThat(top.source()).isEqualTo("servicenow+confluence+gitlab");
         // Merged from a prose mention (no handle) plus API records — the handle must survive.
         assertThat(top.handle()).isEqualTo("priya.nair@example.com");

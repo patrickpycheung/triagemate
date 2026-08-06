@@ -966,9 +966,15 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                         ? c.handle() : existing.handle();
                 String link = (existing.link() == null || existing.link().isBlank())
                         ? c.link() : existing.link();
+                // Don't repeat a signal we already carry. One commit that touched three files
+                // arrives here three times with an IDENTICAL signal, and concatenating blindly
+                // rendered it as the same sentence three times over ("last touched X · last
+                // touched X · last touched X") — noise that reads like three separate findings.
+                // Distinct signals still concatenate: those genuinely are separate evidence.
+                String signal = existing.signal().contains(c.signal())
+                        ? existing.signal() : existing.signal() + " · " + c.signal();
                 merged.put(key, new Contact(existing.name(), handle, source,
-                        existing.reason() + "; " + c.reason(), link,
-                        existing.signal() + " · " + c.signal()));
+                        existing.reason() + "; " + c.reason(), link, signal));
             }
         }
 
