@@ -1,6 +1,6 @@
 # J13 — Evidence & Citation Integrity (the citation contract made enforceable)
 
-**State**: 🟡 Partly built — **ECI-6 landed 2026-08-06** (validation moved inside `runAgentAndParse`, so a contract violation now costs one repair turn instead of an FND-7 degrade; the loop this validator's javadoc always described is finally wired). ECI-1…ECI-4 were already built and tested. **ECI-5 landed 2026-08-06** — typed identifier fields populated only from a signal that determined that field, built after the log search so errorCode can carry the Sumo-derived token. **All six rules built.** `mvn test` 248 / `mvn -Padk test` 307 green · **Complexity**: Moderate · **Priority**: HIGH ·
+**State**: 🟢 **Built** — all six ECI rules. **ECI-6 landed 2026-08-06** (validation moved inside `runAgentAndParse`, so a contract violation now costs one repair turn instead of an FND-7 degrade; the loop this validator's javadoc always described is finally wired). ECI-1…ECI-4 were already built and tested. **ECI-5 landed 2026-08-06** — typed identifier fields populated only from a signal that determined that field, built after the log search so errorCode can carry the Sumo-derived token. **All six rules built.** `mvn test` 248 / `mvn -Padk test` 307 green · **Complexity**: Moderate · **Priority**: HIGH ·
 **Depends on**: J4 (report contract), J2 (ADK engine), J3 (connector tools) ·
 **Amends**: J4 (adds two enforceable rules to the validator and an id-uniqueness clause to
 the contract), J8 (its bounds inventory claims a per-call result cap on `TriageMateTools`
