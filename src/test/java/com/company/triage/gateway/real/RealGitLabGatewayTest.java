@@ -37,10 +37,21 @@ class RealGitLabGatewayTest {
 
     private record Fixture(RealGitLabGateway gateway, MockRestServiceServer server) {}
 
+    /** J18/GEC-2: the allowlist is a gateway-level bound now, so the gateway needs it. */
+    private static final com.company.triage.config.TriageProperties ALLOWLIST =
+            allowlistOf("order-payments/payment-service");
+
+    private static com.company.triage.config.TriageProperties allowlistOf(String... projects) {
+        var base = com.company.triage.config.TriagePropertiesFixture.deterministic();
+        return new com.company.triage.config.TriageProperties(base.engine(), base.writeback(),
+                base.orchestrator(), base.agent(), base.trigger(), base.servicenow(), base.sumo(),
+                new com.company.triage.config.TriageProperties.GitLab(java.util.List.of(projects)));
+    }
+
     private Fixture build() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        return new Fixture(new RealGitLabGateway(builder, PROPS), server);
+        return new Fixture(new RealGitLabGateway(builder, PROPS, ALLOWLIST), server);
     }
 
     /**

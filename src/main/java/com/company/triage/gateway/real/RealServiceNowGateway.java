@@ -175,7 +175,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         // Pass 1 — same configuration item, most recently resolved first.
         String ci = incident.configurationItem();
         if (ci != null && !ci.isBlank()) {
-            candidates.addAll(candidates(resolved + "^cmdb_ci.name=" + ci + RECENT_FIRST));
+            candidates.addAll(candidates(resolved + "^cmdb_ci.name=" + queryValue(ci) + RECENT_FIRST));
         }
 
         // Pass 2 — symptom terms, as an OR-group.
@@ -192,7 +192,7 @@ public class RealServiceNowGateway implements ServiceNowGateway {
         if (!terms.isEmpty()) {
             StringBuilder q = new StringBuilder(resolved);
             for (int i = 0; i < terms.size(); i++) {
-                q.append(i == 0 ? "^" : "^OR").append("short_descriptionLIKE").append(terms.get(i));
+                q.append(i == 0 ? "^" : "^OR").append("short_descriptionLIKE").append(queryValue(terms.get(i)));
             }
             candidates.addAll(candidates(q + RECENT_FIRST));
         }
@@ -445,6 +445,30 @@ public class RealServiceNowGateway implements ServiceNowGateway {
      * than by adding {@code sysparm_exclude_reference_link=true} to each query is deliberate:
      * the boundary owns the rule, so a future caller cannot silently re-open it.
      */
+    /**
+     * J18/GEC-3 — a value that could change the SHAPE of an encoded query is unrepresentable.
+     *
+     * <p>ServiceNow encoded queries are a little language: {@code ^} is AND, {@code ^OR} ORs
+     * with the preceding condition, {@code ^NQ} starts a new query, and {@code =} / {@code IN}
+     * are operators. Every value this gateway interpolates comes from the incident — its
+     * {@code cmdb_ci}, its subject line — which is text a reporter typed and, on a public-facing
+     * queue, text an outsider can influence.
+     *
+     * <p>A CI literally named {@code X^ORactive=true} would not be a syntax error; it would be
+     * a wider query that quietly returns rows the triage was never scoped to see. Nothing
+     * downstream could tell those rows from legitimate ones — they arrive through the same
+     * field, in the same shape.
+     *
+     * <p>Stripped rather than escaped, because the encoded-query grammar has no escape: there
+     * is no way to say "a literal caret" to ServiceNow. A CI whose real name contains a caret
+     * therefore searches slightly wrong, which is a visible miss; the alternative is a silently
+     * broadened query, which is not.
+     */
+    static String queryValue(String raw) {
+        if (raw == null) return "";
+        return raw.replaceAll("[\\^=<>!]", " ").replaceAll("\\s+", " ").trim();
+    }
+
     private static String text(JsonNode n, String field) {
         JsonNode v = n.get(field);
         if (v == null || v.isNull()) return null;
