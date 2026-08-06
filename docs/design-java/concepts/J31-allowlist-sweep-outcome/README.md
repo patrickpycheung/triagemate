@@ -1,6 +1,8 @@
 # J31 — Allowlist sweep outcome (the sweep must report what actually happened)
 
-**State**: 🟡 **Stable** (2026-08-06, Round 5 — ASO-4 decided, no open items) · **Complexity**: Moderate
+**State**: 🟢 **Built** (2026-08-06) — ASO-1…ASO-4 all shipped, with FND-89 (`emitStep` had no
+way to say a step failed) fixed as their prerequisite. 7 new tests, 6 of which were confirmed
+failing against the pre-change engine. · **Complexity**: Moderate
 **Depends on**: J30 (estate binding), J14/FRI-5 (per-call degradation), J6 (GitLab gateway contract)
 **Amends**: **J30/GEB-3** only (which specified the failed-vs-empty distinction for a single
 attempt, not for a sweep).
@@ -80,6 +82,14 @@ written to close it.
 
 ## Design
 
+> **As built (2026-08-06).** ASO-1 is `continue` in the sweep loop; ASO-2 is
+> [`SweepOutcome`](../../../../src/main/java/com/company/triage/orchestration/SweepOutcome.java),
+> which owns all five states and the phrasing for each; ASO-3 is
+> `SweepingGitLabGateway` (a double whose behaviour varies by project) plus
+> `RecordingTraceSink`; ASO-4 is one `emitStep` per attempt, which required FND-89's fix to
+> `emitStep` first. The sections below are the design as reasoned, kept for the why.
+
+
 ### ASO-1 — restore GEB-2: a failed project is skipped, the sweep continues
 
 `continue`, not `break`. This is **not a new rule** — it is GEB-2, implemented. J31 owns the
@@ -89,7 +99,7 @@ correction; J30 keeps the rule.
 
 A boolean cannot express a sweep. Replace `codeSearchFailed` with the attempt record —
 projects attempted, which succeeded, which failed and why — and derive the report line from
-it. **Four states, not two**:
+it. **Five states, not two**:
 
 | Outcome | The report must say |
 |---|---|

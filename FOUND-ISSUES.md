@@ -1,6 +1,6 @@
 # Found issues
 
-**Backlog: 1 open** (FND-89). FND-87 (Spring built the all-mock `ConnectorModeProvider`) and FND-88
+**Backlog: 0 open.** FND-89 was resolved on 2026-08-06 and moved to the archive. FND-87 (Spring built the all-mock `ConnectorModeProvider`) and FND-88
 (raw stack trace in the ServiceNow work note) were both resolved on 2026-08-06 and moved to
 the archive. FND-84a/85a/85/86 were all resolved on 2026-08-05 and moved to
 [`docs/audit/found-issues-archive.md`](docs/audit/found-issues-archive.md).
@@ -85,32 +85,3 @@ The two most consequential, both real bugs rather than doc drift:
 Full detail on all 32 resolved entries: `docs/audit/found-issues-archive.md`.
 
 ---
-
-## FND-89 — the deterministic engine never emits a `FAILED` trace step · **MEDIUM**
-
-**Where** — `DeterministicDiagnosisEngine.emitStep` (`:752-761`), the single funnel every
-deterministic trace row goes through. It calls `sink.after(new TraceStep(… StepState.DONE …))`
-unconditionally.
-
-**What** — `StepState.FAILED` appears **only** in `AdkDiagnosisEngine` (grep: five sites, all
-ADK). On the deterministic path no row can ever resolve `FAILED`, so a degraded connector is
-traced as a step that succeeded. The clearest instance is the GitLab failure line: its text
-says `COULD NOT SEARCH (GitLab unreachable)` while its state says `DONE`.
-
-**Why it matters** — J14/FRI-5 names three signals a degraded call must produce, and the third
-is explicit: *"the step's `TraceStep` resolves **`FAILED`**, not `DONE` … using `DONE` would
-make the trace assert a step succeeded when it did not — the honesty contract J11 is built
-on."* Signals 1 and 2 (the trace line, the `missingInformation` entry) shipped; signal 3 did
-not, on the very engine FRI-5 was written for — the FND-7 fallback, the thing that runs on
-stage when the agent fails. J11/LT5 maps `FAILED` to a `fail` visual, so the live trace shows
-a degraded run in the same colour as a clean one.
-
-**Not a one-liner, hence an entry.** `emitStep` is called from ten sites and has no state
-parameter; adding one is a signature change plus a decision about which existing call sites
-are failure-carrying. That decision is already owned by **J31/ASO-4** (which requires the
-sweep's aggregate row to be `FAILED` when no attempt succeeded) — this entry exists so the
-gap is tracked as a *defect in shipped code*, not only as a design item inside a proposed card.
-
-**Escape** — `contract-partial-implementation`: a design item with three named signals was
-recorded as done when two of the three landed. Nothing checks that a multi-part rule is
-implemented in full, and the two visible signals made the third's absence invisible.
