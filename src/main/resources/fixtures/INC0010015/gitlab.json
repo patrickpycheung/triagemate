@@ -21,32 +21,32 @@
   ],
   "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/addressservice.java": [
     {
-      "name": "VELA, Carl",
-      "handle": "carl.vela2@auspost.com.au",
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "signal": "last touched 2025-06-27T01:00:09.000+00:00 (nothing since 1.9.0)"
     },
     {
-      "name": "voc4",
-      "handle": "chuong.vo4@auspost.com.au",
+      "name": "nguyd3",
+      "handle": "daniel.nguyen3@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "signal": "last touched 2023-02-21T11:21:05.000+11:00 (nothing since 1.9.0)"
     },
     {
-      "name": "bharatias",
-      "handle": "sanjay.bharatia@auspost.com.au",
+      "name": "kaurp",
+      "handle": "priya.kaur@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "signal": "last touched 2022-11-02T13:41:22.000+11:00 (nothing since 1.9.0)"
     },
     {
-      "name": "narayanad",
-      "handle": "divya.narayanan@auspost.com.au",
+      "name": "reddya",
+      "handle": "anita.reddy@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/AddressService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/AddressService.java",
@@ -55,32 +55,32 @@
   ],
   "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/roundservice.java": [
     {
-      "name": "Chuong VO",
-      "handle": "chuong.vo4@auspost.com.au",
+      "name": "Daniel NGUYEN",
+      "handle": "daniel.nguyen3@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "signal": "last touched 2026-05-12T15:57:34.000+10:00 (nothing since 1.9.0)"
     },
     {
-      "name": "VELA, Carl",
-      "handle": "carl.vela2@auspost.com.au",
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "signal": "last touched 2025-06-27T01:00:09.000+00:00 (nothing since 1.9.0)"
     },
     {
-      "name": "David Howe",
-      "handle": "david.howe@auspost.com.au",
+      "name": "Michael Grant",
+      "handle": "michael.grant@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "signal": "last touched 2022-12-09T10:03:42.000+11:00 (nothing since 1.9.0)"
     },
     {
-      "name": "bharatias",
-      "handle": "sanjay.bharatia@auspost.com.au",
+      "name": "kaurp",
+      "handle": "priya.kaur@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/service/RoundService.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/service/RoundService.java",
@@ -89,8 +89,8 @@
   ],
   "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/web/controller/rest/snapsendsolverestcontrollerv1.java": [
     {
-      "name": "VELA, Carl",
-      "handle": "carl.vela2@auspost.com.au",
+      "name": "MARSH, Owen",
+      "handle": "owen.marsh2@example.com",
       "source": "gitlab",
       "reason": "last changed src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
       "link": "enterprise/parcel-systems/applications/delivery-hazards/src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
