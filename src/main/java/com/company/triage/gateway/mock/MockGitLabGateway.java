@@ -30,6 +30,13 @@ public class MockGitLabGateway implements GitLabGateway {
         this(FixtureStore.none(), new FixtureSession());
     }
 
+    /**
+     * @Autowired is LOAD-BEARING, not decoration. With two constructors and no
+     * annotation Spring picks the NO-ARG one, which wires FixtureStore.none() — every
+     * fixture lookup then misses and a recorded incident comes back "incident not
+     * found". Silent, and invisible to unit tests, which construct explicitly.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public MockGitLabGateway(FixtureStore fixtures, FixtureSession session) {
         this.fixtures = fixtures;
         this.session = session;

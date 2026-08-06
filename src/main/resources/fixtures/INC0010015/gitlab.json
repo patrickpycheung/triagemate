@@ -1,0 +1,21 @@
+{
+  "searchCode|enterprise/parcel-systems/applications/delivery-hazards&dataintegrityviolationexception" : [ {
+    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
+    "filePath" : "src/main/java/au/com/auspost/hazards/service/AddressService.java",
+    "line" : 6,
+    "snippet" : "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\nimport org.springframework.transaction.annotation.Transactional;\n"
+  }, {
+    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
+    "filePath" : "src/main/java/au/com/auspost/hazards/service/RoundService.java",
+    "line" : 8,
+    "snippet" : "import org.springframework.cache.annotation.CacheEvict;\nimport org.springframework.cache.annotation.Cacheable;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.stereotype.Service;\n\n"
+  }, {
+    "project" : "enterprise/parcel-systems/applications/delivery-hazards",
+    "filePath" : "src/main/java/au/com/auspost/hazards/web/controller/rest/SnapSendSolveRestControllerV1.java",
+    "line" : 18,
+    "snippet" : "import lombok.extern.slf4j.Slf4j;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.dao.DataIntegrityViolationException;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.ResponseEntity;\n"
+  } ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/addressservice.java" : [ ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/service/roundservice.java" : [ ],
+  "recentCommitters|enterprise/parcel-systems/applications/delivery-hazards&src/main/java/au/com/auspost/hazards/web/controller/rest/snapsendsolverestcontrollerv1.java" : [ ]
+}
