@@ -104,8 +104,9 @@ class RealGitLabGatewayLiveTest {
         var endpoint = new IntegrationProperties.Endpoint(
                 p.getProperty("triage.integrations.gitlab.base-url"), null, null,
                 p.getProperty("triage.integrations.gitlab.token"));
+        var base = com.company.triage.config.TriagePropertiesFixture.deterministic();
         return new RealGitLabGateway(RestClient.builder(),
-                new IntegrationProperties(null, null, null, endpoint));
+                new IntegrationProperties(null, null, null, endpoint), base);
     }
 
     /**

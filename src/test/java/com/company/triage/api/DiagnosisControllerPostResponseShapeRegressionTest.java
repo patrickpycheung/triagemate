@@ -119,7 +119,7 @@ class DiagnosisControllerPostResponseShapeRegressionTest {
                 DiagnosisResult.Engine.DETERMINISTIC, true, List.of());
         when(orchestrator.run(anyString())).thenReturn(sampleResult);
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isOk())
                 .andExpect(content().json(EXPECTED_JSON, true)); // strict: no extra/missing fields
     }

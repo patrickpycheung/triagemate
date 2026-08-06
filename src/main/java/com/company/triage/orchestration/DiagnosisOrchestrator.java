@@ -108,7 +108,7 @@ public class DiagnosisOrchestrator {
                                  @Qualifier("deterministicDiagnosisEngine") DiagnosisEngine fallbackEngine,
                                  ServiceNowGateway serviceNow,
                                  TriageProperties props) {
-        this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry());
+        this(engine, fallbackEngine, serviceNow, props, new InMemoryRunTraceRegistry(props));
     }
 
     /**
@@ -165,6 +165,15 @@ public class DiagnosisOrchestrator {
      * contact a model — the exact opposite of what the FND-49 WARN above says at the same
      * moment. Same identity comparison FND-49 uses, exposed so K1 doesn't need its own.
      */
+    /**
+     * J20/STV-1: the connector modes this orchestrator is ACTUALLY using — resolved once at
+     * construction from {@code ConnectorModeProvider}, i.e. from which beans wired, not from
+     * the properties that asked for them.
+     */
+    public java.util.Map<String, String> connectorModes() {
+        return connectors;
+    }
+
     public boolean isAdkActuallyActive() {
         return engine != fallbackEngine;
     }
@@ -310,19 +319,42 @@ public class DiagnosisOrchestrator {
         // writebackPosted reports false, and the diagnosis itself is still returned.
         boolean writebackPosted = false;
         if (props.writeback().enabled()) {
+            // J17/PCS-3: delivery outcome is tracked PER CALL, not as one boolean. The old
+            // shape wrapped both posts in one try, so a failure on the second left
+            // writebackPosted=false while the first comment WAS on the ticket. Anything
+            // retrying off that boolean would repost the sources note — and the trace could
+            // only say "at most one of the two may have posted", which is not a fact anyone
+            // can act on.
+            boolean sourcesPosted = false;
             try {
                 // Automatic, advisory, two comments — sources first so the diagnosis is auditable.
                 serviceNow.addWorkNote(incidentNumber, result.report().toSourcesNote());
                 result.trace().add("servicenow.addWorkNote → posted 'Sources consulted' comment");
+                sourcesPosted = true;
+            } catch (RuntimeException e) {
+                log.warn("writeback for {}: 'Sources consulted' comment failed ({}: {})",
+                        incidentNumber, e.getClass().getSimpleName(), e.getMessage());
+                result.trace().add("⚠ 'Sources consulted' comment did NOT post (%s: %s)"
+                        .formatted(e.getClass().getSimpleName(), e.getMessage()));
+            }
+            boolean diagnosisPosted = false;
+            try {
                 serviceNow.addWorkNote(incidentNumber, result.report().toDiagnosisNote());
                 result.trace().add("servicenow.addWorkNote → posted 'First-pass diagnosis' comment (advisory)");
-                writebackPosted = true;
+                diagnosisPosted = true;
             } catch (RuntimeException e) {
-                log.warn("writeback for {} failed partway through ({}: {}) — diagnosis still returned",
+                log.warn("writeback for {}: 'First-pass diagnosis' comment failed ({}: {})",
                         incidentNumber, e.getClass().getSimpleName(), e.getMessage());
-                result.trace().add("⚠ writeback failed partway through (%s: %s) — at most one of the two "
-                        .formatted(e.getClass().getSimpleName(), e.getMessage())
-                        + "advisory comments may have posted; diagnosis itself is unaffected");
+                result.trace().add("⚠ 'First-pass diagnosis' comment did NOT post (%s: %s)"
+                        .formatted(e.getClass().getSimpleName(), e.getMessage()));
+            }
+            // The diagnosis note is the one that carries the value. Sources alone is a
+            // citation list with nothing to cite for, so "delivered" means the diagnosis
+            // reached the ticket; a lost sources note is degraded, not undelivered.
+            writebackPosted = diagnosisPosted;
+            if (diagnosisPosted && !sourcesPosted) {
+                result.trace().add("⚠ diagnosis posted without its sources comment — the note's "
+                        + "\"Sources are in the comment above\" line has nothing to point at");
             }
         } else {
             result.trace().add("writeback disabled (triage.writeback.enabled=false) — comments not posted");

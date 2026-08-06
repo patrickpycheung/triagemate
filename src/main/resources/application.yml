@@ -34,6 +34,22 @@ server:
   #   - the run scripts detect it and fall back to 8080 with a printed note;
   #   - the e2e suite passes --server.port=8080 explicitly (tests must never need root).
   port: 80
+  # J21/NEP-1: the trust boundary is the MACHINE, not the subnet. This endpoint writes
+  # advisory comments to a REAL ServiceNow ticket whenever triage.connectors.servicenow=real,
+  # and without this line anything that can reach the laptop over the office wifi can fire it.
+  #
+  # Nothing legitimate loses reach: the startup banner prints http://localhost, the friendly
+  # hostname is a hosts-file entry mapping to 127.0.0.1 (the app never binds it), and the e2e
+  # suite drives http://localhost:{port}, which IS this interface.
+  #
+  # Hazard: server.address takes ONE InetAddress, so this binds 127.0.0.1 and not ::1. On a
+  # host where localhost resolves IPv6-first, a client that does not fall back across resolved
+  # addresses will fail to connect. The e2e test is the canary; the fix is to target 127.0.0.1
+  # explicitly, NOT to widen the bind.
+  #
+  # Rejected: a firewall rule. It lives outside the repo, does not travel with a git clone,
+  # and cannot be asserted by a test.
+  address: 127.0.0.1
 
 triage:
   # Cosmetic demo convenience — pre-fills the incident-number field in the browser so

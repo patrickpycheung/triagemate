@@ -38,17 +38,39 @@ public class RealGitLabGateway implements GitLabGateway {
      * so a test can bind a {@code MockRestServiceServer} to it. Without that seam this gateway
      * had <b>zero</b> tests — which is how the double-encoded project id below survived.
      */
-    public RealGitLabGateway(RestClient.Builder builder, IntegrationProperties props) {
+    public RealGitLabGateway(RestClient.Builder builder, IntegrationProperties props,
+                             com.company.triage.config.TriageProperties triageProps) {
         var gl = props.gitlab();
         this.http = builder
                 .baseUrl(gl.baseUrl())
                 .defaultHeader("PRIVATE-TOKEN", gl.token())
                 .defaultHeader("Accept", "application/json")
                 .build();
+        // J18/GEC-2: the allowlist lives HERE, at the boundary it protects, not at each
+        // caller. It used to be checked in TriageMateTools.searchCode only — so
+        // find_recent_committers, which takes a project id from the model just the same, went
+        // straight through unchecked. A bound enforced per-caller is a bound that holds only
+        // for the callers someone remembered.
+        this.allowedProjects = triageProps.gitlab().allowedProjects();
+    }
+
+    private final List<String> allowedProjects;
+
+    /**
+     * J18/GEC-2 + GEC-4 — every method that takes a project id passes through here, so a new
+     * caller (or a new gateway method) cannot silently skip the bound: it has to hold a project
+     * id, and holding one means coming through this check.
+     */
+    private void requireAllowlisted(String project) {
+        if (allowedProjects == null || !allowedProjects.contains(project)) {
+            throw new IllegalArgumentException("project not allowlisted: " + project
+                    + " (triage.gitlab.allowed-projects)");
+        }
     }
 
     @Override
     public List<CodeSearchResult> searchCode(String project, String searchTerm) {
+        requireAllowlisted(project);
         log.info("[GitLab] searching {} for code matching \"{}\"", project, searchTerm);
         // J22: pass the RAW project id as a URI VARIABLE and let the UriBuilder encode it
         // exactly once. This used to pre-encode with URLEncoder (group/name -> group%2Fname)
@@ -83,6 +105,7 @@ public class RealGitLabGateway implements GitLabGateway {
      */
     @Override
     public List<Contact> recentCommitters(String project, String filePath) {
+        requireAllowlisted(project);   // J18/GEC-2: the bypass this card exists to close
         log.info("[GitLab] looking up recent committers for {}:{}", project, filePath);
         try {
             // 1. newest tag → its committed date (the "last release" boundary)

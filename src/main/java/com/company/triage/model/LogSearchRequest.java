@@ -32,9 +32,33 @@ public record LogSearchRequest(
         if (index != null && !index.isBlank()) {
             sb.append(" and _index=").append(index);
         }
-        if (query != null && !query.isBlank()) {
-            sb.append(' ').append(query);
+        String term = safeTerm(query);
+        if (!term.isEmpty()) {
+            sb.append(' ').append(term);
         }
         return sb.toString();
+    }
+
+    /**
+     * J18/GEC-5 — the search term may narrow the app-composed scope, never widen it.
+     *
+     * <p>{@code _sourceCategory} above is composed by the app from a project slug and an
+     * allowlisted environment, precisely so the model cannot choose where to look. That bound
+     * is only as strong as what follows it: this is one query string, and in Sumo's search
+     * expression a bare {@code or} rejoins at the top level. A term of
+     * {@code or _sourceCategory=*} would turn a scoped search into an estate-wide one, through
+     * a parameter whose whole purpose is to filter <em>within</em> the scope.
+     *
+     * <p>Constrained here rather than in the instruction, because FND-44 already records that
+     * prompt-only guardrails are prompt-only. A term is one bare token — the shape of an error
+     * code, a logger name or an identifier, which is everything this parameter is for.
+     * Anything else is dropped, and dropping degrades the search to the scope alone rather
+     * than failing the run: a broader-than-intended search of the RIGHT scope is a weaker
+     * result, not an unsafe one.
+     */
+    static String safeTerm(String rawQuery) {
+        if (rawQuery == null || rawQuery.isBlank()) return "";
+        String trimmed = rawQuery.trim();
+        return trimmed.matches("[A-Za-z0-9_.:\\-]+") ? trimmed : "";
     }
 }

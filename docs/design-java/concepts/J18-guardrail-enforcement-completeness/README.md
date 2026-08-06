@@ -1,6 +1,6 @@
 # J18 — Guardrail Enforcement Completeness (a bound is owned by the boundary, not by the caller)
 
-**State**: 🔴 Designed, not built · **Complexity**: Moderate ·
+**State**: 🟡 **Mostly built** (2026-08-06) — GEC-1/GEC-2 (allowlist moved to the gateway boundary, closing the find_recent_committers bypass), GEC-3 (encoded-query values sanitised) and GEC-4 (reflection-driven escape test) landed. **GEC-5 landed 2026-08-06** for the Sumo half — the model term is constrained where the query is built (a bare token, else dropped), so it can narrow within the app-composed scope but never widen it. The Confluence half is still an open one-look check. **GEC-6** is already covered by J13/ECI-4 (MAX_CODE_EVIDENCE) · **Complexity**: Moderate ·
 **Priority**: MEDIUM ·
 **Depends on**: J2 (agent + `BoundsCallback`), J5 (ServiceNow gateway), J6 (tools), J8 (guardrails) ·
 **Amends**: J8 (the three-layer bounds inventory — one of its two claims is per-*tool*, not

@@ -56,15 +56,61 @@ public class BoundsCallback {
      *         the wrong name shouldn't also cost the run one of its allowed calls.
      */
     public boolean allow(String toolName) {
+        return deny(toolName).isEmpty();   // J19/ICF-4: one implementation, two shapes
+    }
+
+    /**
+     * J19/ICF-4 — why a call was refused, as a value rather than something re-derived.
+     *
+     * <p>{@link #allow} returned a bare boolean and callers recovered the reason by calling
+     * {@link #denialReason}, which re-runs the same conditions. Two copies of one decision,
+     * and the model-facing message could only ever be generic because the caller did not know
+     * which had fired.
+     *
+     * <p>That genericness has a cost. An allowlist rejection means "not THAT tool — pick
+     * another"; budget exhaustion means "no tool, ever again, on this run". Telling a model
+     * the first when the second is true invites it to keep trying, and every retry is refused
+     * identically until the run ends with no report.
+     */
+    public enum Cause {
+        /** Wrong name. Other tools remain available; switching is the right response. */
+        ALLOWLIST,
+        /** The run is out of calls. NO tool will succeed again — conclude with what you have. */
+        BUDGET
+    }
+
+    /** A refusal and its cause (J19/ICF-4). */
+    public record Denial(Cause cause, String reason) {}
+
+    /**
+     * J19/ICF-4 — the typed form of {@link #allow}. Empty means permitted.
+     *
+     * <p>Shares one implementation with {@code allow} rather than duplicating the conditions,
+     * so the two can never disagree about the same call.
+     */
+    public java.util.Optional<Denial> deny(String toolName) {
         if (!allowedTools.isEmpty() && (toolName == null || !allowedTools.contains(toolName))) {
             deniedAttempts.incrementAndGet();
-            return false;
+            return java.util.Optional.of(new Denial(Cause.ALLOWLIST,
+                    "tool '" + toolName + "' is not in the app's allowlist " + allowedTools));
         }
-        boolean withinBudget = calls.incrementAndGet() <= maxToolCalls;
-        if (!withinBudget) {
+        if (calls.incrementAndGet() > maxToolCalls) {
             deniedAttempts.incrementAndGet();
+            return java.util.Optional.of(new Denial(Cause.BUDGET,
+                    "max tool calls (" + maxToolCalls + ") exceeded"));
         }
-        return withinBudget;
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * J19/ICF-4 — what the MODEL is told, derived from the cause. Only the wording differs;
+     * the decision is the same one.
+     */
+    public static String modelFacingMessage(Denial denial, int maxToolCalls) {
+        return denial.cause() == Cause.ALLOWLIST
+                ? denial.reason()
+                : "the tool-call budget for this run (" + maxToolCalls + ") is exhausted; do not "
+                        + "call ANY tool again — produce the JSON report now from what you have.";
     }
 
     /** True when this instance actually enforces an allowlist (vs budget only). */

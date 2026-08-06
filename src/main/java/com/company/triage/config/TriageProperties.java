@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -140,19 +141,47 @@ public record TriageProperties(
 
     /** {@code triage.sumo.*} — the Sumo Logic bound (FND-20/38, J6/J8). */
     public record Sumo(
-            String sourceCategoryPattern,
-            java.util.Map<String, String> sourceCategoryOverrides,
+            // J20/STV-3: if a field's absence throws anywhere downstream, it is validated at
+            // the boundary. This record's own javadoc already promised "fail before serving a
+            // single request"; these three were simply never brought along.
+            @NotNull String sourceCategoryPattern,          // sourceCategoryFor calls .replace unguarded
+            java.util.Map<String, String> sourceCategoryOverrides,   // genuinely optional
             String index,
-            List<String> allowedEnvironments,
+            @NotNull @NotEmpty List<String> allowedEnvironments,
             @Min(1) int maxResults,
             @Min(1) int maxWindowMinutes
     ) {
+        /**
+         * J20/STV-3: {@code null} overrides become an empty map, because this one IS optional
+         * and {@link #sourceCategoryFor} already handles its absence. Normalising here is safe
+         * precisely because absence has a defined meaning — unlike the allowlists, where it
+         * does not.
+         */
+        public Sumo {
+            if (sourceCategoryOverrides == null) sourceCategoryOverrides = java.util.Map.of();
+        }
         /**
          * Composes the {@code _sourceCategory} for a project + environment. The model never
          * supplies a category directly — it supplies these two fields and the app builds the
          * rest, so an off-convention or wildcard category is unrepresentable rather than
          * merely rejected. A per-project override wins over the default pattern.
          */
+        /**
+         * J19/ICF-1 — the ONE derivation of the fallback environment, shared by both engines.
+         *
+         * <p>It previously existed twice: computed here-ish in {@code DeterministicDiagnosisEngine}
+         * (prod if allowlisted, else the first entry) and written into the ADK instruction as the
+         * literal word "prod". Those agree only while {@code prod} is in the allowlist. A
+         * deployment whose environments are {@code staging, uat} would have the deterministic
+         * engine correctly fall back to {@code staging} while the model was still being told to
+         * use {@code prod} — a value the app then rejects, burning a tool call from its budget on
+         * a guaranteed exception.
+         */
+        public String defaultEnvironment() {
+            if (allowedEnvironments == null || allowedEnvironments.isEmpty()) return "prod";
+            return allowedEnvironments.contains("prod") ? "prod" : allowedEnvironments.get(0);
+        }
+
         public String sourceCategoryFor(String projectSlug, String environment) {
             String pattern = sourceCategoryOverrides == null
                     ? sourceCategoryPattern
@@ -163,6 +192,18 @@ public record TriageProperties(
         }
     }
 
-    /** {@code triage.gitlab.*} — the GitLab project allowlist (FND-38, J6/J8). */
-    public record GitLab(List<String> allowedProjects) {}
+    /**
+     * {@code triage.gitlab.*} — the GitLab project allowlist (FND-38, J6/J8).
+     *
+     * <p>J20/STV-3: {@code @NotEmpty} is the load-bearing half and it is a DECISION, not a
+     * nicety. An empty allowlist is representable and means <em>deny everything</em> — a
+     * silently zero-capability run, which is the same "looks fine, does nothing" failure this
+     * card exists to kill. A deployment that genuinely wants no code search sets
+     * {@code triage.connectors.gitlab=mock}, which is the knob that already exists for it.
+     *
+     * <p>Rejected: normalising {@code null → List.of()} in a compact constructor. It makes the
+     * app boot on a config that cannot work, and moves the diagnosis from a named property in
+     * a startup error to "why did search_code reject everything?" an hour later.
+     */
+    public record GitLab(@NotNull @NotEmpty List<String> allowedProjects) {}
 }

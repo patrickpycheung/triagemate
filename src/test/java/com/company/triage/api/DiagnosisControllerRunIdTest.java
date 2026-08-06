@@ -69,7 +69,7 @@ class DiagnosisControllerRunIdTest {
     void headerAbsentCallsSingleArgRunOverload() throws Exception {
         when(orchestrator.run(anyString())).thenReturn(sampleResult());
 
-        mvc.perform(post("/api/diagnose/INC0010005"))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isOk());
 
         verify(orchestrator).run("INC0010005");
@@ -80,7 +80,7 @@ class DiagnosisControllerRunIdTest {
     void headerPresentCallsTwoArgRunOverloadWithTheRunId() throws Exception {
         when(orchestrator.run(anyString(), anyString())).thenReturn(sampleResult());
 
-        mvc.perform(post("/api/diagnose/INC0010005")
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1")
                         .header("X-Triage-Run-Id", "11111111-1111-1111-1111-111111111111"))
                 .andExpect(status().isOk());
 
@@ -92,7 +92,7 @@ class DiagnosisControllerRunIdTest {
     void blankHeaderIsTreatedAsAbsent() throws Exception {
         when(orchestrator.run(anyString())).thenReturn(sampleResult());
 
-        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Run-Id", "   "))
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1").header("X-Triage-Run-Id", "   "))
                 .andExpect(status().isOk());
 
         verify(orchestrator).run("INC0010005");
@@ -104,15 +104,41 @@ class DiagnosisControllerRunIdTest {
         when(orchestrator.run(eq("INC0010005"))).thenReturn(sampleResult());
         when(orchestrator.run(eq("INC0010005"), anyString())).thenReturn(sampleResult());
 
-        String withoutHeader = mvc.perform(post("/api/diagnose/INC0010005"))
+        String withoutHeader = mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        String withHeader = mvc.perform(post("/api/diagnose/INC0010005")
+        String withHeader = mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1")
                         .header("X-Triage-Run-Id", "22222222-2222-2222-2222-222222222222"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
         org.assertj.core.api.Assertions.assertThat(withHeader).isEqualTo(withoutHeader);
+    }
+
+    /**
+     * J21/NEP-2 — the mutating endpoint requires {@code X-Triage-Local}.
+     *
+     * <p>Not an authenticator: the value is not secret and nothing checks it. It is a
+     * <b>same-origin proof</b>. Because the header is non-safelisted, a cross-origin
+     * {@code fetch} must first send an {@code OPTIONS} preflight, and this app publishes no
+     * CORS configuration — so no {@code Access-Control-Allow-Headers} comes back and the
+     * browser never sends the POST at all.
+     *
+     * <p>Defence in depth behind NEP-1's loopback bind, not a substitute for it. The bind
+     * stops another machine; this stops a browser ON the machine being used as a confused
+     * deputy by whatever page the presenter happens to have open. This endpoint writes
+     * advisory comments to a REAL ServiceNow ticket whenever the connector is live.
+     */
+    @Test
+    void theMutatingEndpointIsRejectedWithoutTheLocalMarkerHeader() throws Exception {
+        mvc.perform(post("/api/diagnose/INC0010005"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void theSameRequestSucceedsWithIt() throws Exception {
+        mvc.perform(post("/api/diagnose/INC0010005").header("X-Triage-Local", "1"))
+                .andExpect(status().isOk());
     }
 }

@@ -1,6 +1,6 @@
 # J23 — Live UI Honesty (the honesty contract holds in every UI state)
 
-**State**: 🔴 Designed, not built · **Complexity**: Simple ·
+**State**: 🟡 **Mostly built** (2026-08-06) — LUH-1 (caption owned by the state, settled at the transition), LUH-2 (a finished live run stops claiming steps are arriving) and LUH-4 (one branch per engine; a degraded run is no longer described as offline, and no engine value inherits a network claim through an else) landed. **Remaining: LUH-3** (provenance in the live window) · **Complexity**: Simple ·
 **Priority**: LOW ·
 **Depends on**: J7 (UI), J11 (LT3/LT4/LT7) ·
 **Amends**: J11 (LT4's caption is not terminal-state-correct; LT7's chips are final-render-only and
