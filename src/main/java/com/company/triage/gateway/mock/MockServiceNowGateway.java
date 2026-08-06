@@ -45,6 +45,8 @@ public class MockServiceNowGateway implements ServiceNowGateway {
     private static final String G = "servicenow";
     private final FixtureStore fixtures;
     private final FixtureSession session;
+    /** Simulated network delay — see {@link MockLatency}. */
+    private final MockLatency latency;
 
     /** Recorded incident replayed under an unrecorded number; blank restores FND-54. */
     @org.springframework.beans.factory.annotation.Value("${triage.connectors.mock-stand-in:}")
@@ -52,7 +54,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockServiceNowGateway() {
-        this(FixtureStore.none(), new FixtureSession());
+        this(FixtureStore.none(), new FixtureSession(), MockLatency.none());
     }
 
     /**
@@ -62,9 +64,10 @@ public class MockServiceNowGateway implements ServiceNowGateway {
      * found". Silent, and invisible to unit tests, which construct explicitly.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public MockServiceNowGateway(FixtureStore fixtures, FixtureSession session) {
+    public MockServiceNowGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency) {
         this.fixtures = fixtures;
         this.session = session;
+        this.latency = latency;
     }
 
     /** One-shot: lets the offline K1 poller see a single "new" incident. See below. */
@@ -91,6 +94,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public IncidentContext getIncident(String number) {
+        latency.pause();   // stand in for the network the real connector crosses
         // FND-54: previously this echoed ANY number into the seeded context, so a typo on
         // stage returned HTTP 200 with a complete, confident diagnosis of the payment-reconcile
         // bug headed with an incident that does not exist — writeback logged, trace full, no
@@ -231,6 +235,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
+        latency.pause();   // stand in for the network the real connector crosses
         // The SESSION, not incident.number(): under a stand-in the context deliberately
         // carries the number the operator typed, while the recordings are filed under the
         // stand-in's. Keying off the context here would miss every fixture and silently fall
@@ -275,6 +280,7 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public Optional<ServiceOwnership> findOwnership(String applicationName) {
+        latency.pause();   // stand in for the network the real connector crosses
         // Recorded as the unwrapped value, so an absent CMDB entry replays as a real absence
         // (null → Optional.empty) rather than as "no fixture, fall back to the demo answer".
         if (fixtures.hasIncident(session.current())) {

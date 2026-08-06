@@ -91,6 +91,23 @@ triage:
     # Blank restores the strict FND-54 behaviour exactly — unknown number, 404, no stand-in.
     mock-stand-in: INC0010015
 
+    # MOCK ONLY — a random pause before each mock connector answers, uniform in
+    # [min-ms, max-ms], drawn independently per call.
+    #
+    # The mocks answer in microseconds, which is not what any of the four real systems does.
+    # On stage that made the whole run finish before the eye could follow it, so the live
+    # trace — the thing the demo is showing — arrived as a finished block instead of as work
+    # happening. It also hid timing: the fixture-latch race (two runs sharing one session)
+    # only reproduced because real HTTP left a window that microsecond mocks never did.
+    #
+    # Sized against the measured real deterministic run: ~16s wall clock over ~12 connector
+    # calls. These bounds give ~1.4-4.8s over the same 12 calls — the same SHAPE, faster than
+    # life, which is what a demo wants. Raise toward 800-1500 to rehearse against real-world
+    # pacing; set max-ms to 0 to disable entirely (what the unit tests use).
+    mock-latency:
+      min-ms: 120
+      max-ms: 400
+
   # engine: 'deterministic' (default, offline, no LLM) | 'adk' (live agent, -Padk build)
   engine: deterministic
 

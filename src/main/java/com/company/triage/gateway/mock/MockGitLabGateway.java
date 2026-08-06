@@ -24,10 +24,12 @@ public class MockGitLabGateway implements GitLabGateway {
     private static final String G = "gitlab";
     private final FixtureStore fixtures;
     private final FixtureSession session;
+    /** Simulated network delay — see {@link MockLatency}. */
+    private final MockLatency latency;
 
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockGitLabGateway() {
-        this(FixtureStore.none(), new FixtureSession());
+        this(FixtureStore.none(), new FixtureSession(), MockLatency.none());
     }
 
     /**
@@ -37,13 +39,15 @@ public class MockGitLabGateway implements GitLabGateway {
      * found". Silent, and invisible to unit tests, which construct explicitly.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public MockGitLabGateway(FixtureStore fixtures, FixtureSession session) {
+    public MockGitLabGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency) {
         this.fixtures = fixtures;
         this.session = session;
+        this.latency = latency;
     }
 
     @Override
     public List<CodeSearchResult> searchCode(String project, String searchTerm) {
+        latency.pause();   // stand in for the network the real connector crosses
         fixtures.requireCapturedOrUnavailable(session.current(), G, "GitLab");
         if (fixtures.hasIncident(session.current())) {
             return fixtures.<List<CodeSearchResult>>find(session.current(), G, "searchCode",
@@ -64,6 +68,7 @@ public class MockGitLabGateway implements GitLabGateway {
     /** Recent committers to the implicated file since the last release (J9). */
     @Override
     public List<Contact> recentCommitters(String project, String filePath) {
+        latency.pause();   // stand in for the network the real connector crosses
         fixtures.requireCapturedOrUnavailable(session.current(), G, "GitLab");
         if (fixtures.hasIncident(session.current())) {
             return fixtures.<List<Contact>>find(session.current(), G, "recentCommitters",

@@ -28,10 +28,12 @@ public class MockConfluenceGateway implements ConfluenceGateway {
     private static final String G = "confluence";
     private final FixtureStore fixtures;
     private final FixtureSession session;
+    /** Simulated network delay — see {@link MockLatency}. */
+    private final MockLatency latency;
 
     /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
     public MockConfluenceGateway() {
-        this(FixtureStore.none(), new FixtureSession());
+        this(FixtureStore.none(), new FixtureSession(), MockLatency.none());
     }
 
     /**
@@ -41,13 +43,15 @@ public class MockConfluenceGateway implements ConfluenceGateway {
      * found". Silent, and invisible to unit tests, which construct explicitly.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public MockConfluenceGateway(FixtureStore fixtures, FixtureSession session) {
+    public MockConfluenceGateway(FixtureStore fixtures, FixtureSession session, MockLatency latency) {
         this.fixtures = fixtures;
         this.session = session;
+        this.latency = latency;
     }
 
     @Override
     public List<KnowledgeDoc> search(String query) {
+        latency.pause();   // stand in for the network the real connector crosses
         fixtures.requireCapturedOrUnavailable(session.current(), G, "Confluence");
         if (fixtures.hasIncident(session.current())) {
             return fixtures.<List<KnowledgeDoc>>find(session.current(), G, "search",
@@ -75,6 +79,7 @@ public class MockConfluenceGateway implements ConfluenceGateway {
     /** Who authored / last edited the cited runbook (J9). */
     @Override
     public List<Contact> contributors(KnowledgeDoc doc) {
+        latency.pause();   // stand in for the network the real connector crosses
         fixtures.requireCapturedOrUnavailable(session.current(), G, "Confluence");
         if (fixtures.hasIncident(session.current())) {
             return fixtures.<List<Contact>>find(session.current(), G, "contributors",

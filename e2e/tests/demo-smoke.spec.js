@@ -15,9 +15,20 @@ async function diagnose(page, number) {
   if (number !== null) await page.fill('#inc', number);
   const typed = await page.inputValue('#inc');
   await page.click('#go');
-  await page.waitForSelector('.card', { timeout: 30_000 });
-  await page.waitForTimeout(4000);          // let the progressive trace finish
-  return { typed, body: await page.textContent('body') };
+  // Wait for the RESULT, not for a fixed interval. '.card' appears instantly — it is also
+  // the "Investigating…" placeholder — and the mock connectors now take a randomised
+  // 120-400ms each (triage.connectors.mock-latency), so a run lands around 3-5s and any
+  // sleep long enough today is a flake waiting for a slower machine.
+  //
+  // Scoped to #out, NOT document.body: the page's <script> is inside <body>, so
+  // body.textContent contains the SOURCE too — including the literal 'Investigating…' and
+  // every other string the code mentions. A body-wide check can never go false, and a
+  // body-wide assertion tests the source rather than the screen.
+  await page.waitForFunction(
+      () => !document.getElementById('out').textContent.includes('Investigating'),
+      null, { timeout: 60_000 });
+  await page.waitForTimeout(500);           // let the last trace rows paint
+  return { typed, body: await page.textContent('#out') };
 }
 
 test('the pre-filled incident diagnoses with real Delivery Hazards evidence', async ({ page }) => {
