@@ -1866,3 +1866,53 @@ so a source without that rule configured would otherwise reopen the identical ho
   was never asserted.
 
 ---
+
+## FND-87 — Spring built the all-mock `ConnectorModeProvider`, so the banner said `mock` on a fully-real run · **HIGH**
+
+**Where**: `src/main/java/com/company/triage/config/ConnectorModeProvider.java` — two public
+constructors, neither annotated.
+
+**What**: the class has an `Environment`-reading constructor and a no-arg convenience
+constructor for unit tests that hardcodes all four connectors to `"mock"`. Spring's
+constructor-resolution rule is that a component with several constructors and **no**
+`@Autowired` marker falls back to the **no-arg** one. Spring therefore built the all-mock
+instance on every run, and the constructor that reads config was dead code from the moment
+the no-arg one was added.
+
+**Why it matters**: the startup banner's `connectors:` line and the UI's LT7 provenance chips
+both read from here. Verified against the live estate 2026-08-06, running
+`SPRING_PROFILES_ACTIVE=real`:
+
+| source | said |
+|---|---|
+| Spring condition report | `RealConfluenceGateway matched`, `MockConfluenceGateway did not match` |
+| trace | `confluence.search(query="Delivery Hazards") → 5 page(s), 5 cleared the relevance floor` |
+| Sumo trace | `→ 20 line(s); errorToken=DataIntegrityViolationException` |
+| **banner + API** | **`connectors: servicenow=mock, confluence=mock, sumo=mock, gitlab=mock`** |
+
+Every connector was live and calling real systems while the app announced mocks. This is
+FND-74's own failure mode — "the UI asserting a run used mocks while it was writing to a real
+ticket" — reopened one layer up: FND-74 fixed the VALUE this provider stores, and nothing
+checked that Spring ever called the constructor that reads one. In the dangerous direction it
+means a presenter reading "mock" while ServiceNow writeback posts to a live, customer-visible
+ticket.
+
+It also cost an investigation: the banner is the app's own answer to "what am I running?", so
+a session trying to enable real connectors trusted it, concluded profile activation was
+broken, and went looking for a config-precedence bug that never existed.
+
+**Fix**: `@Autowired` on the `Environment` constructor, so the container's choice is explicit
+rather than incidental.
+
+- **Resolution**: fixed (2026-08-06). New `ConnectorModeProviderWiringTest` asserts the
+  container's behaviour via `ApplicationContextRunner`; verified it FAILS (2 of 3) with the
+  annotation removed, then passes with it restored.
+- **Escape**: test-mechanism — `ConnectorModeProviderTest` calls `new ConnectorModeProvider()`
+  and `DiagnosisOrchestratorConnectorModesTest` calls `new ConnectorModeProvider(env)`. Between
+  them every LINE of the class was covered, and both stayed green for the whole life of the
+  bug, because the defect was not in either constructor but in **which one Spring chose**. Line
+  coverage cannot see constructor selection; only a container test can. This is exactly
+  J20/STV-5's "mechanism tests, not annotation tests" — the same principle, one level lower:
+  never assert on your own `new` when the question is what the framework does.
+
+---

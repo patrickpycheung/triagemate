@@ -32,6 +32,29 @@ public class ConnectorModeProvider {
 
     private final Map<String, String> modes;
 
+    /**
+     * FND-87 — <b>{@code @Autowired} is load-bearing, not decoration.</b>
+     *
+     * <p>This class has two public constructors: this one, and a no-arg convenience for unit
+     * tests that hardcodes every connector to {@code "mock"}. Spring's constructor-resolution
+     * rule is that a component with several constructors and <b>no</b> {@code @Autowired}
+     * marker falls back to the <b>no-arg</b> one. So Spring built the all-mock instance on
+     * every run and this constructor was dead code from the moment the no-arg one was added.
+     *
+     * <p>What that cost: the startup banner's {@code connectors:} line and the UI's LT7
+     * provenance chips read from here, so a run with {@code --spring.profiles.active=real} —
+     * with {@code RealConfluenceGateway} and {@code RealServiceNowGateway} genuinely wired and
+     * genuinely calling live systems — announced {@code connectors: servicenow=mock,
+     * confluence=mock, sumo=mock, gitlab=mock}. Verified 2026-08-06 against the live estate:
+     * the condition report said {@code RealConfluenceGateway matched}, the trace said
+     * {@code confluence.search(query="Delivery Hazards") → 5 page(s)}, and the banner said
+     * mock.
+     *
+     * <p>That is FND-74's own failure mode — "the UI asserting a run used mocks while it was
+     * writing to a real ticket" — reopened one layer up. FND-74 fixed the VALUE this provider
+     * stores; nothing checked that Spring ever called the constructor that reads one.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public ConnectorModeProvider(Environment environment) {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("servicenow", normalize(environment.getProperty("triage.connectors.servicenow", DEFAULT_MODE)));
