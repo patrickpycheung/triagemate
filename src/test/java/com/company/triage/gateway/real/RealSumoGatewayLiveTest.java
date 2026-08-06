@@ -135,10 +135,26 @@ class RealSumoGatewayLiveTest {
                         PROBE_PROJECT_KEY, PROBE_ENVIRONMENT_KEY)
                 .isNotEmpty();
 
-        // Never more than the configured cap, and every row is from the scope we asked for.
+        // Never more than the configured cap.
         assertThat(logs).hasSizeLessThanOrEqualTo(sumo.maxResults());
+
+        // J14/FRI-3 (2026-08-06): this used to assert logger == req.sourceCategory(), i.e. it
+        // pinned the defect. _sourceCategory is pinned to ONE composed value for the whole
+        // search, so asserting every row carries it proved only that we were copying the
+        // query onto the rows — a property of the QUERY presented as a property of the LINE.
+        //
+        // The logger must now name the EMITTER, and must not be the scope. This live run is
+        // what corrected the implementation too: the first cut preferred `_sourcehost`, which
+        // on the real instance is `54.66.161.136` — a machine, not a component — while the
+        // line itself carries `ap.http.rest.controller`.
         assertThat(logs).allSatisfy(l ->
-                assertThat(l.logger()).isEqualTo(req.sourceCategory()));
+                assertThat(l.logger())
+                        .as("the emitter, never the query's scope")
+                        .isNotEqualTo(req.sourceCategory()));
+        assertThat(logs)
+                .as("at least one row should name a real emitting component — if every row is "
+                        + "blank the raw layout has changed and FRI-3's parse needs revisiting")
+                .anySatisfy(l -> assertThat(l.logger()).isNotBlank());
     }
 
     /**
