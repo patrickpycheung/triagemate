@@ -224,9 +224,31 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             // quotation must be checkable against the thing it cites — and the "Sources
             // consulted" note would show a close code while the diagnosis quoted prose the
             // reader could not see the origin of.
+            // "resolved by null: null" — what this rendered before — is worse than saying
+            // nothing: it asserts a resolution that does not exist, in the voice of a fact.
+            // The estate makes it the COMMON case, not an edge one: triage.servicenow
+            // .resolved-states includes 1=New precisely because every Delivery Hazards
+            // incident is still open, and an open incident has no resolver and no close code.
+            // An open duplicate is still worth showing ("two people have reported this") —
+            // it just has to be described as what it is.
+            // Only a close code evidences a RESOLUTION. resolutionGroup is mapped from
+            // assignment_group (RealServiceNowGateway), which is who the ticket is assigned
+            // to — true of an open ticket just as much as a closed one. Saying "resolved by
+            // Application Development" about a state=New incident, purely because it had an
+            // assignment group, is the same untrue-assertion class as the "null" it replaced.
+            String outcome;
+            if (notBlank(r.resolutionCode())) {
+                outcome = "resolved by %s: %s".formatted(
+                        notBlank(r.resolutionGroup()) ? r.resolutionGroup() : "an unrecorded group",
+                        r.resolutionCode());
+            } else if (notBlank(r.resolutionGroup())) {
+                outcome = "assigned to %s — no close code recorded".formatted(r.resolutionGroup());
+            } else {
+                outcome = "still open — no resolution recorded";
+            }
             evidence.add(new Evidence("e-sim-" + r.number(), "servicenow-incident",
-                    "%s (%.0f%% similar) resolved by %s: %s%s".formatted(
-                            r.number(), r.similarity() * 100, r.resolutionGroup(), r.resolutionCode(),
+                    "%s (%.0f%% similar) %s%s".formatted(
+                            r.number(), r.similarity() * 100, outcome,
                             notBlank(r.resolutionNotes()) ? " — " + r.resolutionNotes().trim() : ""),
                     r.number()));
         }
@@ -632,6 +654,13 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         int unsupportedSystems = 0;
         for (LogEvidence l : logs) {
             String name = prettifySystem(l.logger());
+            // An IP in the logger field names the HOST that emitted the line, not the system
+            // that failed. Counted as unsupported rather than dropped silently, so the report
+            // still discloses that a log line was seen and not turned into a suspect.
+            if (!isSystemName(name)) {
+                unsupportedSystems++;
+                continue;
+            }
             // J13/ECI-2: only the error line's own system may cite e-log. Previously EVERY
             // logger-derived candidate cited it, so a report could name "Order Portal" as a
             // suspect and point at a Payment Service log line as the reason — a citation that
@@ -1208,6 +1237,24 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
     }
 
     /** {@code payment_service} / {@code order-payments/payment-service} → {@code Payment Service}. */
+    /**
+     * Bare IPv4/IPv6, which the real Sumo estate puts in the logger field.
+     *
+     * <p>Measured on INC0010015: every delivery-hazards log line carries {@code 13.237.99.137}
+     * as its logger, so the report's top candidate system — ranked ABOVE "Delivery Hazards" —
+     * was an IP address. "The likely system is 13.237.99.137" is not an answer a human can act
+     * on, and it displaced the one that was.
+     */
+    private static final java.util.regex.Pattern BARE_ADDRESS = java.util.regex.Pattern.compile(
+            "^(?:\\d{1,3}(?:\\.\\d{1,3}){3}|[0-9a-fA-F:]{2,}:[0-9a-fA-F:]*)(?::\\d+)?$");
+
+    /** An address identifies a HOST, never a system — see {@link #BARE_ADDRESS}. */
+    private static boolean isSystemName(String candidate) {
+        return notBlank(candidate)
+                && !"unknown".equals(candidate)
+                && !BARE_ADDRESS.matcher(candidate.trim()).matches();
+    }
+
     private static String prettifySystem(String raw) {
         if (raw == null || raw.isBlank()) return "unknown";
         String last = raw.substring(raw.lastIndexOf('/') + 1);

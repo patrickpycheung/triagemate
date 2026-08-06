@@ -749,7 +749,11 @@ function initThemes() {
 initThemes();
 
 async function run() {
-  const inc = document.getElementById('inc').value.trim();
+  // Upper-cased, not just trimmed: the endpoint's path variable is @Pattern("INC\d{6,10}"),
+  // which is case-SENSITIVE, so a presenter who types "inc0010015" got a bare 400 on screen.
+  // Normalising here rather than loosening the server pattern — the API contract stays exact,
+  // and the client sends what it asks for. ServiceNow numbers are upper-case by definition.
+  const inc = document.getElementById('inc').value.trim().toUpperCase();
   const btn = document.getElementById('go'); const out = document.getElementById('out');
   if (!inc) return;
   btn.disabled = true; out.innerHTML = '<div class="card">Investigating…</div>';
