@@ -1,20 +1,52 @@
 package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ConfluenceGateway;
+import com.company.triage.gateway.fixture.FixtureKeys;
+import com.company.triage.gateway.fixture.FixtureSession;
+import com.company.triage.gateway.fixture.FixtureStore;
 import com.company.triage.model.Contact;
 import com.company.triage.model.KnowledgeDoc;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/** Mock Confluence (J7 dataset): one runbook that documents the known error (J6). */
+/**
+ * Offline Confluence. Replays recorded search results when a fixture bundle exists for the
+ * incident under diagnosis; otherwise serves the legacy J7 runbook.
+ *
+ * <p>Once a bundle exists it is AUTHORITATIVE, including when it recorded zero pages. The
+ * fallback is deliberately not reached in that case: a real search that found nothing is
+ * evidence, and quietly substituting the payment runbook for it would manufacture a
+ * citation the estate never returned.
+ */
 @Component
 @ConditionalOnProperty(name = "triage.connectors.confluence", havingValue = "mock", matchIfMissing = true)
 public class MockConfluenceGateway implements ConfluenceGateway {
 
+    private static final String G = "confluence";
+    private final FixtureStore fixtures;
+    private final FixtureSession session;
+
+    /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
+    public MockConfluenceGateway() {
+        this(FixtureStore.none(), new FixtureSession());
+    }
+
+    public MockConfluenceGateway(FixtureStore fixtures, FixtureSession session) {
+        this.fixtures = fixtures;
+        this.session = session;
+    }
+
     @Override
     public List<KnowledgeDoc> search(String query) {
+        fixtures.requireCapturedOrUnavailable(session.current(), G, "Confluence");
+        if (fixtures.hasIncident(session.current())) {
+            return fixtures.<List<KnowledgeDoc>>find(session.current(), G, "search",
+                    FixtureKeys.of(query), new TypeReference<List<KnowledgeDoc>>() {})
+                    .orElseGet(List::of);
+        }
         String q = query == null ? "" : query.toLowerCase();
         if (q.contains("reconcile") || q.contains("payment") || q.contains("order")
                 || q.contains("discount") || q.contains("checkout") || q.contains("500")) {
@@ -36,6 +68,12 @@ public class MockConfluenceGateway implements ConfluenceGateway {
     /** Who authored / last edited the cited runbook (J9). */
     @Override
     public List<Contact> contributors(KnowledgeDoc doc) {
+        fixtures.requireCapturedOrUnavailable(session.current(), G, "Confluence");
+        if (fixtures.hasIncident(session.current())) {
+            return fixtures.<List<Contact>>find(session.current(), G, "contributors",
+                    FixtureKeys.of(doc == null ? "" : doc.id()), new TypeReference<List<Contact>>() {})
+                    .orElseGet(List::of);
+        }
         if (doc == null || !"KB001234".equals(doc.id())) {
             return List.of();
         }

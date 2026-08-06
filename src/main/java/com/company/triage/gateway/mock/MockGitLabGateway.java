@@ -1,8 +1,12 @@
 package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.GitLabGateway;
+import com.company.triage.gateway.fixture.FixtureKeys;
+import com.company.triage.gateway.fixture.FixtureSession;
+import com.company.triage.gateway.fixture.FixtureStore;
 import com.company.triage.model.CodeSearchResult;
 import com.company.triage.model.Contact;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -17,8 +21,28 @@ import java.util.List;
 @ConditionalOnProperty(name = "triage.connectors.gitlab", havingValue = "mock", matchIfMissing = true)
 public class MockGitLabGateway implements GitLabGateway {
 
+    private static final String G = "gitlab";
+    private final FixtureStore fixtures;
+    private final FixtureSession session;
+
+    /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
+    public MockGitLabGateway() {
+        this(FixtureStore.none(), new FixtureSession());
+    }
+
+    public MockGitLabGateway(FixtureStore fixtures, FixtureSession session) {
+        this.fixtures = fixtures;
+        this.session = session;
+    }
+
     @Override
     public List<CodeSearchResult> searchCode(String project, String searchTerm) {
+        fixtures.requireCapturedOrUnavailable(session.current(), G, "GitLab");
+        if (fixtures.hasIncident(session.current())) {
+            return fixtures.<List<CodeSearchResult>>find(session.current(), G, "searchCode",
+                    FixtureKeys.of(project, searchTerm), new TypeReference<List<CodeSearchResult>>() {})
+                    .orElseGet(List::of);
+        }
         String t = searchTerm == null ? "" : searchTerm.toUpperCase();
         if (t.contains("PAYMENT_RECONCILE_MISMATCH") || t.contains("RECONCILE")) {
             return List.of(new CodeSearchResult(
@@ -33,6 +57,12 @@ public class MockGitLabGateway implements GitLabGateway {
     /** Recent committers to the implicated file since the last release (J9). */
     @Override
     public List<Contact> recentCommitters(String project, String filePath) {
+        fixtures.requireCapturedOrUnavailable(session.current(), G, "GitLab");
+        if (fixtures.hasIncident(session.current())) {
+            return fixtures.<List<Contact>>find(session.current(), G, "recentCommitters",
+                    FixtureKeys.of(project, filePath), new TypeReference<List<Contact>>() {})
+                    .orElseGet(List::of);
+        }
         if (!"payment_service.py".equals(filePath)) {
             return List.of();
         }

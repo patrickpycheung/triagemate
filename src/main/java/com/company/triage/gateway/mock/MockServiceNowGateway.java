@@ -1,6 +1,10 @@
 package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.ServiceNowGateway;
+import com.company.triage.gateway.fixture.FixtureKeys;
+import com.company.triage.gateway.fixture.FixtureSession;
+import com.company.triage.gateway.fixture.FixtureStore;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.company.triage.model.IncidentContext;
 import com.company.triage.model.NewIncident;
 import com.company.triage.model.ResolvedIncident;
@@ -16,10 +20,20 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Ground-truth demo dataset (J7) for the offline demo. Models one deliberately
- * vague incident — INC0010005 / order INC-ORD-4471 — whose real cause is the seeded
- * payment reconcile bug (discount applied after tax). Reuses the S3′ fixture universe
- * so the log↔code citation lands on payment_service.py:44.
+ * Offline ServiceNow. Serves RECORDED responses first (see {@link FixtureStore}), and
+ * falls back to the hand-written demo dataset (J7) for the two incidents that predate
+ * recording.
+ *
+ * <p>Recorded fixtures are the preferred path and the reason this class changed: the
+ * hand-written dataset — INC0010005 / order INC-ORD-4471, the seeded payment-reconcile
+ * bug — is a coherent story about a system that does not exist. It proves the ENGINE
+ * works and proves nothing about the estate, so a mocked run's plausibility was not
+ * evidence. A fixture is what the live instance actually returned, so replaying it
+ * exercises the same parsing, the same empty fields and the same surprises as a real run.
+ *
+ * <p>The legacy dataset is kept rather than deleted: INC0010005 is what the e2e suite
+ * drives and what the offline stage walkthrough narrates, and INC0010009 is the J28/PGC-8
+ * abstention beat. Both must keep working with no network and no fixtures on disk.
  */
 @Component
 @ConditionalOnProperty(name = "triage.connectors.servicenow", havingValue = "mock", matchIfMissing = true)
@@ -27,6 +41,20 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     private static final Logger log = LoggerFactory.getLogger(MockServiceNowGateway.class);
     private final List<String> postedNotes = new ArrayList<>();
+
+    private static final String G = "servicenow";
+    private final FixtureStore fixtures;
+    private final FixtureSession session;
+
+    /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
+    public MockServiceNowGateway() {
+        this(FixtureStore.none(), new FixtureSession());
+    }
+
+    public MockServiceNowGateway(FixtureStore fixtures, FixtureSession session) {
+        this.fixtures = fixtures;
+        this.session = session;
+    }
 
     /** One-shot: lets the offline K1 poller see a single "new" incident. See below. */
     private final java.util.concurrent.atomic.AtomicBoolean newIncidentAvailable =
@@ -60,6 +88,16 @@ public class MockServiceNowGateway implements ServiceNowGateway {
         // FND-48's 404 path unreachable in the demo config, since only the REAL gateway threw.
         // The dataset models exactly one incident (J7); say so rather than fabricate.
         String n = number == null ? "" : number.trim();
+        session.set(n);
+        // Recorded fixture wins when one exists for this exact incident. Checked BEFORE the
+        // known-incident guard below, because a recorded incident IS a known incident — the
+        // guard's job is to reject numbers we have no data for, and a fixture is data.
+        var recorded = fixtures.<IncidentContext>find(
+                n, G, "getIncident", FixtureKeys.of(n), new TypeReference<IncidentContext>() {});
+        if (recorded.isPresent()) {
+            log.info("mock: serving RECORDED ServiceNow incident {}", n);
+            return recorded.get();
+        }
         if (ABSTENTION_INCIDENT.equalsIgnoreCase(n)) {
             return abstentionIncident(number);
         }
@@ -135,6 +173,15 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
+        String number = incident == null || incident.number() == null ? "" : incident.number().trim();
+        if (fixtures.hasIncident(number)) {
+            // A recorded incident never falls through to the payment-reconcile precedents
+            // below — see FixtureStore#hasIncident. No recorded precedents means the live
+            // instance found none, which is itself the answer (J28/PGC-8 abstention).
+            return fixtures.<List<ResolvedIncident>>find(number, G, "findSimilarIncidents",
+                    FixtureKeys.of(number), new TypeReference<List<ResolvedIncident>>() {})
+                    .orElseGet(List::of);
+        }
         // J28/PGC-8: this incident's precedents were closed WITHOUT resolution notes — the
         // ordinary state of a real queue. The ranker still finds them (they match on symptom
         // and CI), so this is not "no similar incidents": it is "similar incidents exist and
@@ -166,6 +213,12 @@ public class MockServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public Optional<ServiceOwnership> findOwnership(String applicationName) {
+        // Recorded as the unwrapped value, so an absent CMDB entry replays as a real absence
+        // (null → Optional.empty) rather than as "no fixture, fall back to the demo answer".
+        if (fixtures.hasIncident(session.current())) {
+            return fixtures.<ServiceOwnership>find(session.current(), G, "findOwnership",
+                    FixtureKeys.of(applicationName), new TypeReference<ServiceOwnership>() {});
+        }
         String a = applicationName == null ? "" : applicationName.toLowerCase();
         if (a.contains("payment") || a.contains("order")) {
             return Optional.of(new ServiceOwnership(

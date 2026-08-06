@@ -1,8 +1,12 @@
 package com.company.triage.gateway.mock;
 
 import com.company.triage.gateway.SumoGateway;
+import com.company.triage.gateway.fixture.FixtureKeys;
+import com.company.triage.gateway.fixture.FixtureSession;
+import com.company.triage.gateway.fixture.FixtureStore;
 import com.company.triage.model.LogEvidence;
 import com.company.triage.model.LogSearchRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -10,13 +14,28 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Mock Sumo (J7 dataset) — mirrors docs/.../verification-s3/sumo-fixture.json, the
- * pre-scoped failure window for INC-ORD-4471. Returns the seeded log lines the agent
- * must correlate back to source (RC3). Respects the request's maxResults cap.
+ * Offline Sumo. Replays RECORDED log lines for a recorded incident; otherwise serves the
+ * legacy J7 window (docs/.../verification-s3/sumo-fixture.json — the pre-scoped failure
+ * window for INC-ORD-4471, the seeded log↔code correlation of RC3). Respects the
+ * request's maxResults cap on both paths.
  */
 @Component
 @ConditionalOnProperty(name = "triage.connectors.sumo", havingValue = "mock", matchIfMissing = true)
 public class MockSumoGateway implements SumoGateway {
+
+    private static final String G = "sumo";
+    private final FixtureStore fixtures;
+    private final FixtureSession session;
+
+    /** No fixtures — the legacy J7 dataset only. See {@link FixtureStore#none()}. */
+    public MockSumoGateway() {
+        this(FixtureStore.none(), new FixtureSession());
+    }
+
+    public MockSumoGateway(FixtureStore fixtures, FixtureSession session) {
+        this.fixtures = fixtures;
+        this.session = session;
+    }
 
     private static final List<LogEvidence> WINDOW = List.of(
             new LogEvidence("2026-07-23T09:14:21Z", "INFO", "payment_service",
@@ -46,6 +65,16 @@ public class MockSumoGateway implements SumoGateway {
      */
     @Override
     public List<LogEvidence> search(LogSearchRequest request) {
+        // Recorded lines replay against the SCOPE + TERM only — the window moves every run
+        // (the engine searches the last 24h), so it is excluded from the key by design; see
+        // FixtureKeys. The cap is still applied below, because it is the caller's bound.
+        fixtures.requireCapturedOrUnavailable(session.current(), G, "Sumo Logic");
+        if (fixtures.hasIncident(session.current())) {
+            List<LogEvidence> recorded = fixtures.<List<LogEvidence>>find(session.current(), G,
+                    "search", FixtureKeys.forSumo(request), new TypeReference<List<LogEvidence>>() {})
+                    .orElseGet(List::of);
+            return recorded.stream().limit(Math.max(1, request.maxResults())).toList();
+        }
         String scope = request.sourceCategory() == null ? "" : request.sourceCategory().toLowerCase();
         // The seeded window is the payment/order estate. A scope naming any other application
         // legitimately has no lines here.
