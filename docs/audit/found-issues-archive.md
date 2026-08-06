@@ -1866,3 +1866,40 @@ so a source without that rule configured would otherwise reopen the identical ho
   was never asserted.
 
 ---
+
+## FND-87 — the raw stack trace also goes into the ServiceNow work note · **MEDIUM**
+
+**Where** — `DiagnosisReport.toSourcesNote()` (`src/main/java/com/company/triage/model/DiagnosisReport.java:76`),
+`b.append("• ").append(e.source()).append(" — ").append(e.summary())`.
+
+**What** — the `e-log` evidence summary is the Sumo row's whole `_raw`, which for a real
+Java service is a 100–300 line stack trace. The UI now folds that for display
+(`stackTraceHtml` in `index.html`), but the work-note composer still writes it out flat, so
+every triaged incident gets a sources comment several screens long with one useful sentence
+in it. Same defect, second surface — the UI fold does not reach it.
+
+**Why it matters** — not logged as a UI nit but as an outbound-content change: this text is
+posted into a live ServiceNow ticket and read by the assignment group, so shortening it is a
+decision about what the app tells other people, not about what a page looks like. The fold
+rule itself is already settled and could be ported to Java as-is (keep headers, every
+`Caused by:`, the throw site, application frames; elide runs of framework frames with a
+count) — what needs deciding is whether a work note may elide at all, given a reader there
+has no expander to click and no link back to the full row.
+
+**Escape** — `surface-coverage`: the same evidence string is rendered by two different
+composers and only one was in scope when the display problem was found.
+
+**Resolution** — `fixed` (this commit). Ported the UI fold rule to
+`StackTraceFold` (`src/main/java/com/company/triage/model/StackTraceFold.java`) and applied it
+in `toSourcesNote()`. The open question in the entry — *may a work note elide at all, given
+the reader has no expander?* — was answered **yes, but only stated**: every dropped run leaves
+a counted marker (`… 9 framework frames elided (java.base, org.springframework, …)`) and the
+bullet ends with `(stack trace abbreviated: N of M lines elided — full text in Sumo Logic)`,
+so a reader can always tell the trace is not whole and where the whole one lives. A cap
+(head + tail, gap stated) bounds traces that are all application frames and so have no
+framework runs to elide. Pinned by `StackTraceFoldTest` (8 tests), including the two the rule
+exists for: the deepest `Caused by:` survives, and every application frame survives.
+
+**Escape** — `surface-coverage`: the same evidence string is rendered by two different
+composers and only one was in scope when the display problem was found.
+
