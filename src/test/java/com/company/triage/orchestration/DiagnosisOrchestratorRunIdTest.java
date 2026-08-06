@@ -25,19 +25,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * TASK-009 (J11/LT4 {@code runId} protocol): request-side header handling in
- * {@code DiagnosisOrchestrator#run(String, String)}.
+ * J11/LT4 {@code runId} protocol as amended by J16 ({@code
+ * docs/design-java/concepts/J16-run-trace-registry-lifecycle/README.md}): request-side
+ * handling in {@code DiagnosisOrchestrator#run(String, String)}.
  *
- * <p>Verifies the three binding rules from {@code docs/design-java/concepts/
- * J11-live-thinking-trace/README.md} §LT4:
  * <ul>
- *   <li>rule 4, "no header ⇒ no buffer" — {@code run(String)} (K1's call, and K3's
- *       header-less call) never touches the {@link RunTraceRegistry} at all;</li>
- *   <li>a real (non-NOOP) {@link TraceCollector} backs a run when a runId is supplied,
- *       registered under that runId;</li>
- *   <li>rule 5, FND-31 coalescing — a coalesced caller's runId gets handed to {@link
- *       RunTraceRegistry#alias}, without regressing the existing coalescing behaviour
- *       proven by {@code DiagnosisOrchestratorTest}.</li>
+ *   <li><b>RTR-1</b> — every run registers a buffer. A headerless caller (K1, and K3
+ *       without the header) runs under a server-minted {@code "srv-"} runId instead of
+ *       skipping the {@link RunTraceRegistry} entirely. LT4 rule 4, "no header ⇒ no
+ *       buffer", is retired; the two tests that used to pin it are inverted below.</li>
+ *   <li>a client-supplied runId stays authoritative and registers under exactly that id —
+ *       the {@code X-Triage-Run-Id} contract is unchanged;</li>
+ *   <li><b>RTR-2</b> — a coalesced waiter aliases its own runId onto the CANONICAL RUN'S
+ *       runId via {@link RunTraceRegistry#aliasTo}, not onto an incident number, without
+ *       regressing the coalescing behaviour proven by {@code DiagnosisOrchestratorTest}.</li>
  * </ul>
  */
 class DiagnosisOrchestratorRunIdTest {
@@ -74,18 +75,30 @@ class DiagnosisOrchestratorRunIdTest {
      *  a mocking framework dependency in this test class. */
     static class RecordingRunTraceRegistry implements RunTraceRegistry {
         final Map<String, TraceCollector> registered = new ConcurrentHashMap<>();
+        /** Every {@code register} call in order, so a test can assert a server-minted id was
+         *  minted ONCE per run rather than re-derived per use. */
+        final List<String> registerOrder = Collections.synchronizedList(new ArrayList<>());
+        /** {waiterRunId, canonicalRunId} per {@code aliasTo} call — runId → runId, never
+         *  runId → incident (J16/RTR-2). */
         final List<String[]> aliasCalls = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public TraceCollector register(String runId, String incidentNumber) {
             TraceCollector collector = new TraceCollector();
             registered.put(runId, collector);
+            registerOrder.add(runId);
             return collector;
         }
 
         @Override
-        public void alias(String runId, String incidentNumber) {
-            aliasCalls.add(new String[] {runId, incidentNumber});
+        public boolean aliasTo(String waiterRunId, String canonicalRunId) {
+            aliasCalls.add(new String[] {waiterRunId, canonicalRunId});
+            TraceCollector canonical = registered.get(canonicalRunId);
+            if (canonical == null || canonical.isDone()) {
+                return false;
+            }
+            registered.put(waiterRunId, canonical);
+            return true;
         }
 
         @Override
@@ -98,10 +111,16 @@ class DiagnosisOrchestratorRunIdTest {
         }
     }
 
-    // --- rule 4: "no header ⇒ no buffer" --------------------------------------------
+    // --- RTR-1: every run registers a buffer, whatever the trigger -------------------
 
+    /**
+     * <b>Inverts</b> the retired {@code headerlessRunNeverTouchesTheRegistry}, which pinned
+     * LT4 rule 4 ("no header ⇒ no buffer"). Rule 4 made "is there a live trace?" depend on
+     * which trigger fired, which is precisely what left the FND-31 mixed-trigger case with
+     * nothing to watch. A headerless run now registers under a server-minted id.
+     */
     @Test
-    void headerlessRunNeverTouchesTheRegistry() {
+    void headerlessRunRegistersAServerMintedRunId() {
         var snow = new RecordingServiceNow();
         var registry = new RecordingRunTraceRegistry();
         DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(sampleReport(), new ArrayList<>());
@@ -109,15 +128,19 @@ class DiagnosisOrchestratorRunIdTest {
 
         DiagnosisResult r = orchestrator.run("INC0010005");   // the K1/no-header overload
 
-        assertThat(registry.registered).as("K1-shaped call must allocate zero buffer entries").isEmpty();
-        assertThat(registry.aliasCalls).isEmpty();
-        // The response is unaffected — steps() is still populated from the ordinary,
-        // unregistered TraceCollector runOnce() always builds.
+        assertThat(registry.registered)
+                .as("RTR-1: a headerless run must still get a registered live buffer")
+                .hasSize(1);
+        assertThat(registry.registered.keySet()).allMatch(id -> id.startsWith("srv-"));
+        assertThat(registry.aliasCalls).as("nothing coalesced, so nothing to alias").isEmpty();
+        // The response is unaffected — the server-minted id is invisible to the caller.
         assertThat(r.report()).isNotNull();
     }
 
+    /** <b>Inverts</b> the retired {@code twoArgOverloadWithNullRunIdBehavesIdenticallyToHeaderlessCall}
+     *  in the same direction: identical to the headerless call means identically REGISTERED. */
     @Test
-    void twoArgOverloadWithNullRunIdBehavesIdenticallyToHeaderlessCall() {
+    void twoArgOverloadWithNullRunIdAlsoMintsAServerRunId() {
         var snow = new RecordingServiceNow();
         var registry = new RecordingRunTraceRegistry();
         DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(sampleReport(), new ArrayList<>());
@@ -125,7 +148,8 @@ class DiagnosisOrchestratorRunIdTest {
 
         orchestrator.run("INC0010005", null);
 
-        assertThat(registry.registered).isEmpty();
+        assertThat(registry.registered).hasSize(1);
+        assertThat(registry.registered.keySet()).allMatch(id -> id.startsWith("srv-"));
         assertThat(registry.aliasCalls).isEmpty();
     }
 
@@ -140,12 +164,14 @@ class DiagnosisOrchestratorRunIdTest {
 
         DiagnosisResult r = orchestrator.run("INC0010005", "run-abc-123");
 
-        assertThat(registry.registered).containsOnlyKeys("run-abc-123");
+        assertThat(registry.registered)
+                .as("a client-minted runId stays authoritative — no srv- id is substituted")
+                .containsOnlyKeys("run-abc-123");
         assertThat(r.report()).isNotNull();
     }
 
     @Test
-    void blankRunIdIsTreatedAsAbsent() {
+    void blankRunIdIsTreatedAsAbsentAndServerMinted() {
         var snow = new RecordingServiceNow();
         var registry = new RecordingRunTraceRegistry();
         DiagnosisEngine engine = (incident, sink) -> new DiagnosisResult(sampleReport(), new ArrayList<>());
@@ -153,7 +179,9 @@ class DiagnosisOrchestratorRunIdTest {
 
         orchestrator.run("INC0010005", "   ");
 
-        assertThat(registry.registered).isEmpty();
+        assertThat(registry.registered.keySet())
+                .as("a blank header is not a client-minted id — the server mints one instead")
+                .allMatch(id -> id.startsWith("srv-"));
     }
 
     // --- response body identical with/without a runId (this task only touches the
@@ -178,10 +206,15 @@ class DiagnosisOrchestratorRunIdTest {
         assertThat(withHeader.writebackPosted()).isEqualTo(withoutHeader.writebackPosted());
     }
 
-    // --- rule 5: FND-31 coalescing hands B's runId to the registry ------------------
+    // --- RTR-2: FND-31 coalescing aliases B's runId onto A's RUNID ------------------
 
+    /**
+     * RTR-2: the waiter's alias target is the canonical <b>runId</b> taken straight out of
+     * the in-flight map entry it just lost the race to — not an incident number resolved
+     * through a second index that could name a different run than the one being awaited.
+     */
     @Test
-    void coalescedCallerRunIdIsAliasedToTheCanonicalIncident() throws Exception {
+    void coalescedCallerRunIdIsAliasedToTheCanonicalRunId() throws Exception {
         var snow = new RecordingServiceNow();
         var registry = new RecordingRunTraceRegistry();
         AtomicInteger engineCalls = new AtomicInteger();
@@ -213,17 +246,25 @@ class DiagnosisOrchestratorRunIdTest {
 
             assertThat(engineCalls.get()).as("FND-31 coalescing must not regress").isEqualTo(1);
             assertThat(r2).isSameAs(r1);
-            // Only the canonical caller (A) registers a buffer entry; B never runs an
-            // engine, so it must never call register() — only alias().
-            assertThat(registry.registered).containsOnlyKeys("run-A");
-            assertThat(registry.aliasCalls).contains(new String[] {"run-B", "INC0010005"});
+            assertThat(registry.aliasCalls)
+                    .as("RTR-2: alias binds runId -> runId, never runId -> incident")
+                    .contains(new String[] {"run-B", "run-A"});
+            assertThat(registry.registered.get("run-B"))
+                    .as("and the waiter ends up on the canonical run's collector")
+                    .isSameAs(registry.registered.get("run-A"));
         } finally {
             pool.shutdownNow();
         }
     }
 
+    /**
+     * <b>Inverts</b> the retired {@code coalescedCallerWithNoRunIdNeverCallsAlias}. Under
+     * RTR-1 there is no such thing as a caller with no runId — a headerless waiter has a
+     * server-minted one, and aliasing it costs one bounded map entry while making the
+     * headerless-waiter case behave identically to the header-carrying one.
+     */
     @Test
-    void coalescedCallerWithNoRunIdNeverCallsAlias() throws Exception {
+    void coalescedCallerWithNoRunIdIsAliasedUnderItsServerMintedRunId() throws Exception {
         var snow = new RecordingServiceNow();
         var registry = new RecordingRunTraceRegistry();
         AtomicInteger engineCalls = new AtomicInteger();
@@ -255,7 +296,57 @@ class DiagnosisOrchestratorRunIdTest {
             second.get(2, TimeUnit.SECONDS);
 
             assertThat(engineCalls.get()).isEqualTo(1);
-            assertThat(registry.aliasCalls).as("a caller with no runId must never alias").isEmpty();
+            assertThat(registry.aliasCalls)
+                    .as("RTR-1: a headerless waiter aliases under its server-minted runId")
+                    .hasSize(1);
+            String[] call = registry.aliasCalls.get(0);
+            assertThat(call[0]).as("waiter's own server-minted id").startsWith("srv-");
+            assertThat(call[1]).as("canonical runId it is waiting on").isEqualTo("run-A");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * RTR-1: the server-minted id is minted ONCE per run and used for every registry
+     * interaction that run has. If it were re-derived at each use, the buffer registered at
+     * the start and the buffer a waiter aliased onto would be different entries, and the
+     * whole point of registering headerless runs would be lost.
+     */
+    @Test
+    void serverMintedRunIdIsStableForTheLifetimeOfTheRun() throws Exception {
+        var snow = new RecordingServiceNow();
+        var registry = new RecordingRunTraceRegistry();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        DiagnosisEngine engine = (incident, sink) -> {
+            started.countDown();
+            try {
+                assertThat(release.await(2, TimeUnit.SECONDS)).isTrue();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new DiagnosisResult(sampleReport(), new ArrayList<>(List.of("diagnose")));
+        };
+        var orchestrator = new DiagnosisOrchestrator(engine, engine, snow, props(5000), registry);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<DiagnosisResult> owner = pool.submit(() -> orchestrator.run("INC0010005"));
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+            Future<DiagnosisResult> waiter = pool.submit(() -> orchestrator.run("INC0010005", "run-B"));
+            Thread.sleep(100);
+            release.countDown();
+            owner.get(2, TimeUnit.SECONDS);
+            waiter.get(2, TimeUnit.SECONDS);
+
+            String ownerRunId = registry.registerOrder.get(0);
+            assertThat(ownerRunId).startsWith("srv-");
+            assertThat(registry.aliasCalls).hasSize(1);
+            assertThat(registry.aliasCalls.get(0)[1])
+                    .as("the waiter aliases onto the SAME id the owner registered under")
+                    .isEqualTo(ownerRunId);
+            assertThat(registry.registered.get("run-B")).isSameAs(registry.registered.get(ownerRunId));
         } finally {
             pool.shutdownNow();
         }

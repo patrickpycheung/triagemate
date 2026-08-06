@@ -19,11 +19,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * TASK-010's bounded {@link RunTraceRegistry} implementation: cap ~20 retained runs
- * (oldest-first eviction) and ~5 min TTL measured from each run's LAST WRITE, not its
- * creation time (design doc: {@code docs/design-java/concepts/J11-live-thinking-trace/
- * README.md} §LT4 "Bound the buffer"). This is the one part of the whole J11 design with
- * no prior spike, so coverage here is deliberately thorough rather than a smoke test.
+ * The bounded {@link RunTraceRegistry} implementation: cap ~20 retained runs (oldest-first
+ * eviction) and a TTL measured from each run's LAST WRITE, not its creation time (design
+ * doc: {@code docs/design-java/concepts/J11-live-thinking-trace/README.md} §LT4 "Bound the
+ * buffer"), as amended by {@code J16-run-trace-registry-lifecycle} — RTR-2 ({@code aliasTo}
+ * binds runId → runId, the incident index is gone), RTR-3 (a done buffer is never aliasable)
+ * and RTR-4 (TTL derives from {@code timeout-ms}). This is the one part of the whole J11
+ * design with no prior spike, so coverage here is deliberately thorough.
  */
 class InMemoryRunTraceRegistryTest {
 
@@ -76,22 +78,50 @@ class InMemoryRunTraceRegistryTest {
     }
 
     @Test
-    void aliasPointsTheCoalescedRunIdAtTheCanonicalIncidentsCollector() {
+    void aliasToPointsTheCoalescedRunIdAtTheCanonicalRunsCollector() {
         var registry = new InMemoryRunTraceRegistry();
         TraceCollector canonical = registry.register("run-A", "INC0010005");
         canonical.forAttempt(0).before(activeStep(System.currentTimeMillis()));
 
-        registry.alias("run-B", "INC0010005");
+        assertThat(registry.aliasTo("run-B", "run-A")).isTrue();
 
         assertThat(registry.peek("run-B")).isSameAs(canonical);
         assertThat(registry.peek("run-B").steps()).hasSize(1);
     }
 
+    /**
+     * Re-pointed, not deleted: this used to pass an INCIDENT with nothing registered for it.
+     * Under RTR-2 the argument is a canonical {@code runId}, so the same "nothing to alias
+     * to" case is now an unknown runId — and the no-op is observable as a {@code false}
+     * return rather than only as "didn't throw", which is what lets {@code
+     * DiagnosisOrchestrator} tell a bound waiter from an unbound one.
+     */
     @Test
-    void aliasWithNoCanonicalRegisteredIsANoOp() {
+    void aliasToAnUnregisteredCanonicalRunIdIsARefusedNoOp() {
         var registry = new InMemoryRunTraceRegistry();
 
-        assertThatCode(() -> registry.alias("run-B", "INC9999999")).doesNotThrowAnyException();
+        assertThatCode(() -> registry.aliasTo("run-B", "run-nope")).doesNotThrowAnyException();
+        assertThat(registry.aliasTo("run-B", "run-nope")).isFalse();
+        assertThat(registry.peek("run-B")).isNull();
+    }
+
+    /**
+     * J16/RTR-3 (server side). A {@code done} collector can never emit another step, so
+     * binding a live poller to it would have the UI narrate "live" over a finished run —
+     * the honesty failure J11 exists to prevent. Refuse instead; the waiter's poll then
+     * 404s and the client renders the settled result from the POST response.
+     */
+    @Test
+    void aliasToARunThatIsAlreadyDoneIsRefused() {
+        var registry = new InMemoryRunTraceRegistry();
+        TraceCollector canonical = registry.register("run-A", "INC0010005");
+        canonical.markDone();
+
+        assertThat(registry.aliasTo("run-B", "run-A")).isFalse();
+        assertThat(registry.peek("run-B"))
+                .as("a terminal buffer is never aliasable").isNull();
+        assertThat(registry.peek("run-A"))
+                .as("refusing the alias must not disturb the canonical entry").isSameAs(canonical);
     }
 
     // --- cap: retain ~20, evict oldest-first (Requirement 1 / 4) -------------------
@@ -201,22 +231,22 @@ class InMemoryRunTraceRegistryTest {
     }
 
     @Test
-    void aliasSweepsBeforeResolvingSoAStaleCanonicalRunIsANoOp() {
+    void aliasToSweepsBeforeResolvingSoAStaleCanonicalRunIsARefusedNoOp() {
         var clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
         var registry = new InMemoryRunTraceRegistry(clock);
 
         registry.register("run-A", "INC0010005");
         clock.advance(Duration.ofMinutes(5).plusSeconds(1));
         // Nothing has re-registered yet, so run-A is still physically present but stale;
-        // alias() itself must sweep before resolving, per TASK-009's carve-out for "once
-        // TASK-010 adds eviction — the canonical run's entry has already aged out".
-        registry.alias("run-B", "INC0010005");
+        // aliasTo() itself must sweep before resolving, or it would resurrect a buffer the
+        // very next sweep retires.
+        assertThat(registry.aliasTo("run-B", "run-A")).isFalse();
 
         assertThat(registry.peek("run-A")).isNull();
         assertThat(registry.peek("run-B")).isNull();
     }
 
-    // --- incident->runId map stays in lockstep with eviction ------------------------
+    // --- re-registration after eviction ---------------------------------------------
 
     @Test
     void reRegisteringAnIncidentAfterEvictionWorksNormally() {
@@ -228,7 +258,7 @@ class InMemoryRunTraceRegistryTest {
         registry.register("run-Z", "INC-filler"); // sweeps run-A out
 
         TraceCollector fresh = registry.register("run-A2", "INC0010005");
-        registry.alias("run-B2", "INC0010005");
+        assertThat(registry.aliasTo("run-B2", "run-A2")).isTrue();
 
         assertThat(registry.peek("run-B2")).isSameAs(fresh);
     }
@@ -237,10 +267,81 @@ class InMemoryRunTraceRegistryTest {
     void aliasedRunIdOccupiesItsOwnCapSlotWhileSharingTheCollector() {
         var registry = new InMemoryRunTraceRegistry();
         registry.register("run-A", "INC0010005");
-        registry.alias("run-B", "INC0010005");
+        registry.aliasTo("run-B", "run-A");
 
         assertThat(registry.size()).isEqualTo(2); // run-A and run-B both resolvable, sharing one collector
         assertThat(registry.peek("run-A")).isSameAs(registry.peek("run-B"));
+    }
+
+    // --- RTR-4: TTL derives from triage.orchestrator.timeout-ms ---------------------
+
+    /**
+     * The whole point of RTR-4: the buffer must outlive the run that writes into it. A run
+     * that emits no steps can legitimately stay silent for a full {@code timeout-ms}, and
+     * with an FND-7 degrade for two of them plus the writeback tail — so if the TTL ever
+     * fell below that, {@code lookup()}'s own sweep would evict the buffer it was about to
+     * read and the UI would go dark mid-run.
+     */
+    @Test
+    void ttlAlwaysOutlivesTheWorstCaseSilentWindowOfTheConfiguredTimeout() {
+        for (long timeoutMs : new long[] {1_000, 60_000, 120_000, 250_000, 600_000}) {
+            Duration ttl = InMemoryRunTraceRegistry.ttlFor(timeoutMs);
+            assertThat(ttl.toMillis())
+                    .as("TTL must exceed 2 x timeout-ms (FND-7 degrade) for timeout-ms=%d", timeoutMs)
+                    .isGreaterThan(2 * timeoutMs);
+        }
+    }
+
+    /**
+     * RTR-4 is a LINK, not a retune. At the shipped {@code timeout-ms: 120000} the derived
+     * TTL is exactly the 5 minutes the hardcoded constant used to be, so shipped behaviour
+     * is unchanged — this test is what would fail if someone "fixed" the formula into a
+     * behaviour change.
+     */
+    @Test
+    void atTheShippedTimeoutTheDerivedTtlIsExactlyTheFiveMinutesItReplaces() {
+        assertThat(InMemoryRunTraceRegistry.ttlFor(120_000)).isEqualTo(Duration.ofMinutes(5));
+    }
+
+    /** The floor holds for short timeouts: a fast timeout must not shrink the window a
+     *  human needs to read a finished run. */
+    @Test
+    void shortTimeoutsFallBackToTheFiveMinuteFloor() {
+        assertThat(InMemoryRunTraceRegistry.ttlFor(1_000)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(InMemoryRunTraceRegistry.ttlFor(119_000)).isEqualTo(Duration.ofMinutes(5));
+    }
+
+    /** A longer timeout genuinely stretches the TTL — the link is live, not decorative. */
+    @Test
+    void aLongerTimeoutStretchesTheTtlAndTheRegistryHonoursIt() {
+        assertThat(InMemoryRunTraceRegistry.ttlFor(300_000))
+                .isEqualTo(Duration.ofMinutes(10).plusSeconds(60));
+
+        var clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
+        var registry = new InMemoryRunTraceRegistry(InMemoryRunTraceRegistry.ttlFor(300_000), clock);
+        registry.register("run-A", "INC0010005");
+
+        // Past the old hardcoded 5 min, but well inside a timeout-ms=300000 run's own bound:
+        // under the pre-RTR-4 constant this entry was evicted while its run was still live.
+        clock.advance(Duration.ofMinutes(9));
+        registry.register("run-B", "INC0010006"); // sweeps
+
+        assertThat(registry.peek("run-A"))
+                .as("a run whose timeout allows 9 minutes of silence must still have its buffer")
+                .isNotNull();
+    }
+
+    /** The Spring-wired constructor is the one that actually reads config — pin that it
+     *  derives, rather than silently taking the floor. */
+    @Test
+    void springWiredConstructorDerivesItsTtlFromTriageProperties() {
+        var base = com.company.triage.config.TriagePropertiesFixture.deterministic();
+        var props = new com.company.triage.config.TriageProperties(base.engine(), base.writeback(),
+                new com.company.triage.config.TriageProperties.Orchestrator(300_000), base.agent(),
+                base.trigger(), base.servicenow(), base.sumo(), base.gitlab());
+
+        assertThat(new InMemoryRunTraceRegistry(props).ttl())
+                .isEqualTo(Duration.ofMinutes(10).plusSeconds(60));
     }
 
     // --- lookup() (TASK-011: the read side GET /api/runs/{runId}/steps needs) ------
@@ -280,7 +381,7 @@ class InMemoryRunTraceRegistryTest {
     void lookupSeesTheAliasedCollectorToo() {
         var registry = new InMemoryRunTraceRegistry();
         TraceCollector canonical = registry.register("run-A", "INC0010005");
-        registry.alias("run-B", "INC0010005");
+        registry.aliasTo("run-B", "run-A");
 
         assertThat(registry.lookup("run-B")).isSameAs(canonical);
     }
@@ -290,7 +391,7 @@ class InMemoryRunTraceRegistryTest {
         // Regression pin for the binding correction: DiagnosisOrchestratorTest proves
         // sequential runs of the SAME incident are not coalesced, so the buffer must never
         // be keyed by incident. Registering two runIds for the same incident must produce
-        // two independent, non-aliased collectors unless alias() is explicitly called.
+        // two independent, non-aliased collectors unless aliasTo() is explicitly called.
         var registry = new InMemoryRunTraceRegistry();
 
         TraceCollector first = registry.register("run-A", "INC0010005");
