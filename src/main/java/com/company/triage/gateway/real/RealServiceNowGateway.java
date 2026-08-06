@@ -168,6 +168,21 @@ public class RealServiceNowGateway implements ServiceNowGateway {
      */
     @Override
     public List<ResolvedIncident> findSimilarIncidents(IncidentContext incident) {
+        // FND-90: translate a transport/HTTP failure into the one exception the engine's
+        // J14/FRI-5 safety net actually catches. Every other real gateway does this
+        // (RealGitLabGateway, RealConfluenceGateway, RealSumoGateway); ServiceNow never did,
+        // so a 5xx or an expired session here surfaced as a raw RestClientException that
+        // nothing on the path was looking for.
+        try {
+            return findSimilarIncidentsOrThrow(incident);
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new com.company.triage.gateway.GatewayUnavailableException("ServiceNow", e);
+        }
+    }
+
+    private List<ResolvedIncident> findSimilarIncidentsOrThrow(IncidentContext incident) {
         if (incident == null) return List.of();
         String resolved = "stateIN" + resolvedStates;
         List<SimilarIncidentRanker.Candidate> candidates = new ArrayList<>();
@@ -276,6 +291,17 @@ public class RealServiceNowGateway implements ServiceNowGateway {
 
     @Override
     public Optional<ServiceOwnership> findOwnership(String applicationName) {
+        // FND-90 — see findSimilarIncidents. Same translation, same reason.
+        try {
+            return findOwnershipOrThrow(applicationName);
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new com.company.triage.gateway.GatewayUnavailableException("ServiceNow", e);
+        }
+    }
+
+    private Optional<ServiceOwnership> findOwnershipOrThrow(String applicationName) {
         if (applicationName == null || applicationName.isBlank()) return Optional.empty();
         // Query the BASE cmdb_ci table, not cmdb_ci_service. ServiceNow table inheritance
         // means cmdb_ci returns every CI class; cmdb_ci_service returns only service-class

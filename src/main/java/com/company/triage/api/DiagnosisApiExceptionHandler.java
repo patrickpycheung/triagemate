@@ -93,6 +93,22 @@ class DiagnosisApiExceptionHandler {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, e);
     }
 
+    /**
+     * FND-90: 502, and named. Both engines failed, which — unlike the case above — genuinely
+     * does involve an upstream: the deterministic fallback's failure mode is an unreachable
+     * connector, not our own logic. The message carries BOTH failures, so the response says
+     * two engines were tried and why each one stopped, rather than surfacing whichever raw
+     * transport error happened to escape last.
+     *
+     * <p>Before this existed the pair went out as an unmapped 500 with an arbitrary internal
+     * message. On stage that is indistinguishable from the app being broken.
+     */
+    @ExceptionHandler(com.company.triage.orchestration.BothEnginesFailedException.class)
+    ResponseEntity<Map<String, String>> bothEnginesFailed(
+            com.company.triage.orchestration.BothEnginesFailedException e) {
+        return error(HttpStatus.BAD_GATEWAY, e);
+    }
+
     /** FND-58: {@code @Pattern}-rejected {@code incidentNumber} path variable (Spring Boot 3.2+
      * translates a {@code @Validated} controller's constraint violations into this type). */
     @ExceptionHandler(HandlerMethodValidationException.class)

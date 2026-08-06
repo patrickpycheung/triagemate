@@ -459,7 +459,27 @@ public class DiagnosisOrchestrator {
             // dropped by the collector — they can never merge into attempt 1's sequence.
             collector.abandonAndStartFallback(0, 1, DiagnosisResult.Engine.DEGRADED_TO_DETERMINISTIC,
                     "%s: %s".formatted(e.getClass().getSimpleName(), e.getMessage()));
-            DiagnosisResult fallback = callWithTimeout(fallbackEngine, incidentNumber, collector.forAttempt(1));
+            DiagnosisResult fallback;
+            try {
+                fallback = callWithTimeout(fallbackEngine, incidentNumber, collector.forAttempt(1));
+            } catch (RuntimeException fallbackFailure) {
+                // FND-90: the net under the net. The catch above covers the PRIMARY engine
+                // failing; nothing covered the fallback failing, so a throw from the
+                // deterministic engine propagated straight out to an HTTP 500 — no report, no
+                // trace, nothing on screen. That is the one outcome the demo runbook's D2
+                // exists to prevent ("the demo cannot hard-fail on stage"), and it was
+                // reachable at precisely the moment D2 matters: after the primary already
+                // failed.
+                //
+                // Both failures are surfaced, not just the second. Reporting only the fallback's
+                // error would hide why the fallback was running at all, and the two together
+                // are what a person needs to debug it afterwards.
+                log.error("BOTH engines failed for {} — primary {}: {}; fallback {}: {}",
+                        incidentNumber, e.getClass().getSimpleName(), e.getMessage(),
+                        fallbackFailure.getClass().getSimpleName(), fallbackFailure.getMessage(),
+                        fallbackFailure);
+                throw new BothEnginesFailedException(incidentNumber, e, fallbackFailure);
+            }
             fallback.trace().add(0, "⚠ primary engine did not converge (%s: %s) — degraded to the deterministic engine"
                     .formatted(e.getClass().getSimpleName(), e.getMessage()));
             // Reconstruction site 3/3 (of diagnoseWithFallback; runOnce carries it forward

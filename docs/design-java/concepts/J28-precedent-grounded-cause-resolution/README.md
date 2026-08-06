@@ -214,19 +214,34 @@ not apply here.
 
 ### PGC-5 — Ship restricted to `PRIOR_RESOLUTION`
 
-Each basis rests on a concept that is 🔴 designed-not-built:
+Each basis rests on a concept that was 🔴 designed-not-built **when this was written**.
+**All three have since shipped** (J25, J13, J24 all 🟢 Built as of 2026-08-06), so the reason
+for the restriction below no longer holds — see the note after the table.
 
 | Basis | Rests on | If enabled now |
 |---|---|---|
 | `PRIOR_RESOLUTION` | **J26** ✅ built | safe |
-| `KNOWN_ERROR_DOC` | **J25** 🔴 | Confluence returns unrelated pages — quote fidelity would prove only that an irrelevant page was quoted accurately |
-| `CODE_PATH` | **J13** 🔴 | code-evidence ids collide; citations can name the wrong system |
+| `KNOWN_ERROR_DOC` | **J25** ✅ *(was 🔴)* | Confluence returns unrelated pages — quote fidelity would prove only that an irrelevant page was quoted accurately |
+| `CODE_PATH` | **J13** ✅ *(was 🔴)* | code-evidence ids collide; citations can name the wrong system |
 
-J26's ranker also weights `cmdb_ci` at 0.3, and **J24** 🔴 shows reference fields parse to
+J26's ranker also weights `cmdb_ci` at 0.3, and **J24** ✅ *(was 🔴)* showed reference fields parse to
 `""` — so ~30% of the ranking input is dead until J24 lands.
 
-**The enum keeps all three** (the schema is right); emission is restricted by config. Nothing
-is thrown away. *(All three flagged HIGH by Codex in `/doc-test dds`.)*
+**The enum keeps all three** (the schema is right); emission is restricted. Nothing is thrown
+away. *(All three flagged HIGH by Codex in `/doc-test dds`.)*
+
+> **Status 2026-08-06 — the gate is still shut and its reason is gone.** Every dependency this
+> restriction waited on has shipped. The restriction itself is real and enforced in two places:
+> `AdkDiagnosisEngine`'s instruction says `PRIOR_RESOLUTION` is *"the ONLY value you may use"*,
+> and the deterministic engine hardcodes it. Note this is **not** the "restricted by config"
+> mechanism the paragraph above describes — no such config key was ever added; the restriction
+> is in an instruction string and a literal.
+>
+> Consequence today: cause and resolution can only ever cite a prior incident's resolution,
+> never a known-error runbook or a code path, even though both are now safe to cite. That is
+> narrower than designed, and it is not a defect — abstention is legal here and the app never
+> claims a basis it lacks — but it is capability that exists and is switched off.
+> Tracked as **FND-91**; deliberately NOT flipped as a pre-demo change.
 
 ### PGC-6 — Rendering, in both places
 

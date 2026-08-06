@@ -166,7 +166,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String traceGetIncident = "servicenow.getIncident(%s) → CI=%s, env=%s".formatted(
                 incidentNumber, inc.configurationItem(), inc.environment());
         trace.add(traceGetIncident);
-        emitStep(sink, stepSeq, "servicenow.getIncident", traceGetIncident);
+        emitStep(sink, stepSeq, "servicenow.getIncident", traceGetIncident, StepState.DONE);
 
         // FND-63: the ticket itself is evidence — it is a real source with real content, and
         // every conclusion below is at minimum grounded in what it says. It was never cited,
@@ -187,10 +187,37 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String traceUnderstand = "understand: id=%s, keywords=%s, app=%s".formatted(
                 orderId, signals.keywords(), signals.app());
         trace.add(traceUnderstand);
-        emitStep(sink, stepSeq, "understand:", traceUnderstand);
+        emitStep(sink, stepSeq, "understand:", traceUnderstand, StepState.DONE);
 
         // ---- Step 3: similar incidents + ownership ----------------------------
-        List<ResolvedIncident> similar = serviceNow.findSimilarIncidents(inc);
+        // Declared here rather than at the knowledge step: FND-90 added two earlier users
+        // (similar incidents, CMDB ownership), and a degradation list has to exist before the
+        // first call that can degrade.
+        List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
+        // FND-90 / J14/FRI-5: this call site was NAMED in FRI-5's mechanism and never wrapped,
+        // while sumo.search, gitLab.searchCode and confluence.search all were. Precedent is
+        // not decoration here: this engine is D2, the fallback the demo runbook keeps hot
+        // because "the demo cannot hard-fail on stage", and the orchestrator has no net under
+        // it — a throw from here became an HTTP 500 with no report at all, at exactly the
+        // moment the fallback was supposed to be saving the run.
+        //
+        // getIncident stays unwrapped, deliberately: without the ticket there is nothing to
+        // diagnose. Similar incidents are ENRICHMENT — losing them costs precedent, not the
+        // diagnosis.
+        List<ResolvedIncident> similarGathered;
+        boolean similarFailed = false;
+        try {
+            similarGathered = serviceNow.findSimilarIncidents(inc);
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            similarGathered = List.of();
+            similarFailed = true;
+            gatewayFailures.add(e.getMessage()
+                    + " — no past incidents were compared, so \"no precedent found\" is not a "
+                    + "conclusion this run is entitled to");
+            log.warn("  {} unreachable for similar incidents — continuing without precedent", e.system(), e);
+        }
+        // Effectively-final copy: assignment below captures this in a lambda.
+        final List<ResolvedIncident> similar = similarGathered;
         for (ResolvedIncident r : similar) {
             // J28: the resolution NOTE is appended so the evidence carries what the cause
             // section quotes. Without it, CR-8 (quote fidelity) could never pass — a
@@ -203,17 +230,35 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                             notBlank(r.resolutionNotes()) ? " — " + r.resolutionNotes().trim() : ""),
                     r.number()));
         }
-        String traceFindSimilar = "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
+        String traceFindSimilar = similarFailed
+                ? "servicenow.findSimilarIncidents → COULD NOT SEARCH (ServiceNow unreachable) "
+                  + "— this is not 'no similar incidents'"
+                : "servicenow.findSimilarIncidents → %d hits".formatted(similar.size());
         trace.add(traceFindSimilar);
-        emitStep(sink, stepSeq, "servicenow.findSimilarIncidents", traceFindSimilar);
+        emitStep(sink, stepSeq, "servicenow.findSimilarIncidents", traceFindSimilar,
+                similarFailed ? StepState.FAILED : StepState.DONE);
 
-        Optional<ServiceOwnership> ownership = serviceNow.findOwnership(inc.configurationItem());
+        // FND-90 — same rule, same reason. Ownership drives the suggested assignment group,
+        // so losing it degrades routing; it must not end the run.
+        Optional<ServiceOwnership> ownership;
+        boolean ownershipFailed = false;
+        try {
+            ownership = serviceNow.findOwnership(inc.configurationItem());
+        } catch (com.company.triage.gateway.GatewayUnavailableException e) {
+            ownership = Optional.empty();
+            ownershipFailed = true;
+            gatewayFailures.add(e.getMessage()
+                    + " — the CMDB owner was not looked up, so no assignment group is suggested "
+                    + "from ownership");
+            log.warn("  {} unreachable for CMDB ownership — continuing without it", e.system(), e);
+        }
         ownership.ifPresent(o -> evidence.add(new Evidence("e-cmdb", "servicenow-cmdb",
                 "CMDB: %s owned by %s".formatted(o.application(), o.supportGroup()), o.source())));
         String traceFindOwnership = "servicenow.findOwnership(%s) → %s".formatted(
                 inc.configurationItem(), ownership.map(ServiceOwnership::supportGroup).orElse("none"));
         trace.add(traceFindOwnership);
-        emitStep(sink, stepSeq, "servicenow.findOwnership", traceFindOwnership);
+        emitStep(sink, stepSeq, "servicenow.findOwnership", traceFindOwnership,
+                ownershipFailed ? StepState.FAILED : StepState.DONE);
 
         // ---- Step 4: knowledge (Confluence) -----------------------------------
         // FND-59: this used to be the fixed literal "checkout order payment reconcile 500"
@@ -225,16 +270,18 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // FND-62: keywords + app rather than the whole sentence + app, so the search gets
         // distinctive terms instead of English function words.
         List<String> knowledgeMisses = new ArrayList<>();
-        List<String> gatewayFailures = new ArrayList<>();   // J14/FRI-5
         boolean codeSearchFailed = false;                   // J30/GEB-3
         String confluenceQuery = signals.confluenceQuery();
         // J25/KQR-4 + J14/FRI-5: the safety net degrades PER CALL. An unreachable Confluence
         // costs this run its runbook evidence and says so; it does not cost the run.
         List<KnowledgeDoc> returned;
+        // FND-89: the trace row's STATE must match what happened, not just its text.
+        boolean confluenceFailed = false;
         try {
             returned = confluence.search(confluenceQuery);
         } catch (com.company.triage.gateway.GatewayUnavailableException e) {
             returned = List.of();
+            confluenceFailed = true;
             knowledgeMisses.add(e.getMessage() + " — no runbook evidence was gathered "
                     + "(this is a connector failure, not an absence of runbooks)");
             log.warn("  {} unreachable — continuing without knowledge evidence", e.system(), e);
@@ -269,7 +316,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     dropped, returned.size());
         }
         trace.add(traceConfluenceSearch);
-        emitStep(sink, stepSeq, "confluence.search", traceConfluenceSearch);
+        emitStep(sink, stepSeq, "confluence.search", traceConfluenceSearch,
+                confluenceFailed ? StepState.FAILED : StepState.DONE);
 
         // ---- Step 5: bounded logs (Sumo) --------------------------------------
         // The _sourceCategory is COMPOSED, not chosen: project slug (from the affected app)
@@ -341,6 +389,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         // from (handled above via sumoRequest == null), searched and found nothing, and could
         // not search at all. Only the middle one is a finding.
         List<LogEvidence> logs;
+        boolean sumoFailed = false;   // FND-89 — the row's STATE, not only its text
         if (sumoRequest == null) {
             logs = List.of();
         } else {
@@ -348,6 +397,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 logs = sumo.search(sumoRequest);
             } catch (com.company.triage.gateway.GatewayUnavailableException e) {
                 logs = List.of();
+                sumoFailed = true;   // FND-89
                 gatewayFailures.add(e.getMessage()
                         + " — the log window was not searched, so \"no errors found\" is not a "
                         + "conclusion this run is entitled to");
@@ -398,7 +448,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                     + "'no logs found')").formatted(projectSlug);
         }
         trace.add(traceSumoSearch);
-        emitStep(sink, stepSeq, "sumo.search", traceSumoSearch);
+        emitStep(sink, stepSeq, "sumo.search", traceSumoSearch,
+                sumoFailed ? StepState.FAILED : StepState.DONE);
 
         // ---- Step 6: targeted code search + log↔code citation (RC3) -----------
         // FND-63: was the literal "Order submission (checkout)". The ticket's own
@@ -414,20 +465,58 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             // missed here). Same rank-then-sweep as the log search above.
             List<String> projectsToTry =
                     IncidentSignals.rankAllowlist(signals.app(), gitLabProjectAllowlist);
+            SweepOutcome sweep = new SweepOutcome();
+            // J31/ASO-1 + ASO-2. Two rules that were already converged but not implemented:
+            //
+            //   ASO-1 (restores J30/GEB-2) — a project that cannot resolve is a SKIPPED
+            //   project, not the end of the sweep. This loop used to `break` on failure, so a
+            //   single unresolvable entry ranked first stopped every remaining candidate from
+            //   being searched at all. GEB-2, GEB-2's own verification row, and
+            //   GatewayUnavailableException's javadoc all say "continue"; only the code said
+            //   otherwise.
+            //
+            //   ASO-2 — the outcome is a property of the WHOLE sweep, not of whichever attempt
+            //   happened to go last. `codeSearchFailed` was a boolean assigned in the catch, so
+            //   a real project searched successfully and empty, followed by a phantom entry's
+            //   404, reported "could not search" for a search that ran and truthfully found
+            //   nothing. A boolean cannot express five outcomes.
             for (String project : projectsToTry) {
                 try {
                     codeHits = gitLab.searchCode(project, errorToken);
+                    sweep.searched(project);
+                    // J31/ASO-4: one row per ATTEMPT. The trace spine already models a call
+                    // (TraceSink.before/after wrap one), and a sweep is N calls — so N rows,
+                    // each naming its project. This is what makes "partial" legible rather
+                    // than merely stated: the reader sees which project answered and which
+                    // did not, instead of one summary row asserting a single outcome for
+                    // several different things that happened.
+                    emitStep(sink, stepSeq, "gitlab.searchCode",
+                            "gitlab.searchCode(%s) → %d hit(s)".formatted(project, codeHits.size()),
+                            StepState.DONE);
                 } catch (com.company.triage.gateway.GatewayUnavailableException e) {
                     // J14/FRI-5: one unreachable connector costs its own evidence, not the run.
-                    codeSearchFailed = true;   // J30/GEB-3
+                    // The PROJECT is recorded alongside the error: the exception carries only
+                    // the system ("GitLab is unreachable: …"), so two failed entries were
+                    // indistinguishable and a partial result could not name what it missed.
+                    sweep.failed(project, e.getMessage());
                     codeHits = List.of();
-                    gatewayFailures.add(e.getMessage()
-                            + " — the log line was not tied to the code that emits it");
-                    log.warn("  {} unreachable — continuing without code evidence", e.system(), e);
-                    break;
+                    // J31/ASO-4 + FND-89: this attempt FAILED and says so. Previously the only
+                    // GitLab row was the aggregate, always DONE, so an unreachable project was
+                    // indistinguishable in the live trace from one that answered.
+                    emitStep(sink, stepSeq, "gitlab.searchCode",
+                            "gitlab.searchCode(%s) → unreachable".formatted(project),
+                            StepState.FAILED);
+                    log.warn("  {} unreachable for project {} — continuing to the next candidate",
+                            e.system(), project, e);
+                    continue;
                 }
                 if (!codeHits.isEmpty()) break;
             }
+            // Failures are reported once the sweep is complete, so the message can say whether
+            // anything else succeeded. Recording it inside the loop would state a conclusion
+            // before the evidence for it existed.
+            gatewayFailures.addAll(sweep.missingInformation());
+            codeSearchFailed = sweep.nothingWasSearched();
             // J13/ECI-4: cap the fan-out. GitLab's blob search can return many hits for a
             // common token; each became an Evidence entry AND a recentCommitters API call, so
             // an unlucky token meant ~20 evidence rows and ~40 calls in one run. The report is
@@ -462,18 +551,22 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             // This is the same honesty rule as J25/KQR-4 (failed vs empty Confluence search)
             // and J29/LLF-2 (an unreadable log level). Third instance of the pattern; the
             // card notes it is worth stating once as a rule if a fourth appears.
-            if (codeSearchFailed) {
-                String traceFailed = "gitlab.searchCode(term='%s', projects=%s) → COULD NOT SEARCH "
-                        + "(GitLab unreachable) — this is not 'no code matched'"
-                        .formatted(errorToken, projectsToTry);
-                trace.add(traceFailed);
-                emitStep(sink, stepSeq, "gitlab.searchCode", traceFailed);
-            } else {
-            String traceGitLabSearch = "gitlab.searchCode(term='%s', projects=%s) → %d hit(s) (log↔code citation)"
-                    .formatted(errorToken, projectsToTry, codeHits.size());
+            // J31/ASO-2: one line, derived from what the sweep actually did. Previously an
+            // if/else over a boolean, which could only ever say "0 hit(s)" or "COULD NOT
+            // SEARCH" — the three states in between had no way to be expressed.
+            //
+            // The parens around the concatenation are load-bearing: `"…%s…" + "…".formatted(a)`
+            // binds `formatted` to the SECOND literal only, so the first literal's placeholders
+            // were printed raw and every degraded run traced `term='%s', projects=%s`. Found in
+            // J31's CDS round; pinned by `theCouldNotSearchLineIsActuallyFormatted`.
+            String traceGitLabSearch = ("gitlab.searchCode(term='%s', projects=%s) → %s")
+                    .formatted(errorToken, projectsToTry, sweep.describe(codeHits.size()));
             trace.add(traceGitLabSearch);
-            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSearch);
-            }
+            // J31/ASO-4 + FND-89: the row may only claim DONE if something was actually
+            // searched. A step whose text says the search failed and whose state says it
+            // succeeded is exactly what J14/FRI-5 forbids.
+            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSearch,
+                    sweep.nothingWasSearched() ? StepState.FAILED : StepState.DONE);
         } else {
             // The code search is only meaningful with an error token to search FOR — the
             // whole point is the log↔code citation, and there is no log line to cite.
@@ -485,7 +578,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
             String traceGitLabSkipped =
                     "gitlab.searchCode → skipped (no error token in the log lines to search code for)";
             trace.add(traceGitLabSkipped);
-            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSkipped);
+            emitStep(sink, stepSeq, "gitlab.searchCode", traceGitLabSkipped, StepState.DONE);
         }
 
         // ---- Step 7: who to talk to (J9) --------------------------------------
@@ -513,7 +606,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String traceContacts = "contacts: %d suggested (from %d doc(s) + %d code file(s), merged across sources)"
                 .formatted(contacts.size(), docs.size(), codeHits.size());
         trace.add(traceContacts);
-        emitStep(sink, stepSeq, "contacts:", traceContacts);
+        emitStep(sink, stepSeq, "contacts:", traceContacts, StepState.DONE);
 
         // ---- Step 8: assemble the diagnosis report (J4) -----------------------
         // FND-63: candidates and their evidenceRefs were hardcoded, and two of the refs
@@ -731,7 +824,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String traceReportAssembled = "report assembled: %d candidates, %d evidence items, assignment=%s"
                 .formatted(candidates.size(), evidence.size(), assignment.group());
         trace.add(traceReportAssembled);
-        emitStep(sink, stepSeq, "report assembled:", traceReportAssembled);
+        emitStep(sink, stepSeq, "report assembled:", traceReportAssembled, StepState.DONE);
 
         return new DiagnosisResult(report, trace);
     }
@@ -749,7 +842,27 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
      * but {@code durationMs} is still a measured (not hardcoded) elapsed time, so the row
      * shape stays honest for LT3's replay renderer even when that measured value is 0.
      */
-    private static void emitStep(TraceSink sink, AtomicInteger stepSeq, String dottedKey, String resultText) {
+    /**
+     * FND-89 — the terminal state is a PARAMETER, not a constant.
+     *
+     * <p>This method used to hardcode {@link StepState#DONE}, and it is the single funnel every
+     * deterministic trace row passes through, so no row on this engine could ever resolve
+     * {@code FAILED}. {@code grep StepState.FAILED src/main} returned hits only in
+     * {@code AdkDiagnosisEngine}. The clearest symptom: the GitLab row whose text read
+     * {@code COULD NOT SEARCH (GitLab unreachable)} while its state said the step succeeded.
+     *
+     * <p>J14/FRI-5 names three signals a degraded call must produce, and is explicit about the
+     * third: <i>"the step's TraceStep resolves <b>FAILED</b>, not DONE … using DONE would make
+     * the trace assert a step succeeded when it did not — the honesty contract J11 is built
+     * on."</i> Signals 1 and 2 shipped; this is signal 3, on the fallback engine FRI-5 was
+     * written for — the one that runs on stage when the agent fails. J11/LT5 maps FAILED to a
+     * {@code fail} visual, so until now a degraded run rendered identically to a clean one.
+     *
+     * <p>Deliberately <b>no DONE-defaulting overload</b>: a default is precisely how this gap
+     * stayed invisible for so long. Every call site states its own outcome.
+     */
+    private static void emitStep(TraceSink sink, AtomicInteger stepSeq, String dottedKey,
+                                 String resultText, StepState terminalState) {
         StepCatalog.Entry entry = StepCatalog.lookup(dottedKey);
         int seq = stepSeq.getAndIncrement();
         String callId = "det-" + seq;
@@ -759,7 +872,7 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 null, StepState.ACTIVE, startedAtEpochMs, null, DiagnosisResult.Engine.DETERMINISTIC));
         long durationMs = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
         sink.after(new TraceStep(seq, 0, callId, entry.platform(), dottedKey, entry.label(),
-                resultText, StepState.DONE, startedAtEpochMs, durationMs, DiagnosisResult.Engine.DETERMINISTIC));
+                resultText, terminalState, startedAtEpochMs, durationMs, DiagnosisResult.Engine.DETERMINISTIC));
         // Every investigation step also goes to the console. This engine is the DEFAULT one,
         // and it used to log nothing at all: a full 11-step run printed only the
         // orchestrator's single "completed" line, so from the console the app looked idle
@@ -803,9 +916,10 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
         String traceContributors = "confluence.contributors(%d page(s)) → %d author/editor name(s)"
                 .formatted(docs.size(), contributorCount);
         trace.add(traceContributors);
-        emitStep(sink, stepSeq, "confluence.contributors", traceContributors);
+        emitStep(sink, stepSeq, "confluence.contributors", traceContributors, StepState.DONE);
 
         int committerCount = 0;
+        boolean committersFailed = false;   // FND-89
         for (CodeSearchResult h : codeHits) {
             try {
                 List<Contact> committers = gitLab.recentCommitters(h.project(), h.filePath());
@@ -813,7 +927,9 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 raw.addAll(committers);
             } catch (com.company.triage.gateway.GatewayUnavailableException e) {
                 // Contacts are display-only (J9). Losing them degrades the report; it must
-                // never be the reason a diagnosis fails to appear.
+                // never be the reason a diagnosis fails to appear — but the trace still has to
+                // say the call failed rather than showing a clean row with fewer names on it.
+                committersFailed = true;
                 log.warn("  {} unreachable while gathering committers — continuing", e.system(), e);
             }
         }
@@ -822,7 +938,8 @@ public class DeterministicDiagnosisEngine implements DiagnosisEngine {
                 : "gitlab.recentCommitters(%d file(s)) → %d committer name(s)"
                         .formatted(codeHits.size(), committerCount);
         trace.add(traceCommitters);
-        emitStep(sink, stepSeq, "gitlab.recentCommitters", traceCommitters);
+        emitStep(sink, stepSeq, "gitlab.recentCommitters", traceCommitters,
+                committersFailed ? StepState.FAILED : StepState.DONE);
 
         // Merge, preserving first-seen order.
         //

@@ -30,6 +30,22 @@ public final class TriagePropertiesFixture {
                 20, 1440);
     }
 
+    /**
+     * J31 — the deterministic engine with a MULTI-PROJECT GitLab allowlist.
+     *
+     * <p>The default fixture pins exactly one project, which quietly made the allowlist
+     * *sweep* untestable: with one entry there is no second candidate to continue to, so
+     * "the sweep skipped a failed project and carried on" could not be expressed, let alone
+     * asserted. Real config has held two entries since J30/GEB-1.
+     */
+    public static TriageProperties deterministicWithProjects(String... gitLabProjects) {
+        TriageProperties base = deterministic();
+        return new TriageProperties(
+                base.engine(), base.writeback(), base.orchestrator(), base.agent(),
+                base.trigger(), base.servicenow(), base.sumo(),
+                new TriageProperties.GitLab(List.of(gitLabProjects)));
+    }
+
     public static TriageProperties withEngine(TriageProperties.Engine engine) {
         return new TriageProperties(
                 engine,
